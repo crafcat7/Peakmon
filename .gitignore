@@ -1,0 +1,67 @@
+# ----------------------------------------------------------------------
+# Peakmon .gitignore
+#
+# Tracks Swift / Xcode / macOS build artefacts and editor metadata.
+# ----------------------------------------------------------------------
+
+# Swift Package Manager build outputs
+.build/
+.swiftpm/
+Packages/*/.build/
+Packages/*/.swiftpm/
+Packages/*/Package.resolved
+
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+DerivedData/
+*.moved-aside
+*.xccheckout
+
+# Xcode workspace state we don't share
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+# Build products
+build/
+out/
+*.dSYM/
+*.dSYM.zip
+*.ipa
+*.app.dSYM.zip
+
+# Logs / coverage
+*.log
+*.xcresult
+*.profdata
+coverage/
+
+# Generated icons (regenerate via Tools/generate_icons.swift)
+*.icns
+
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Private design doc — not for public distribution
+Docs/ARCHITECTURE.md
+
+# Internal knowledge base — not for public distribution
+memories/
+
+# Misc
+*.tmp
+*.bak
+*.orig

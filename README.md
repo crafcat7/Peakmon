@@ -66,13 +66,29 @@ swift test --package-path Packages/PeakmonCore
 
 ## Install
 
-Pre-built binaries will land on the [GitHub Releases][releases] page.
-Ad-hoc signed; **App Sandbox is intentionally
-disabled** so Peakmon can read system-level metrics.
+### Homebrew
+
+```sh
+brew install crafcat7/cellar/peakmon
+```
+
+This installs the latest release of Peakmon into your Homebrew
+prefix and prints instructions for symlinking it into `/Applications`
+if you want it to show up in Spotlight.
+
+### Pre-built binary
+
+Each release also ships an ad-hoc signed `.app.zip` on the
+[GitHub Releases][releases] page. Download, unzip, and drop the
+`.app` into `/Applications`.
+
+**App Sandbox is intentionally disabled** so Peakmon can read
+system-level metrics. The binary is ad-hoc signed; on first launch
+right-click → Open to bypass Gatekeeper.
 
 Mac App Store release is not planned for the near future.
 
-[releases]: https://github.com/anomalyco/Peakmon/releases
+[releases]: https://github.com/crafcat7/Peakmon/releases
 
 ## Repository layout
 

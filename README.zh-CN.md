@@ -65,13 +65,26 @@ swift test --package-path Packages/PeakmonCore
 
 ## 安装
 
-预编译二进制会发布在 [GitHub Releases][releases]。
-采用 ad-hoc 签名；**App Sandbox 是被有意关闭的**，因为 Peakmon 需要
-读取系统级指标。
+### Homebrew
+
+```sh
+brew install crafcat7/cellar/peakmon
+```
+
+会把最新版 Peakmon 装到 Homebrew 前缀目录下，并提示如何创建软链
+到 `/Applications`，方便 Spotlight 检索。
+
+### 预编译二进制
+
+每个版本同时会在 [GitHub Releases][releases] 提供 ad-hoc 签名的
+`.app.zip`。下载解压后，把 `.app` 拖到 `/Applications` 即可。
+
+**App Sandbox 是被有意关闭的**，因为 Peakmon 需要读取系统级指标。
+首次启动若被 Gatekeeper 拦下，右键 → 打开放行即可。
 
 Mac App Store 分发不在计划之内。
 
-[releases]: https://github.com/anomalyco/Peakmon/releases
+[releases]: https://github.com/crafcat7/Peakmon/releases
 
 ## 仓库结构
 

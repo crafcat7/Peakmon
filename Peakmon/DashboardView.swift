@@ -215,10 +215,49 @@ struct DashboardView: View {
                 card.view.frame(maxWidth: .infinity, alignment: .leading)
             }
         case let .pair(lhs, rhs):
-            HStack(alignment: .top, spacing: 12) {
-                lhs.view.frame(maxWidth: .infinity, alignment: .leading)
-                rhs.view.frame(maxWidth: .infinity, alignment: .leading)
+            // Use a `Grid` for paired half-width cards so they
+            // render at the same height and the same width:
+            //
+            //   * a `Grid` row aligns every cell to a shared
+            //     baseline *and* sizes them to a shared height
+            //     (the height of the tallest cell), which an
+            //     ordinary HStack(alignment: .top) does not do —
+            //     the latter only top-anchors otherwise
+            //     intrinsically-sized children;
+            //   * `.gridCellColumns(1)` paired with
+            //     `.frame(maxWidth: .infinity)` on each cell makes
+            //     the Grid divide the popover width evenly,
+            //     matching the previous HStack behaviour.
+            //
+            // Critically, this affects only `.pair` rows. Single
+            // full-width rows keep their existing
+            // `.frame(maxWidth: .infinity, alignment: .leading)`
+            // and their natural height, so the popover total
+            // height is unchanged for users who never see a pair
+            // row.
+            Grid(horizontalSpacing: 12, verticalSpacing: 0) {
+                GridRow {
+                    lhs.view
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: .infinity,
+                            alignment: .topLeading,
+                        )
+                    rhs.view
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: .infinity,
+                            alignment: .topLeading,
+                        )
+                }
             }
+            // Clamp the Grid's own height to the natural height of
+            // its tallest cell so the equal-height behaviour does
+            // not leak upward and inflate the popover's overall
+            // height: SwiftUI's Grid would otherwise advertise an
+            // unbounded ideal height because both cells declare
+            // maxHeight: .infinity.
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -427,9 +466,12 @@ struct DashboardView: View {
             systemImage: "network",
             tint: networkTint,
             accessory: {
-                Text(Self.formatRate(netIn + netOut))
-                    .font(.callout.monospacedDigit().weight(.semibold))
+                let total = netIn + netOut
+                Text(Self.formatRate(total))
+                    .font(.title3.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.primary)
+                    .contentTransition(.numericText(value: total))
+                    .animation(.smooth, value: total)
             },
             content: {
                 VStack(alignment: .leading, spacing: 10) {

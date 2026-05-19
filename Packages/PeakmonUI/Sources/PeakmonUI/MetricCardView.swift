@@ -98,9 +98,20 @@ public struct MetricStatLabel: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
+                .lineLimit(1)
             Text(value)
                 .font(.callout.monospacedDigit().weight(.medium))
                 .foregroundStyle(tint)
+                // Long values (e.g. GPU "Apple M3 Max", network
+                // "1023.4 MB/s") must not wrap because that would
+                // push the stat row taller than the matching row in
+                // neighbouring cards, breaking half-width pair
+                // alignment. Allow the text to scale down to 70 % of
+                // its intrinsic size before truncating with a tail
+                // ellipsis.
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .truncationMode(.tail)
         }
     }
 }

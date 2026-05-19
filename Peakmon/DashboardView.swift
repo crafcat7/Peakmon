@@ -579,7 +579,13 @@ struct DashboardView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: "speedometer")
+            // Mirror the visual language of the bundle's app icon —
+            // a circular gauge face with tick dots and a needle — by
+            // picking the matching SF Symbol instead of rasterising
+            // the icon asset. This keeps the header monochrome,
+            // tintable, and crisp at any size while still reading as
+            // "Peakmon" at a glance.
+            Image(systemName: "gauge.with.dots.needle.bottom.50percent")
                 .imageScale(.large)
                 .foregroundStyle(.tint)
             Text("Peakmon")

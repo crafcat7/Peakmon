@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "PeakmonCollectors",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v14)],
     products: [
         .library(name: "PeakmonCollectors", targets: ["PeakmonCollectors"]),
     ],

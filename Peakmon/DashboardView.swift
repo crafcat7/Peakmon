@@ -23,6 +23,13 @@ struct DashboardView: View {
     @AppStorage("showProcessesCard") private var showProcesses = false
     @AppStorage("processesSortByMemory") private var processesSortByMemory = false
 
+    @CardWidthStorage(.cpu) private var cpuWidth
+    @CardWidthStorage(.memory) private var memoryWidth
+    @CardWidthStorage(.battery) private var batteryWidth
+    @CardWidthStorage(.disk) private var diskWidth
+    @CardWidthStorage(.network) private var networkWidth
+    @CardWidthStorage(.processes) private var processesWidth
+
     @CardTintStorage(.cpu) var cpuTint
     @CardTintStorage(.memory) private var memoryTint
     @CardTintStorage(.battery) private var batteryTint
@@ -79,6 +86,13 @@ struct DashboardView: View {
     var netInHistory: [MetricSample] { store.history(for: .netInRate) }
     var netOutHistory: [MetricSample] { store.history(for: .netOutRate) }
 
+    /// Popover width, in points. Bumped from 300 → 420 to give two
+    /// half-width cards enough horizontal room to render without
+    /// truncating their multi-stat headers; full-width cards still
+    /// look balanced at this width because the new padding-to-content
+    /// ratio (14:392) is close to the original (14:272).
+    static let popoverWidth: CGFloat = 420
+
     var body: some View {
         Group {
             if isVisible {
@@ -88,7 +102,7 @@ struct DashboardView: View {
                 // window geometry while hidden, and — critically — does
                 // *not* read any `store.*` property so the @Observable
                 // store no longer triggers `body` recomputes here.
-                Color.clear.frame(width: 300, height: 1)
+                Color.clear.frame(width: Self.popoverWidth, height: 1)
             }
         }
         .onAppear { isVisible = true }
@@ -103,20 +117,62 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
-            if showCPU { cpuCard }
-            if showMemory { memoryCard }
-            if showBattery, batterySample != nil { batteryCard }
-            if showDisk { diskCard }
-            if showNetwork { networkCard }
-            if showProcesses { processesCard }
+            ForEach(Array(DashboardLayout.rows(from: visibleCards).enumerated()), id: \.offset) { _, row in
+                rowView(row)
+            }
 
             if !anyCardVisible { emptyState }
 
             footer
         }
         .padding(14)
-        .frame(width: 300)
+        .frame(width: Self.popoverWidth)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: visibilityKey)
+    }
+
+    /// Materialises the user's visibility + width preferences into the
+    /// ordered card list `DashboardLayout` packs into rows. Card order
+    /// here matches the historical top-to-bottom order so users who
+    /// keep everything `full` see no visual change.
+    private var visibleCards: [DashboardLayout.VisibleCard] {
+        var cards: [DashboardLayout.VisibleCard] = []
+        if showCPU { cards.append(.init(slot: .cpu, width: cpuWidth, view: AnyView(cpuCard))) }
+        if showMemory { cards.append(.init(slot: .memory, width: memoryWidth, view: AnyView(memoryCard))) }
+        if showBattery, batterySample != nil {
+            cards.append(.init(slot: .battery, width: batteryWidth, view: AnyView(batteryCard)))
+        }
+        if showDisk { cards.append(.init(slot: .disk, width: diskWidth, view: AnyView(diskCard))) }
+        if showNetwork { cards.append(.init(slot: .network, width: networkWidth, view: AnyView(networkCard))) }
+        if showProcesses {
+            cards.append(.init(slot: .processes, width: processesWidth, view: AnyView(processesCard)))
+        }
+        return cards
+    }
+
+    /// Renders a single laid-out row. Half-card pairs are emitted as
+    /// an `HStack` with `.frame(maxWidth: .infinity)` on both children
+    /// so SwiftUI divides the available space evenly; a lone card
+    /// (full *or* half) gets `.frame(maxWidth: .infinity, alignment:
+    /// .leading)` so it stretches the full row, preserving the v0.1
+    /// look for users who never touch the new width preference.
+    @ViewBuilder
+    private func rowView(_ row: DashboardLayout.Row) -> some View {
+        switch row {
+        case let .single(card):
+            if card.width == .half {
+                HStack(spacing: 12) {
+                    card.view.frame(maxWidth: .infinity, alignment: .leading)
+                    Color.clear.frame(maxWidth: .infinity)
+                }
+            } else {
+                card.view.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        case let .pair(lhs, rhs):
+            HStack(alignment: .top, spacing: 12) {
+                lhs.view.frame(maxWidth: .infinity, alignment: .leading)
+                rhs.view.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 
     private var anyCardVisible: Bool {
@@ -125,7 +181,9 @@ struct DashboardView: View {
     }
 
     private var visibilityKey: String {
-        "\(showCPU)\(showMemory)\(showBattery)\(showDisk)\(showNetwork)\(showProcesses)"
+        "\(showCPU)\(showMemory)\(showBattery)\(showDisk)\(showNetwork)\(showProcesses)" +
+            "|\(cpuWidth.rawValue)\(memoryWidth.rawValue)\(batteryWidth.rawValue)" +
+            "\(diskWidth.rawValue)\(networkWidth.rawValue)\(processesWidth.rawValue)"
     }
 
     private var emptyState: some View {

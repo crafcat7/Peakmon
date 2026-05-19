@@ -361,6 +361,8 @@ private struct DisplayPage: View {
                 Divider().padding(.vertical, 4)
                 CardTintRow(slot: .processes, hideIcon: true)
                 Divider().padding(.vertical, 4)
+                CardWidthRow(slot: .processes)
+                Divider().padding(.vertical, 4)
                 HStack(spacing: 10) {
                     Image(systemName: "arrow.up.arrow.down")
                         .foregroundStyle(.secondary)
@@ -397,6 +399,8 @@ private struct DisplayPage: View {
                 )
                 Divider().padding(.vertical, 4)
                 CardTintRow(slot: config.slot, hideIcon: true)
+                Divider().padding(.vertical, 4)
+                CardWidthRow(slot: config.slot)
                 if !config.series.isEmpty {
                     Divider().padding(.vertical, 4)
                     ChartSeriesRow(series: config.series)

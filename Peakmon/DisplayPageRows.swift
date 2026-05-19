@@ -185,3 +185,35 @@ struct ChartSeriesToggle: View {
         .controlSize(.small)
     }
 }
+
+/// Segmented Full / Half picker for a card's `CardWidthStorage`.
+/// Placed inside each metric section so the user sees width and tint
+/// preferences live next to each other for the same card; matches
+/// the visual rhythm of `CardTintRow`.
+struct CardWidthRow: View {
+    let slot: CardTintSlot
+    @CardWidthStorage private var width: CardWidth
+
+    init(slot: CardTintSlot) {
+        self.slot = slot
+        _width = CardWidthStorage(slot)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "rectangle.split.2x1")
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            Text("Width")
+            Spacer()
+            Picker("", selection: $width) {
+                ForEach(CardWidth.allCases) { value in
+                    Text(value.label).tag(value)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+        }
+    }
+}

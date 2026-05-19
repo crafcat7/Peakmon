@@ -25,6 +25,8 @@ enum MenuBarSegment: String, CaseIterable, Identifiable, Codable, Transferable {
     case diskRate
     case diskGraph
     case batteryPercent
+    case gpuPercent
+    case gpuGraph
 
     var id: String { rawValue }
 
@@ -43,6 +45,8 @@ enum MenuBarSegment: String, CaseIterable, Identifiable, Codable, Transferable {
         case .diskRate: "Disk R/W"
         case .diskGraph: "Disk graph"
         case .batteryPercent: "Battery %"
+        case .gpuPercent: "GPU %"
+        case .gpuGraph: "GPU graph"
         }
     }
 
@@ -53,6 +57,7 @@ enum MenuBarSegment: String, CaseIterable, Identifiable, Codable, Transferable {
         case .networkRate, .networkGraph: "network"
         case .diskRate, .diskGraph: "internaldrive"
         case .batteryPercent: "battery.100percent"
+        case .gpuPercent, .gpuGraph: "cpu.fill"
         }
     }
 }

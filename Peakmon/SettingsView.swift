@@ -279,6 +279,7 @@ private struct DisplayPage: View {
     @AppStorage("showDiskCard") private var showDisk = true
     @AppStorage("showNetworkCard") private var showNetwork = true
     @AppStorage("showProcessesCard") private var showProcesses = false
+    @AppStorage("showGPUCard") private var showGPU = true
     @AppStorage("processesSortByMemory") private var processesSortByMemory = false
 
     @CardTintStorage(.cpu) private var cpuTint
@@ -287,6 +288,7 @@ private struct DisplayPage: View {
     @CardTintStorage(.disk) private var diskTint
     @CardTintStorage(.network) private var networkTint
     @CardTintStorage(.processes) private var processesTint
+    @CardTintStorage(.gpu) private var gpuTint
 
     @CardWidthStorage(.cpu) private var cpuWidth
     @CardWidthStorage(.memory) private var memoryWidth
@@ -294,6 +296,7 @@ private struct DisplayPage: View {
     @CardWidthStorage(.disk) private var diskWidth
     @CardWidthStorage(.network) private var networkWidth
     @CardWidthStorage(.processes) private var processesWidth
+    @CardWidthStorage(.gpu) private var gpuWidth
 
     @CardOrderStorage private var cardOrder: [CardTintSlot]
 
@@ -332,6 +335,7 @@ private struct DisplayPage: View {
             .disk: showDisk,
             .network: showNetwork,
             .processes: showProcesses,
+            .gpu: showGPU,
         ]
     }
 
@@ -343,6 +347,7 @@ private struct DisplayPage: View {
             .disk: diskWidth,
             .network: networkWidth,
             .processes: processesWidth,
+            .gpu: gpuWidth,
         ]
     }
 
@@ -354,6 +359,7 @@ private struct DisplayPage: View {
             .disk: diskTint,
             .network: networkTint,
             .processes: processesTint,
+            .gpu: gpuTint,
         ]
     }
 
@@ -407,6 +413,15 @@ private struct DisplayPage: View {
             ))
         case .processes:
             processesSection
+        case .gpu:
+            metricSection(.init(
+                title: "GPU",
+                systemImage: "cpu.fill",
+                slot: .gpu,
+                iconTint: gpuTint,
+                isOn: $showGPU,
+                series: [.gpuDevice, .gpuRenderer, .gpuTiler],
+            ))
         }
     }
 

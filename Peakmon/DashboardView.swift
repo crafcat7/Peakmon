@@ -6,6 +6,7 @@
 //  for a polished look that scales to future metrics.
 //
 
+import PeakmonCollectors
 import PeakmonCore
 import PeakmonUI
 import SwiftUI
@@ -21,6 +22,7 @@ struct DashboardView: View {
     @AppStorage("showDiskCard") private var showDisk = true
     @AppStorage("showNetworkCard") private var showNetwork = true
     @AppStorage("showProcessesCard") private var showProcesses = false
+    @AppStorage("showGPUCard") private var showGPU = true
     @AppStorage("processesSortByMemory") private var processesSortByMemory = false
 
     @CardWidthStorage(.cpu) private var cpuWidth
@@ -29,6 +31,7 @@ struct DashboardView: View {
     @CardWidthStorage(.disk) private var diskWidth
     @CardWidthStorage(.network) private var networkWidth
     @CardWidthStorage(.processes) private var processesWidth
+    @CardWidthStorage(.gpu) private var gpuWidth
 
     @CardOrderStorage private var cardOrder: [CardTintSlot]
 
@@ -38,6 +41,7 @@ struct DashboardView: View {
     @CardTintStorage(.disk) var diskTint
     @CardTintStorage(.network) var networkTint
     @CardTintStorage(.processes) var processesTint
+    @CardTintStorage(.gpu) var gpuTint
 
     @ChartSeriesEnabled(.cpuTotal) var cpuTotalEnabled
     @ChartSeriesEnabled(.cpuUser) var cpuUserEnabled
@@ -46,6 +50,9 @@ struct DashboardView: View {
     @ChartSeriesEnabled(.diskWrite) var diskWriteEnabled
     @ChartSeriesEnabled(.netIn) var netInEnabled
     @ChartSeriesEnabled(.netOut) var netOutEnabled
+    @ChartSeriesEnabled(.gpuDevice) var gpuDeviceEnabled
+    @ChartSeriesEnabled(.gpuRenderer) var gpuRendererEnabled
+    @ChartSeriesEnabled(.gpuTiler) var gpuTilerEnabled
 
     /// `true` only while the popover window is on-screen. Used to gate
     /// every `store.*` read so the popover stops subscribing to the
@@ -58,6 +65,13 @@ struct DashboardView: View {
     /// is the ~20% steady-state CPU users observed after first opening
     /// the popover, even with the menu-bar label fully cached.
     @State private var isVisible = false
+
+    /// Static GPU model + core count, populated once on first popover
+    /// open from the IORegistry. Cached in `@State` so the IOKit query
+    /// only runs once per app launch instead of on every body pass.
+    /// Optional so the card stays usable on machines where the driver
+    /// does not surface these fields (e.g. some VMs).
+    @State private var gpuInfo: GPUDeviceInfo?
 
     private var total: Double { store.latest(for: .cpuTotal)?.value ?? 0 }
     private var user: Double { store.latest(for: .cpuUser)?.value ?? 0 }
@@ -88,6 +102,11 @@ struct DashboardView: View {
     var netInHistory: [MetricSample] { store.history(for: .netInRate) }
     var netOutHistory: [MetricSample] { store.history(for: .netOutRate) }
 
+    private var gpuUtil: Double { store.latest(for: .gpuUtilization)?.value ?? 0 }
+    var gpuUtilHistory: [MetricSample] { store.history(for: .gpuUtilization) }
+    var gpuRendererHistory: [MetricSample] { store.history(for: .gpuRenderer) }
+    var gpuTilerHistory: [MetricSample] { store.history(for: .gpuTiler) }
+
     /// Popover width, in points. Bumped from 300 → 420 to give two
     /// half-width cards enough horizontal room to render without
     /// truncating their multi-stat headers; full-width cards still
@@ -107,7 +126,10 @@ struct DashboardView: View {
                 Color.clear.frame(width: Self.popoverWidth, height: 1)
             }
         }
-        .onAppear { isVisible = true }
+        .onAppear {
+            isVisible = true
+            if gpuInfo == nil { gpuInfo = GPUCollector.deviceInfo() }
+        }
         .onDisappear { isVisible = false }
     }
 
@@ -165,6 +187,10 @@ struct DashboardView: View {
                 if showProcesses {
                     cards.append(.init(slot: .processes, width: processesWidth, view: AnyView(processesCard)))
                 }
+            case .gpu:
+                if showGPU {
+                    cards.append(.init(slot: .gpu, width: gpuWidth, view: AnyView(gpuCard)))
+                }
             }
         }
         return cards
@@ -198,13 +224,13 @@ struct DashboardView: View {
 
     private var anyCardVisible: Bool {
         showCPU || showMemory || (showBattery && batterySample != nil)
-            || showDisk || showNetwork || showProcesses
+            || showDisk || showNetwork || showProcesses || showGPU
     }
 
     private var visibilityKey: String {
-        "\(showCPU)\(showMemory)\(showBattery)\(showDisk)\(showNetwork)\(showProcesses)" +
+        "\(showCPU)\(showMemory)\(showBattery)\(showDisk)\(showNetwork)\(showProcesses)\(showGPU)" +
             "|\(cpuWidth.rawValue)\(memoryWidth.rawValue)\(batteryWidth.rawValue)" +
-            "\(diskWidth.rawValue)\(networkWidth.rawValue)\(processesWidth.rawValue)" +
+            "\(diskWidth.rawValue)\(networkWidth.rawValue)\(processesWidth.rawValue)\(gpuWidth.rawValue)" +
             "|" + cardOrder.map(\.rawValue).joined(separator: ",")
     }
 
@@ -424,6 +450,46 @@ struct DashboardView: View {
                         series: networkSparklineSeries,
                         yMin: 0,
                         yMax: nil,
+                    )
+                    .frame(height: 48)
+                }
+            },
+        )
+    }
+
+    private var gpuCard: some View {
+        MetricCardView(
+            title: "GPU",
+            systemImage: "cpu.fill",
+            tint: gpuTint,
+            accessory: {
+                Text("\(gpuUtil, specifier: "%.0f")%")
+                    .font(.title3.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .contentTransition(.numericText(value: gpuUtil))
+                    .animation(.smooth, value: gpuUtil)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 18) {
+                        MetricStatLabel(
+                            label: "Model",
+                            value: gpuInfo?.model ?? "Unknown",
+                            tint: gpuTint,
+                        )
+                        if let cores = gpuInfo?.coreCount {
+                            MetricStatLabel(
+                                label: "Cores",
+                                value: "\(cores)",
+                                tint: gpuTint,
+                            )
+                        }
+                        Spacer()
+                    }
+                    MetricSparklineView(
+                        series: gpuSparklineSeries,
+                        yMin: 0,
+                        yMax: 100,
                     )
                     .frame(height: 48)
                 }

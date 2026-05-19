@@ -118,6 +118,7 @@ final class MetricsRuntime {
                 BatteryCollector(),
                 DiskCollector(),
                 NetworkCollector(),
+                GPUCollector(),
             ],
             interval: Self.duration(seconds: interval),
         )
@@ -238,6 +239,7 @@ private struct MenuBarLabel: View {
     @CardTintStorage(.memory) private var memoryTint
     @CardTintStorage(.disk) private var diskTint
     @CardTintStorage(.network) private var networkTint
+    @CardTintStorage(.gpu) private var gpuTint
 
     /// Cached rasterised label. Recomputed only when the source data
     /// actually changes, so the menu-bar refresh loop costs ~0 % CPU
@@ -258,6 +260,7 @@ private struct MenuBarLabel: View {
             memoryTint: memoryTint,
             diskTint: diskTint,
             networkTint: networkTint,
+            gpuTint: gpuTint,
         )
         let image = cache.image(for: signature) { render(items: items) }
 
@@ -356,6 +359,14 @@ private struct MenuBarLabel: View {
             }
         case .batteryPercent:
             batteryPercentView
+        case .gpuPercent:
+            let gpu = store.latest(for: .gpuUtilization)?.value ?? 0
+            Text("GPU \(Int(gpu.rounded()))%")
+        case .gpuGraph:
+            HStack(spacing: 3) {
+                Text("GPU")
+                MenuBarBarChart(samples: store.history(for: .gpuUtilization), tint: gpuTint)
+            }
         }
     }
 
@@ -439,7 +450,7 @@ private final class MenuBarLabelCache {
 private struct MenuBarLabelSignature: Equatable {
     let segments: [MenuBarSegment]
     let isDark: Bool
-    let tints: [String]      // [cpu, memory, disk, network] hex
+    let tints: [String]      // [cpu, memory, disk, network, gpu] hex
     let latestValues: [Double]
     let historyHashes: [Int]
 
@@ -451,6 +462,7 @@ private struct MenuBarLabelSignature: Equatable {
         memoryTint: Color,
         diskTint: Color,
         networkTint: Color,
+        gpuTint: Color,
     ) -> Self {
         let match = NSApp.effectiveAppearance.bestMatch(
             from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight],
@@ -484,6 +496,10 @@ private struct MenuBarLabelSignature: Equatable {
             case .batteryPercent:
                 latests.append(Self.round(store.latest(for: .batteryLevel)?.value))
                 latests.append(store.latest(for: .batteryPowerSource)?.value ?? -1)
+            case .gpuPercent:
+                latests.append(Self.round(store.latest(for: .gpuUtilization)?.value))
+            case .gpuGraph:
+                historyHashes.append(Self.hashHistory(store.history(for: .gpuUtilization), step: 1))
             }
         }
 
@@ -495,6 +511,7 @@ private struct MenuBarLabelSignature: Equatable {
                 memoryTint.hexString,
                 diskTint.hexString,
                 networkTint.hexString,
+                gpuTint.hexString,
             ],
             latestValues: latests,
             historyHashes: historyHashes,

@@ -15,6 +15,7 @@ import UniformTypeIdentifiers
 enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
     case cpu
     case memory
+    case gpu
     case battery
     case disk
     case network
@@ -34,6 +35,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
         switch self {
         case .cpu: "CPU"
         case .memory: "Memory"
+        case .gpu: "GPU"
         case .battery: "Battery"
         case .disk: "Disk"
         case .network: "Network"
@@ -45,6 +47,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
         switch self {
         case .cpu: "cpu"
         case .memory: "memorychip"
+        case .gpu: "cpu.fill"
         case .battery: "battery.100percent"
         case .disk: "internaldrive"
         case .network: "network"
@@ -59,6 +62,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
         switch self {
         case .cpu: "#007AFF" // .blue
         case .memory: "#AF52DE" // .purple
+        case .gpu: "#5856D6" // .indigo
         case .battery: "#34C759" // .green
         case .disk: "#32ADE6" // .cyan
         case .network: "#FF2D55" // .pink

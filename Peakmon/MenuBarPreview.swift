@@ -20,6 +20,7 @@ struct MenuBarLivePreview: View {
     @CardTintStorage(.memory) private var memoryTint
     @CardTintStorage(.disk) private var diskTint
     @CardTintStorage(.network) private var networkTint
+    @CardTintStorage(.gpu) private var gpuTint
 
     var body: some View {
         HStack(spacing: 0) {
@@ -115,6 +116,14 @@ struct MenuBarLivePreview: View {
             }
         case .batteryPercent:
             batteryPercentView
+        case .gpuPercent:
+            let gpu = store.latest(for: .gpuUtilization)?.value ?? 0
+            Text("GPU \(Int(gpu.rounded()))%")
+        case .gpuGraph:
+            HStack(spacing: 3) {
+                Text("GPU")
+                MenuBarBarChart(samples: store.history(for: .gpuUtilization), tint: gpuTint)
+            }
         }
     }
 

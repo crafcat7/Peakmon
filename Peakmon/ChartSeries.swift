@@ -31,6 +31,9 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
     case diskWrite
     case netIn
     case netOut
+    case gpuDevice
+    case gpuRenderer
+    case gpuTiler
 
     var id: String { rawValue }
 
@@ -44,6 +47,9 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .diskWrite: .diskWriteRate
         case .netIn: .netInRate
         case .netOut: .netOutRate
+        case .gpuDevice: .gpuUtilization
+        case .gpuRenderer: .gpuRenderer
+        case .gpuTiler: .gpuTiler
         }
     }
 
@@ -57,6 +63,9 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .diskWrite: "Write"
         case .netIn: "Download"
         case .netOut: "Upload"
+        case .gpuDevice: "Device"
+        case .gpuRenderer: "Renderer"
+        case .gpuTiler: "Tiler"
         }
     }
 
@@ -71,6 +80,9 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .diskWrite: .pink
         case .netIn: .green
         case .netOut: .indigo
+        case .gpuDevice: .indigo
+        case .gpuRenderer: .mint
+        case .gpuTiler: .orange
         }
     }
 
@@ -85,6 +97,9 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .diskWrite: "#FF2D55"
         case .netIn: "#34C759"
         case .netOut: "#5856D6"
+        case .gpuDevice: "#5856D6"
+        case .gpuRenderer: "#00C7BE"
+        case .gpuTiler: "#FF9500"
         }
     }
 
@@ -96,10 +111,16 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
 
     /// Default enabled state on first launch. CPU defaults to
     /// User+System on; Total off to avoid visual redundancy with the
-    /// big percentage in the card header.
+    /// big percentage in the card header. GPU only enables the Device
+    /// series by default — on Apple Silicon the IOAccelerator driver
+    /// reports the same value for `Renderer Utilization %` and
+    /// `Tiler Utilization %` as `Device Utilization %` outside of
+    /// specific workloads, so showing all three lines just produces
+    /// a single overlapping trace. Users with discrete GPUs (Intel
+    /// Macs + eGPU) can opt back in from Settings › Display.
     var defaultEnabled: Bool {
         switch self {
-        case .cpuTotal: false
+        case .cpuTotal, .gpuRenderer, .gpuTiler: false
         default: true
         }
     }

@@ -27,6 +27,9 @@ public enum MetricKind: String, Hashable, Codable, Sendable, CaseIterable {
     case diskWriteRate = "disk.write_rate"
     case netInRate = "net.in_rate"
     case netOutRate = "net.out_rate"
+    case gpuUtilization = "gpu.utilization"
+    case gpuRenderer = "gpu.renderer"
+    case gpuTiler = "gpu.tiler"
 }
 
 /// Unit of measurement attached to a `MetricSample`.

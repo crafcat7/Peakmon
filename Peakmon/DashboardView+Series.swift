@@ -99,4 +99,42 @@ extension DashboardView {
         }
         return lines
     }
+
+    /// GPU sparkline payload. Mirrors the CPU card: defaults hide the
+    /// "Device" line because the headline percentage is already shown
+    /// in the card accessory, leaving Renderer + Tiler to drive the
+    /// chart. Falls back to the Device series so the chart never goes
+    /// blank if the user disables every series.
+    var gpuSparklineSeries: [SparklineSeries] {
+        var lines: [SparklineSeries] = []
+        if gpuDeviceEnabled {
+            lines.append(SparklineSeries(
+                id: ChartSeries.gpuDevice.rawValue,
+                samples: gpuUtilHistory,
+                color: ChartSeries.gpuDevice.storedTint,
+            ))
+        }
+        if gpuRendererEnabled {
+            lines.append(SparklineSeries(
+                id: ChartSeries.gpuRenderer.rawValue,
+                samples: gpuRendererHistory,
+                color: ChartSeries.gpuRenderer.storedTint,
+            ))
+        }
+        if gpuTilerEnabled {
+            lines.append(SparklineSeries(
+                id: ChartSeries.gpuTiler.rawValue,
+                samples: gpuTilerHistory,
+                color: ChartSeries.gpuTiler.storedTint,
+            ))
+        }
+        if lines.isEmpty {
+            lines.append(SparklineSeries(
+                id: "gpu.utilization",
+                samples: gpuUtilHistory,
+                color: gpuTint,
+            ))
+        }
+        return lines
+    }
 }

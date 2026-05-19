@@ -287,21 +287,38 @@ struct DashboardView: View {
             systemImage: batteryIconName(for: level, source: source),
             tint: batteryTint,
             accessory: {
-                HStack(spacing: 6) {
-                    BatteryStatusBadge(source: source, tint: batteryTint)
-                    Text("\(level, specifier: "%.0f")%")
-                        .font(.title3.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .contentTransition(.numericText(value: level))
-                        .animation(.smooth, value: level)
+                // Badge + percentage in the full-width layout; falls
+                // back to percentage-only in half-width where the
+                // header row no longer has the horizontal budget for
+                // the badge. The power-state information is still
+                // visible via the card's leading SF symbol
+                // (`battery.100percent.bolt` etc.) and the
+                // charging/standby/low-battery overlays below, so
+                // dropping the textual badge is non-destructive.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        BatteryStatusBadge(source: source, tint: batteryTint)
+                        percentageText(level: level)
+                    }
+                    percentageText(level: level)
                 }
             },
             content: {
-                MetricSparklineView(
-                    samples: store.history(for: .batteryLevel),
-                    style: .battery,
-                )
-                .frame(height: 48)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 18) {
+                        MetricStatLabel(
+                            label: "Source",
+                            value: source.displayLabel,
+                            tint: batteryTint,
+                        )
+                        Spacer()
+                    }
+                    MetricSparklineView(
+                        samples: store.history(for: .batteryLevel),
+                        style: .battery,
+                    )
+                    .frame(height: 48)
+                }
             },
         )
         .overlay {
@@ -320,6 +337,19 @@ struct DashboardView: View {
             }
         }
         .animation(.easeInOut(duration: 0.35), value: source)
+    }
+
+    /// Shared accessory text for the battery card; extracted so both
+    /// `ViewThatFits` branches render identical glyphs (otherwise the
+    /// fits-check could pick the smaller branch even when the larger
+    /// would fit, because differing fonts produce different intrinsic
+    /// widths).
+    private func percentageText(level: Double) -> some View {
+        Text("\(level, specifier: "%.0f")%")
+            .font(.title3.monospacedDigit().weight(.semibold))
+            .foregroundStyle(.primary)
+            .contentTransition(.numericText(value: level))
+            .animation(.smooth, value: level)
     }
 
     private var diskCard: some View {

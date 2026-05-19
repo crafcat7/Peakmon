@@ -15,20 +15,40 @@ struct BatteryStatusBadge: View {
     let tint: Color
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: source.systemImage)
-                .font(.system(size: 10, weight: .semibold))
-            Text(source.displayLabel)
-                .font(.system(size: 10, weight: .semibold))
+        // `ViewThatFits` lets the badge gracefully degrade in the
+        // narrow half-width card layout: when the icon+label capsule
+        // can't fit alongside the battery percentage, we fall back to
+        // an icon-only capsule instead of letting SwiftUI truncate
+        // the label or push the percentage off the row.
+        ViewThatFits(in: .horizontal) {
+            iconAndLabel
+            iconOnly
         }
         .foregroundStyle(foregroundColor)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
         .background(backgroundColor, in: .capsule)
         .overlay {
             Capsule().stroke(borderColor, lineWidth: 0.5)
         }
         .help(source.displayLabel)
+    }
+
+    private var iconAndLabel: some View {
+        HStack(spacing: 4) {
+            Image(systemName: source.systemImage)
+                .font(.system(size: 10, weight: .semibold))
+            Text(source.displayLabel)
+                .font(.system(size: 10, weight: .semibold))
+                .fixedSize()
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+    }
+
+    private var iconOnly: some View {
+        Image(systemName: source.systemImage)
+            .font(.system(size: 10, weight: .semibold))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 3)
     }
 
     private var foregroundColor: Color {

@@ -16,6 +16,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable {
     case battery
     case disk
     case network
+    case processes
 
     var id: String { rawValue }
 
@@ -26,6 +27,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable {
         case .battery: "Battery"
         case .disk: "Disk"
         case .network: "Network"
+        case .processes: "Processes"
         }
     }
 
@@ -36,6 +38,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable {
         case .battery: "battery.100percent"
         case .disk: "internaldrive"
         case .network: "network"
+        case .processes: "list.bullet.rectangle"
         }
     }
 
@@ -49,6 +52,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable {
         case .battery: "#34C759" // .green
         case .disk: "#32ADE6" // .cyan
         case .network: "#FF2D55" // .pink
+        case .processes: "#FF9500" // .orange
         }
     }
 

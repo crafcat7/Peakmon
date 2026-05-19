@@ -12,6 +12,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(MetricsStore.self) private var store
+    @Environment(ProcessesStore.self) private var processesStore
     @Environment(\.openWindow) private var openWindow
 
     @AppStorage("showCPUCard") private var showCPU = true
@@ -19,12 +20,15 @@ struct DashboardView: View {
     @AppStorage("showBatteryCard") private var showBattery = true
     @AppStorage("showDiskCard") private var showDisk = true
     @AppStorage("showNetworkCard") private var showNetwork = true
+    @AppStorage("showProcessesCard") private var showProcesses = false
+    @AppStorage("processesSortByMemory") private var processesSortByMemory = false
 
     @CardTintStorage(.cpu) var cpuTint
     @CardTintStorage(.memory) private var memoryTint
     @CardTintStorage(.battery) private var batteryTint
     @CardTintStorage(.disk) var diskTint
     @CardTintStorage(.network) var networkTint
+    @CardTintStorage(.processes) var processesTint
 
     @ChartSeriesEnabled(.cpuTotal) var cpuTotalEnabled
     @ChartSeriesEnabled(.cpuUser) var cpuUserEnabled
@@ -104,6 +108,7 @@ struct DashboardView: View {
             if showBattery, batterySample != nil { batteryCard }
             if showDisk { diskCard }
             if showNetwork { networkCard }
+            if showProcesses { processesCard }
 
             if !anyCardVisible { emptyState }
 
@@ -115,11 +120,12 @@ struct DashboardView: View {
     }
 
     private var anyCardVisible: Bool {
-        showCPU || showMemory || (showBattery && batterySample != nil) || showDisk || showNetwork
+        showCPU || showMemory || (showBattery && batterySample != nil)
+            || showDisk || showNetwork || showProcesses
     }
 
     private var visibilityKey: String {
-        "\(showCPU)\(showMemory)\(showBattery)\(showDisk)\(showNetwork)"
+        "\(showCPU)\(showMemory)\(showBattery)\(showDisk)\(showNetwork)\(showProcesses)"
     }
 
     private var emptyState: some View {
@@ -310,6 +316,51 @@ struct DashboardView: View {
                         yMax: nil,
                     )
                     .frame(height: 48)
+                }
+            },
+        )
+    }
+
+    /// Top-5 process card. Reads `processesStore.latestProcesses` which
+    /// the ProcessCollector refreshes every 2 s on a background task.
+    /// Sort order is controlled by `processesSortByMemory`; rows are
+    /// trimmed to 5 here since the collector already limits to 10 to
+    /// give the picker a little headroom for live re-sorting without
+    /// dropping the user's currently-watched process.
+    private var processesCard: some View {
+        let processes = processesStore.latestProcesses
+        let sorted: [ProcessSnapshot] = if processesSortByMemory {
+            processes.sorted { $0.memoryBytes > $1.memoryBytes }
+        } else {
+            processes // collector already pre-sorts by CPU desc
+        }
+        let top = Array(sorted.prefix(5))
+        let sortLabel = processesSortByMemory ? "by RAM" : "by CPU"
+
+        return MetricCardView(
+            title: "Top Processes",
+            systemImage: "list.bullet.rectangle",
+            tint: processesTint,
+            accessory: {
+                Text(sortLabel)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            },
+            content: {
+                VStack(alignment: .leading, spacing: 4) {
+                    if top.isEmpty {
+                        Text("Collecting…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ForEach(top) { snapshot in
+                            ProcessRow(
+                                snapshot: snapshot,
+                                showMemory: processesSortByMemory,
+                            )
+                        }
+                    }
                 }
             },
         )

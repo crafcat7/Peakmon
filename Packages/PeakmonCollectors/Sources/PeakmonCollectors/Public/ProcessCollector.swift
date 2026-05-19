@@ -1,0 +1,181 @@
+//
+//  ProcessCollector.swift
+//  PeakmonCollectors
+//
+//  Enumerates running BSD processes via libproc and computes each
+//  process's share of CPU across the most recent polling interval.
+//  Designed to run on a slower cadence than the host-metric collectors
+//  because walking ~500 PIDs and reading PROC_PIDTASKINFO for each is
+//  measurably more expensive (10–50 ms) than a single
+//  `host_statistics64` call.
+//
+//  Public API of PeakmonCollectors. No private/SPI usage; everything
+//  is built on `libproc.h` + Mach time conversions.
+//
+
+import Darwin
+import Foundation
+import PeakmonCore
+
+/// Walks `proc_listallpids` and emits a `ProcessSnapshot` per BSD
+/// process, ranked descending by CPU usage over the interval since
+/// the previous `collect()` call.
+///
+/// The first call after launch always returns an empty array because
+/// no baseline exists yet to diff against — exactly the same pattern
+/// `CPUCollector` uses.
+///
+/// `collect()` is intentionally *not* required to conform to
+/// `MetricCollector` because the resulting data shape
+/// (`[ProcessSnapshot]`) does not fit into the time-series
+/// `[MetricSample]` model. Callers drive it from their own task at
+/// whatever cadence makes sense (we use 2 s in production).
+public final class ProcessCollector {
+    public let identifier = "process.libproc"
+
+    /// Maximum number of processes returned per snapshot. Matches the
+    /// number of rows the dashboard's Top Processes card needs, with
+    /// some headroom so the consumer can re-sort/filter if desired.
+    public let limit: Int
+
+    private let state = State()
+
+    public init(limit: Int = 10) {
+        self.limit = limit
+    }
+
+    public func collect() async throws -> [ProcessSnapshot] {
+        let now = Date.now
+        let pids = try Self.listPIDs()
+        let infos = Self.readInfos(for: pids)
+
+        let previous = await state.swap(infos: infos, at: now)
+        guard let previous, previous.sampledAt < now else {
+            // First sample or non-monotonic clock — nothing to diff.
+            return []
+        }
+
+        let elapsedNanos = now.timeIntervalSince(previous.sampledAt) * 1_000_000_000
+        guard elapsedNanos > 0 else { return [] }
+
+        let timebase = Self.timebase
+        var snapshots: [ProcessSnapshot] = []
+        snapshots.reserveCapacity(infos.count)
+
+        for (pid, info) in infos {
+            guard let prev = previous.infos[pid] else { continue }
+            // total_user + total_system are in mach_absolute_time units
+            // (subtract previous, convert via timebase to nanoseconds).
+            let deltaMachTime = (info.cpuTimeRaw &- prev.cpuTimeRaw)
+            let deltaNanos =
+                Double(deltaMachTime) * Double(timebase.numer) / Double(timebase.denom)
+            let cpuPercent = (deltaNanos / elapsedNanos) * 100
+            snapshots.append(ProcessSnapshot(
+                pid: pid,
+                name: info.name,
+                cpuPercent: max(cpuPercent, 0),
+                memoryBytes: info.memoryBytes,
+            ))
+        }
+
+        snapshots.sort { $0.cpuPercent > $1.cpuPercent }
+        if snapshots.count > limit { snapshots.removeLast(snapshots.count - limit) }
+        return snapshots
+    }
+
+    // MARK: - libproc plumbing
+
+    private struct Info: Sendable {
+        let name: String
+        let cpuTimeRaw: UInt64       // user + system, in mach time units
+        let memoryBytes: UInt64
+    }
+
+    /// Mach timebase used to convert raw `ptinfo_total_*` ticks into
+    /// nanoseconds. Cached because it is constant per boot but the
+    /// `mach_timebase_info` syscall is not free at 1 Hz × N processes.
+    private nonisolated(unsafe) static let timebase: mach_timebase_info_data_t = {
+        var tb = mach_timebase_info_data_t()
+        mach_timebase_info(&tb)
+        return tb
+    }()
+
+    /// Snapshot the full PID table. `proc_listallpids` is the modern
+    /// replacement for `proc_listpids(PROC_ALL_PIDS, ...)` and returns
+    /// the active BSD pid set.
+    private static func listPIDs() throws -> [Int32] {
+        let needed = proc_listallpids(nil, 0)
+        guard needed > 0 else { return [] }
+        // Add headroom because processes can appear between the two
+        // calls; oversizing is fine, `proc_listallpids` clips to what
+        // it actually wrote.
+        let capacity = Int(needed) + 64
+        var buffer = [pid_t](repeating: 0, count: capacity)
+        let written = buffer.withUnsafeMutableBufferPointer { ptr -> Int32 in
+            let bytes = Int32(ptr.count * MemoryLayout<pid_t>.size)
+            return proc_listallpids(ptr.baseAddress, bytes)
+        }
+        guard written > 0 else { return [] }
+        let count = Int(written) / MemoryLayout<pid_t>.size
+        return Array(buffer.prefix(count)).filter { $0 > 0 }
+    }
+
+    /// Per-PID `proc_pidinfo(PROC_PIDTASKINFO)` lookup. Failures are
+    /// silently skipped — processes can exit between `listPIDs` and
+    /// this call, and short-lived helpers regularly disappear under
+    /// our feet.
+    private static func readInfos(for pids: [Int32]) -> [Int32: Info] {
+        var out: [Int32: Info] = [:]
+        out.reserveCapacity(pids.count)
+
+        for pid in pids {
+            var info = proc_taskinfo()
+            let size = Int32(MemoryLayout<proc_taskinfo>.size)
+            let written = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, size)
+            guard written == size else { continue }
+
+            let name = processName(pid: pid)
+            out[pid] = Info(
+                name: name,
+                cpuTimeRaw: info.pti_total_user &+ info.pti_total_system,
+                memoryBytes: info.pti_resident_size,
+            )
+        }
+        return out
+    }
+
+    /// Best-effort human-readable name. `proc_name` returns the BSD
+    /// command name (15-char limit), which matches what `top` and
+    /// `ps` show. If that fails we fall back to "pid <n>" so the row
+    /// is still identifiable.
+    private static func processName(pid: Int32) -> String {
+        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        let written = buffer.withUnsafeMutableBufferPointer { ptr -> Int32 in
+            proc_name(pid, ptr.baseAddress, UInt32(ptr.count))
+        }
+        if written > 0 {
+            let name = String(cString: buffer)
+            if !name.isEmpty { return name }
+        }
+        return "pid \(pid)"
+    }
+
+    /// Holds the previous tick's per-PID `Info` plus the timestamp at
+    /// which it was captured. An actor so concurrent `collect()`
+    /// invocations remain safe even though we never expect more than
+    /// one outstanding call in practice.
+    private actor State {
+        struct Snapshot {
+            let infos: [Int32: Info]
+            let sampledAt: Date
+        }
+
+        private var previous: Snapshot?
+
+        func swap(infos: [Int32: Info], at sampledAt: Date) -> Snapshot? {
+            let outgoing = previous
+            previous = Snapshot(infos: infos, sampledAt: sampledAt)
+            return outgoing
+        }
+    }
+}

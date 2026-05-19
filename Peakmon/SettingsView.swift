@@ -278,12 +278,15 @@ private struct DisplayPage: View {
     @AppStorage("showBatteryCard") private var showBattery = true
     @AppStorage("showDiskCard") private var showDisk = true
     @AppStorage("showNetworkCard") private var showNetwork = true
+    @AppStorage("showProcessesCard") private var showProcesses = false
+    @AppStorage("processesSortByMemory") private var processesSortByMemory = false
 
     @CardTintStorage(.cpu) private var cpuTint
     @CardTintStorage(.memory) private var memoryTint
     @CardTintStorage(.battery) private var batteryTint
     @CardTintStorage(.disk) private var diskTint
     @CardTintStorage(.network) private var networkTint
+    @CardTintStorage(.processes) private var processesTint
 
     var body: some View {
         SettingsPage(
@@ -330,6 +333,51 @@ private struct DisplayPage: View {
                 isOn: $showNetwork,
                 series: [.netIn, .netOut],
             ))
+            processesSection
+        }
+    }
+
+    /// Top Processes block. Distinct from the regular metric sections
+    /// because it has no chart series and adds a sort-order picker
+    /// instead. Sampling for this card runs on a slower 2 s cadence
+    /// because walking the BSD process table is ~50x more expensive
+    /// than a host-statistics syscall — the footer makes that
+    /// trade-off visible to the user.
+    @ViewBuilder
+    private var processesSection: some View {
+        SettingsSection(
+            "Top Processes",
+            systemImage: "list.bullet.rectangle",
+            iconTint: processesTint,
+            footer: "Sampled every 2 seconds via libproc.",
+        ) {
+            VStack(spacing: 0) {
+                MetricShowRow(
+                    title: "Top Processes",
+                    systemImage: "eye",
+                    slot: .processes,
+                    isOn: $showProcesses,
+                )
+                Divider().padding(.vertical, 4)
+                CardTintRow(slot: .processes, hideIcon: true)
+                Divider().padding(.vertical, 4)
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18)
+                    Text("Sort by")
+                    Spacer()
+                    Picker("", selection: $processesSortByMemory) {
+                        Text("CPU").tag(false)
+                        Text("RAM").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(.rect)
+            }
         }
     }
 

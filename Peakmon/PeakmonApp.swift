@@ -16,28 +16,39 @@ import SwiftUI
 @main
 struct PeakmonApp: App {
     @State private var store = MetricsStore(historyLimit: 120)
+    @State private var processesStore = ProcessesStore()
     @State private var runtime = MetricsRuntime()
     @Environment(\.openWindow) private var openWindow
 
     @AppStorage("silentLaunch") private var silentLaunch = false
     @AppStorage("samplingIntervalSeconds") private var samplingInterval: Double = 1.0
+    @AppStorage("showProcessesCard") private var showProcesses = false
 
     var body: some Scene {
         MenuBarExtra {
             DashboardView()
                 .environment(store)
+                .environment(processesStore)
         } label: {
             MenuBarLabel(store: store)
         }
         .menuBarExtraStyle(.window)
         .onChange(of: runtime.started, initial: true) { _, started in
             if !started {
-                runtime.start(store: store, interval: samplingInterval)
+                runtime.start(
+                    store: store,
+                    processesStore: processesStore,
+                    interval: samplingInterval,
+                )
+                runtime.processesEnabled = showProcesses
                 bootstrap()
             }
         }
         .onChange(of: samplingInterval) { _, newValue in
             runtime.updateInterval(seconds: newValue)
+        }
+        .onChange(of: showProcesses, initial: false) { _, newValue in
+            runtime.processesEnabled = newValue
         }
 
         Window("Peakmon Settings", id: "settings") {
@@ -70,8 +81,33 @@ struct PeakmonApp: App {
 final class MetricsRuntime {
     private(set) var started = false
     private var scheduler: MetricsScheduler?
+    private var processTask: Task<Void, Never>?
 
-    func start(store: MetricsStore, interval: Double) {
+    /// Toggled from SwiftUI to gate the process collector. When false,
+    /// the background task still runs but skips the libproc walk and
+    /// pushes an empty list into the store so the Top Processes card
+    /// gracefully shows "—" instead of stale data.
+    var processesEnabled = false {
+        didSet {
+            let value = processesEnabled
+            let gate = processCollector
+            Task { await gate.setEnabled(value) }
+        }
+    }
+
+    /// Cadence at which the process collector polls libproc, in
+    /// seconds. Kept slower than the host-metric scheduler because
+    /// walking ~500 PIDs is ~50x more expensive than a single
+    /// `host_statistics64` call. 2 s matches Activity Monitor's
+    /// default refresh and is plenty for trend spotting.
+    private static let processInterval: Duration = .seconds(2)
+    private let processCollector = ProcessCollectorGate(collector: ProcessCollector(limit: 10))
+
+    func start(
+        store: MetricsStore,
+        processesStore: ProcessesStore,
+        interval: Double,
+    ) {
         guard !started else { return }
         started = true
         let scheduler = MetricsScheduler(
@@ -87,6 +123,7 @@ final class MetricsRuntime {
         )
         self.scheduler = scheduler
         Task { await scheduler.start() }
+        spawnProcessLoop(processesStore: processesStore)
         Log.app.info("Peakmon v0.1 runtime started")
     }
 
@@ -105,6 +142,83 @@ final class MetricsRuntime {
         // precision (e.g. 0.5 s -> 500 ms).
         let millis = Int((seconds * 1000).rounded())
         return .milliseconds(max(50, millis))
+    }
+
+    /// Long-running task that polls `ProcessCollector` on the slower
+    /// fixed cadence. Cancellation happens implicitly when the
+    /// runtime is deallocated; the task observes `Task.isCancelled`
+    /// and returns cleanly.
+    private func spawnProcessLoop(processesStore: ProcessesStore) {
+        let gate = processCollector
+        processTask = Task.detached(priority: .utility) {
+            while !Task.isCancelled {
+                do {
+                    if let snapshots = try await gate.collect() {
+                        await MainActor.run {
+                            processesStore.ingest(snapshots)
+                        }
+                    }
+                } catch {
+                    Log.collectors.error(
+                        // swiftlint:disable:next line_length
+                        "ProcessCollector failed: \(String(describing: error), privacy: .public)",
+                    )
+                }
+                do {
+                    try await Task.sleep(for: Self.processInterval)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+}
+
+/// Wrapper around `ProcessCollector` that gates expensive libproc
+/// walks on a user-controllable enabled flag. When disabled, the
+/// gate returns an empty list once (to clear stale data in the
+/// store) and then `nil` to short-circuit subsequent polls without
+/// any work. Re-enabling resets the gate so collection resumes
+/// immediately on the next tick.
+///
+/// Implemented as an actor so the `enabled` / `didFlushAfterDisable`
+/// state stays safe across the SwiftUI MainActor caller (toggle from
+/// the settings page) and the detached background loop (long poll
+/// every 2 s).
+private actor ProcessCollectorGate {
+    private let collector: ProcessCollector
+    private var enabled = false
+    private var didFlushAfterDisable = true
+
+    init(collector: ProcessCollector) {
+        self.collector = collector
+    }
+
+    func setEnabled(_ value: Bool) {
+        if value == enabled { return }
+        enabled = value
+        // After flipping off, push one empty snapshot so the UI
+        // forgets stale rows. After flipping on, the next collect()
+        // will rebuild a baseline (first call returns []), then
+        // produce real numbers on the call after that.
+        didFlushAfterDisable = false
+    }
+
+    /// Returns:
+    ///   - the latest snapshot list when collection is active
+    ///   - `[]` exactly once after the collector was disabled, so the
+    ///     consumer can clear stale data
+    ///   - `nil` afterwards while still disabled, signalling "no
+    ///     update needed"
+    func collect() async throws -> [ProcessSnapshot]? {
+        let isEnabled = enabled
+        let needsFlush = !didFlushAfterDisable
+        if needsFlush { didFlushAfterDisable = true }
+
+        if !isEnabled {
+            return needsFlush ? [] : nil
+        }
+        return try await collector.collect()
     }
 }
 

@@ -288,11 +288,79 @@ private struct DisplayPage: View {
     @CardTintStorage(.network) private var networkTint
     @CardTintStorage(.processes) private var processesTint
 
+    @CardWidthStorage(.cpu) private var cpuWidth
+    @CardWidthStorage(.memory) private var memoryWidth
+    @CardWidthStorage(.battery) private var batteryWidth
+    @CardWidthStorage(.disk) private var diskWidth
+    @CardWidthStorage(.network) private var networkWidth
+    @CardWidthStorage(.processes) private var processesWidth
+
+    @CardOrderStorage private var cardOrder: [CardTintSlot]
+
     var body: some View {
         SettingsPage(
             .display,
-            subtitle: "Configure each metric card independently.",
+            subtitle: "Drag the cards below to reorder. Configure each card's appearance further down.",
         ) {
+            // Drag-and-drop reorder lives on lightweight thumbnail
+            // tiles in the preview, not on the per-card config
+            // sections. See `DisplayCardPreview.swift` for the
+            // rationale.
+            SettingsSection(
+                "Card Layout",
+                footer: "Drag a tile onto another tile to insert it there. Hidden cards stay visible here so you can pre-arrange them.",
+            ) {
+                DisplayCardPreview(
+                    order: $cardOrder,
+                    visibility: visibility,
+                    widths: widths,
+                    tints: tints,
+                )
+            }
+
+            ForEach(cardOrder) { slot in
+                section(for: slot)
+            }
+        }
+    }
+
+    private var visibility: [CardTintSlot: Bool] {
+        [
+            .cpu: showCPU,
+            .memory: showMemory,
+            .battery: showBattery,
+            .disk: showDisk,
+            .network: showNetwork,
+            .processes: showProcesses,
+        ]
+    }
+
+    private var widths: [CardTintSlot: CardWidth] {
+        [
+            .cpu: cpuWidth,
+            .memory: memoryWidth,
+            .battery: batteryWidth,
+            .disk: diskWidth,
+            .network: networkWidth,
+            .processes: processesWidth,
+        ]
+    }
+
+    private var tints: [CardTintSlot: Color] {
+        [
+            .cpu: cpuTint,
+            .memory: memoryTint,
+            .battery: batteryTint,
+            .disk: diskTint,
+            .network: networkTint,
+            .processes: processesTint,
+        ]
+    }
+
+    @ViewBuilder
+    private func section(for slot: CardTintSlot) -> some View {
+        switch slot {
+        case .cpu:
             metricSection(.init(
                 title: "CPU",
                 systemImage: "cpu",
@@ -301,6 +369,7 @@ private struct DisplayPage: View {
                 isOn: $showCPU,
                 series: [.cpuTotal, .cpuUser, .cpuSystem],
             ))
+        case .memory:
             metricSection(.init(
                 title: "Memory",
                 systemImage: "memorychip",
@@ -309,6 +378,7 @@ private struct DisplayPage: View {
                 isOn: $showMemory,
                 series: [],
             ))
+        case .battery:
             metricSection(.init(
                 title: "Battery",
                 systemImage: "battery.100percent",
@@ -317,6 +387,7 @@ private struct DisplayPage: View {
                 isOn: $showBattery,
                 series: [],
             ))
+        case .disk:
             metricSection(.init(
                 title: "Disk",
                 systemImage: "internaldrive",
@@ -325,6 +396,7 @@ private struct DisplayPage: View {
                 isOn: $showDisk,
                 series: [.diskRead, .diskWrite],
             ))
+        case .network:
             metricSection(.init(
                 title: "Network",
                 systemImage: "network",
@@ -333,6 +405,7 @@ private struct DisplayPage: View {
                 isOn: $showNetwork,
                 series: [.netIn, .netOut],
             ))
+        case .processes:
             processesSection
         }
     }

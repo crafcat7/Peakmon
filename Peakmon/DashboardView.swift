@@ -30,6 +30,8 @@ struct DashboardView: View {
     @CardWidthStorage(.network) private var networkWidth
     @CardWidthStorage(.processes) private var processesWidth
 
+    @CardOrderStorage private var cardOrder: [CardTintSlot]
+
     @CardTintStorage(.cpu) var cpuTint
     @CardTintStorage(.memory) private var memoryTint
     @CardTintStorage(.battery) private var batteryTint
@@ -130,21 +132,40 @@ struct DashboardView: View {
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: visibilityKey)
     }
 
-    /// Materialises the user's visibility + width preferences into the
-    /// ordered card list `DashboardLayout` packs into rows. Card order
-    /// here matches the historical top-to-bottom order so users who
-    /// keep everything `full` see no visual change.
+    /// Materialises the user's visibility + width + order
+    /// preferences into the ordered card list `DashboardLayout`
+    /// packs into rows. Order is driven by `CardOrderStorage` so
+    /// the popover reflects whatever sequence the user dragged into
+    /// place on the Settings › Display preview.
     private var visibleCards: [DashboardLayout.VisibleCard] {
         var cards: [DashboardLayout.VisibleCard] = []
-        if showCPU { cards.append(.init(slot: .cpu, width: cpuWidth, view: AnyView(cpuCard))) }
-        if showMemory { cards.append(.init(slot: .memory, width: memoryWidth, view: AnyView(memoryCard))) }
-        if showBattery, batterySample != nil {
-            cards.append(.init(slot: .battery, width: batteryWidth, view: AnyView(batteryCard)))
-        }
-        if showDisk { cards.append(.init(slot: .disk, width: diskWidth, view: AnyView(diskCard))) }
-        if showNetwork { cards.append(.init(slot: .network, width: networkWidth, view: AnyView(networkCard))) }
-        if showProcesses {
-            cards.append(.init(slot: .processes, width: processesWidth, view: AnyView(processesCard)))
+        for slot in cardOrder {
+            switch slot {
+            case .cpu:
+                if showCPU {
+                    cards.append(.init(slot: .cpu, width: cpuWidth, view: AnyView(cpuCard)))
+                }
+            case .memory:
+                if showMemory {
+                    cards.append(.init(slot: .memory, width: memoryWidth, view: AnyView(memoryCard)))
+                }
+            case .battery:
+                if showBattery, batterySample != nil {
+                    cards.append(.init(slot: .battery, width: batteryWidth, view: AnyView(batteryCard)))
+                }
+            case .disk:
+                if showDisk {
+                    cards.append(.init(slot: .disk, width: diskWidth, view: AnyView(diskCard)))
+                }
+            case .network:
+                if showNetwork {
+                    cards.append(.init(slot: .network, width: networkWidth, view: AnyView(networkCard)))
+                }
+            case .processes:
+                if showProcesses {
+                    cards.append(.init(slot: .processes, width: processesWidth, view: AnyView(processesCard)))
+                }
+            }
         }
         return cards
     }
@@ -183,7 +204,8 @@ struct DashboardView: View {
     private var visibilityKey: String {
         "\(showCPU)\(showMemory)\(showBattery)\(showDisk)\(showNetwork)\(showProcesses)" +
             "|\(cpuWidth.rawValue)\(memoryWidth.rawValue)\(batteryWidth.rawValue)" +
-            "\(diskWidth.rawValue)\(networkWidth.rawValue)\(processesWidth.rawValue)"
+            "\(diskWidth.rawValue)\(networkWidth.rawValue)\(processesWidth.rawValue)" +
+            "|" + cardOrder.map(\.rawValue).joined(separator: ",")
     }
 
     private var emptyState: some View {

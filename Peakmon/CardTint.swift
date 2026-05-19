@@ -7,10 +7,12 @@
 //  default that matches the app's original palette.
 //
 
+import CoreTransferable
 import PeakmonUI
 import SwiftUI
+import UniformTypeIdentifiers
 
-enum CardTintSlot: String, CaseIterable, Identifiable {
+enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
     case cpu
     case memory
     case battery
@@ -19,6 +21,14 @@ enum CardTintSlot: String, CaseIterable, Identifiable {
     case processes
 
     var id: String { rawValue }
+
+    /// `CardTintSlot` is moved between views by the Display page's
+    /// reorder UI; declare the transfer representation here so any
+    /// view can mark itself `.draggable(slot)` /
+    /// `.dropDestination(for: CardTintSlot.self)`.
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .plainText)
+    }
 
     var title: String {
         switch self {

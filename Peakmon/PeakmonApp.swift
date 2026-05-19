@@ -7,6 +7,8 @@
 //  data.
 //
 
+import AppKit
+import CoreGraphics
 import OSLog
 import PeakmonCollectors
 import PeakmonCore
@@ -279,17 +281,17 @@ private struct MenuBarLabel: View {
     private func render(items: [MenuBarSegment]) -> NSImage? {
         guard !items.isEmpty else { return nil }
 
-        // Pick the text colour based on the current system appearance
-        // so the label keeps adequate contrast against both light and
-        // dark menu bars. Chart tints are emitted by `MenuBarBarChart`
-        // as a non-template `NSImage`, so they keep their colour
-        // regardless of this choice.
-        let match = NSApp.effectiveAppearance.bestMatch(
-            from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight],
-        )
-        let isDark = match == .darkAqua || match == .vibrantDark
-        let textColour: Color = isDark ? .white : .black
-        let dividerColour: Color = isDark ? .white.opacity(0.55) : .black.opacity(0.45)
+        // Pick the text colour based on the *wallpaper* under the
+        // menu bar rather than the system appearance, because the
+        // menu bar is a translucent vibrancy layer that takes its
+        // visible tone from the desktop image — a Light-Mode session
+        // with a dark photo wallpaper still produces a dark menu bar
+        // that would otherwise swallow black text, and vice versa.
+        // Chart tints are emitted by `MenuBarBarChart` as non-template
+        // pixels, so they keep their colour regardless of this choice.
+        let usesLightText = WallpaperLuminance.shared.usesLightText()
+        let textColour: Color = usesLightText ? .white : .black
+        let dividerColour: Color = usesLightText ? .white.opacity(0.55) : .black.opacity(0.45)
 
         let composed = HStack(spacing: 4) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, segment in
@@ -449,7 +451,7 @@ private final class MenuBarLabelCache {
 /// renderer.
 private struct MenuBarLabelSignature: Equatable {
     let segments: [MenuBarSegment]
-    let isDark: Bool
+    let usesLightText: Bool
     let tints: [String]      // [cpu, memory, disk, network, gpu] hex
     let latestValues: [Double]
     let historyHashes: [Int]
@@ -464,10 +466,7 @@ private struct MenuBarLabelSignature: Equatable {
         networkTint: Color,
         gpuTint: Color,
     ) -> Self {
-        let match = NSApp.effectiveAppearance.bestMatch(
-            from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight],
-        )
-        let isDark = match == .darkAqua || match == .vibrantDark
+        let usesLightText = WallpaperLuminance.shared.usesLightText()
 
         var latests: [Double] = []
         var historyHashes: [Int] = []
@@ -505,7 +504,7 @@ private struct MenuBarLabelSignature: Equatable {
 
         return MenuBarLabelSignature(
             segments: items,
-            isDark: isDark,
+            usesLightText: usesLightText,
             tints: [
                 cpuTint.hexString,
                 memoryTint.hexString,
@@ -582,5 +581,129 @@ private struct MenuBarLabelSignature: Equatable {
             hasher.combine(Int(bucketRate(sample.value) * 10))
         }
         return hasher.finalize()
+    }
+}
+
+/// Decides whether the menu bar label should render with light or
+/// dark text by sampling the **wallpaper** under the menu bar strip.
+///
+/// macOS's menu bar is a translucent vibrancy layer, so its visible
+/// tone is dictated by whatever sits beneath it. In a Light-Mode
+/// session with a dark photo wallpaper the menu bar is dark; in a
+/// Dark-Mode session with a bright wallpaper it is bright. Neither
+/// `NSApp.effectiveAppearance` nor `NSColor.labelColor` reflects
+/// that, so the label colour had to be derived from the actual
+/// background. Reading the wallpaper file does not require any
+/// entitlement (unlike screen capture), at the cost of being unable
+/// to detect dynamic / live wallpapers or opaque windows behind the
+/// menu bar.
+///
+/// The result is cached and re-derived only when the wallpaper URL
+/// changes or `sampleInterval` seconds have elapsed, keeping the
+/// per-tick signature work essentially free.
+@MainActor
+private final class WallpaperLuminance {
+    static let shared = WallpaperLuminance()
+
+    /// Luminance threshold above which the wallpaper is treated as
+    /// "light" (so the label switches to dark text). 0.5 is the
+    /// midpoint; anything brighter than mid-grey gets dark glyphs.
+    private let luminanceThreshold: CGFloat = 0.5
+
+    /// How often to re-check the wallpaper URL even when it appears
+    /// unchanged. Catches the case where the user replaces the file
+    /// in place (e.g. a dynamic wallpaper rotating its asset on a
+    /// macOS schedule) without renaming it.
+    private let sampleInterval: TimeInterval = 5.0
+
+    private var cachedURL: URL?
+    private var cachedUsesLightText = true
+    private var lastSampledAt: Date = .distantPast
+    private let log = Logger(subsystem: "com.crafcat7.Peakmon", category: "menubar.luminance")
+
+    private init() {}
+
+    /// Returns `true` if the menu bar text should be drawn in white
+    /// (i.e. the wallpaper top strip is dark). Falls back to the
+    /// previous decision when the wallpaper cannot be loaded.
+    func usesLightText() -> Bool {
+        let now = Date()
+        guard let screen = NSScreen.main else { return cachedUsesLightText }
+        let url = NSWorkspace.shared.desktopImageURL(for: screen)
+
+        let urlChanged = url != cachedURL
+        let stale = now.timeIntervalSince(lastSampledAt) >= sampleInterval
+        guard urlChanged || stale else { return cachedUsesLightText }
+
+        lastSampledAt = now
+        cachedURL = url
+
+        guard let url, let luminance = Self.topStripLuminance(of: url) else {
+            // Fall back to system appearance when the wallpaper file
+            // is missing, unreadable, or a non-image asset (e.g. an
+            // .mov live wallpaper). This is strictly better than
+            // randomly flipping the cached value.
+            let match = NSApp.effectiveAppearance.bestMatch(
+                from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight],
+            )
+            let isDark = match == .darkAqua || match == .vibrantDark
+            cachedUsesLightText = isDark
+            return cachedUsesLightText
+        }
+
+        cachedUsesLightText = luminance < luminanceThreshold
+        return cachedUsesLightText
+    }
+
+    /// Loads `url` as a CGImage and averages the Rec. 601 luminance
+    /// of its top ~3 % horizontal strip (the slice that visually
+    /// underlies the menu bar). Returns `nil` if the URL cannot be
+    /// decoded.
+    private static func topStripLuminance(of url: URL) -> CGFloat? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        else { return nil }
+
+        let width = cgImage.width
+        let height = cgImage.height
+        guard width > 0, height > 0 else { return nil }
+
+        // Crop the top ~3 % of the image (matches the proportion of a
+        // ~24 pt menu bar on a typical retina wallpaper roughly
+        // 800 px tall in points). Clamp to at least 1 px so tiny
+        // wallpapers still produce a sample.
+        let stripHeight = max(height / 32, 1)
+        guard let strip = cgImage.cropping(to: CGRect(
+            x: 0, y: 0, width: width, height: stripHeight,
+        )) else { return averageLuminance(of: cgImage) }
+
+        return averageLuminance(of: strip)
+    }
+
+    /// Mean Rec. 601 luminance of `cgImage`, computed by box-filtering
+    /// the whole image down to a single pixel via `CGContext`. This
+    /// avoids walking every pixel of a multi-megapixel wallpaper on
+    /// every sample.
+    private static func averageLuminance(of cgImage: CGImage) -> CGFloat? {
+        var pixel: [UInt8] = [0, 0, 0, 0]
+        let colourSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: &pixel,
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: colourSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue,
+        ) else { return nil }
+        context.interpolationQuality = .medium
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let r = CGFloat(pixel[0]) / 255
+        let g = CGFloat(pixel[1]) / 255
+        let b = CGFloat(pixel[2]) / 255
+        // Rec. 601 luma — green-heavy, matches the human eye's
+        // perceived brightness and what AppKit uses for its own
+        // contrast decisions on template imagery.
+        return 0.299 * r + 0.587 * g + 0.114 * b
     }
 }

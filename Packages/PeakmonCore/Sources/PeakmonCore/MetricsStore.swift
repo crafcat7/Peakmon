@@ -31,15 +31,24 @@ public final class MetricsStore {
     }
 
     /// Append a batch of samples, trimming to the rolling window.
+    ///
+    /// Uses the in-place subscript `samples[kind, default: []]` so the
+    /// underlying `Array` is mutated through Swift's `_modify`
+    /// accessor instead of being copied out, mutated, and written
+    /// back — that pattern triggers a buffer reassignment on every
+    /// ingest tick, which in turn forces SwiftUI to treat the
+    /// `history(for:)` result as a fresh array on every popover body
+    /// pass. Trim cost is the steady-state minimum: a single
+    /// `removeFirst()` per overflow rather than `removeFirst(n)`'s
+    /// arithmetic + range path, since at the 1 Hz cadence overflow
+    /// is always exactly one element.
     public func ingest(_ batch: [MetricSample]) {
         guard !batch.isEmpty else { return }
         for sample in batch {
-            var window = samples[sample.kind, default: []]
-            window.append(sample)
-            if window.count > historyLimit {
-                window.removeFirst(window.count - historyLimit)
+            samples[sample.kind, default: []].append(sample)
+            while samples[sample.kind]!.count > historyLimit {
+                samples[sample.kind]!.removeFirst()
             }
-            samples[sample.kind] = window
         }
     }
 

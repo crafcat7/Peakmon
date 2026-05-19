@@ -8,40 +8,54 @@
 
 import SwiftUI
 
-public struct MetricCardView<Content: View>: View {
+public struct MetricCardView<Content: View, Accessory: View>: View {
     private let title: String
     private let systemImage: String
     private let tint: Color
-    private let accessory: AnyView?
+    private let accessory: Accessory
     private let content: Content
 
+    /// Designated initialiser. Both `accessory` and `content` are
+    /// captured as generic `View`s so SwiftUI can preserve view
+    /// identity across body re-evaluations. Previously these were
+    /// stored as `AnyView`, which forced a full subtree rebuild on
+    /// every popover tick and was a measurable contributor to the
+    /// dashboard's per-tick CPU cost while open.
+    public init(
+        title: String,
+        systemImage: String,
+        tint: Color = .accentColor,
+        @ViewBuilder accessory: () -> Accessory,
+        @ViewBuilder content: () -> Content,
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.tint = tint
+        self.accessory = accessory()
+        self.content = content()
+    }
+}
+
+extension MetricCardView where Accessory == EmptyView {
+    /// Convenience initialiser for cards that don't show an accessory
+    /// (kept so existing call sites compile unchanged).
     public init(
         title: String,
         systemImage: String,
         tint: Color = .accentColor,
         @ViewBuilder content: () -> Content,
     ) {
-        self.title = title
-        self.systemImage = systemImage
-        self.tint = tint
-        accessory = nil
-        self.content = content()
+        self.init(
+            title: title,
+            systemImage: systemImage,
+            tint: tint,
+            accessory: { EmptyView() },
+            content: content,
+        )
     }
+}
 
-    public init(
-        title: String,
-        systemImage: String,
-        tint: Color = .accentColor,
-        @ViewBuilder accessory: () -> some View,
-        @ViewBuilder content: () -> Content,
-    ) {
-        self.title = title
-        self.systemImage = systemImage
-        self.tint = tint
-        self.accessory = AnyView(accessory())
-        self.content = content()
-    }
-
+extension MetricCardView {
     public var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {

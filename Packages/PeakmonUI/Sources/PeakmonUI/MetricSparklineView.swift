@@ -66,6 +66,20 @@ public struct SparklineSeries: Identifiable, Sendable {
     }
 }
 
+/// Flattened `(series, sample)` row used internally by
+/// `MetricSparklineView` so Swift Charts only walks one collection
+/// per render pass. `Identifiable` because `Chart(_:)` needs a
+/// stable id; the composite `"<seriesID>@<timestamp>"` form is both
+/// unique and cheap to compute.
+private struct SparklinePoint: Identifiable {
+    let seriesID: String
+    let sample: MetricSample
+    let color: Color
+    let fillOpacity: Double
+
+    var id: String { "\(seriesID)@\(sample.timestamp.timeIntervalSinceReferenceDate)" }
+}
+
 /// Renders one or more rolling-window line charts in a single
 /// frame. Empty inputs render an empty frame so the surrounding
 /// layout doesn't jump when data first arrives.
@@ -108,36 +122,32 @@ public struct MetricSparklineView: View {
     }
 
     public var body: some View {
-        Chart {
-            ForEach(series) { line in
-                ForEach(line.samples) { sample in
-                    LineMark(
-                        x: .value("Time", sample.timestamp),
-                        y: .value("Value", sample.value),
-                        series: .value("Series", line.id),
-                    )
-                    .interpolationMethod(.monotone)
-                    .foregroundStyle(line.color)
-                    .lineStyle(StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+        Chart(flattenedPoints) { point in
+            LineMark(
+                x: .value("Time", point.sample.timestamp),
+                y: .value("Value", point.sample.value),
+                series: .value("Series", point.seriesID),
+            )
+            .interpolationMethod(.linear)
+            .foregroundStyle(point.color)
+            .lineStyle(StrokeStyle(lineWidth: lineWidth, lineCap: .round))
 
-                    AreaMark(
-                        x: .value("Time", sample.timestamp),
-                        y: .value("Value", sample.value),
-                        series: .value("Series", line.id),
-                    )
-                    .interpolationMethod(.monotone)
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [
-                                line.color.opacity(line.fillOpacity),
-                                line.color.opacity(0),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom,
-                        ),
-                    )
-                }
-            }
+            AreaMark(
+                x: .value("Time", point.sample.timestamp),
+                y: .value("Value", point.sample.value),
+                series: .value("Series", point.seriesID),
+            )
+            .interpolationMethod(.linear)
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [
+                        point.color.opacity(point.fillOpacity),
+                        point.color.opacity(0),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom,
+                ),
+            )
         }
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
@@ -147,6 +157,27 @@ public struct MetricSparklineView: View {
             plot.background(Color.clear)
         }
         .clipped()
+    }
+
+    /// One row per `(series, sample)` so Swift Charts can iterate a
+    /// single flat collection instead of paying the diff cost of two
+    /// nested `ForEach`es every body pass.
+    private var flattenedPoints: [SparklinePoint] {
+        var out: [SparklinePoint] = []
+        out.reserveCapacity(series.reduce(0) { $0 + $1.samples.count })
+        for line in series {
+            for sample in line.samples {
+                out.append(
+                    SparklinePoint(
+                        seriesID: line.id,
+                        sample: sample,
+                        color: line.color,
+                        fillOpacity: line.fillOpacity,
+                    ),
+                )
+            }
+        }
+        return out
     }
 
     private var domainX: ClosedRange<Date> {

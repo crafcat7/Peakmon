@@ -34,6 +34,18 @@ struct DashboardView: View {
     @ChartSeriesEnabled(.netIn) var netInEnabled
     @ChartSeriesEnabled(.netOut) var netOutEnabled
 
+    /// `true` only while the popover window is on-screen. Used to gate
+    /// every `store.*` read so the popover stops subscribing to the
+    /// `@Observable` `MetricsStore` once it is dismissed. Without this
+    /// gate, `MenuBarExtra(.window)` keeps the dashboard view tree
+    /// alive after the popover closes — every store ingest then forces
+    /// a `body` recompute, which re-runs all sparklines, charts, and
+    /// `Text` formatters, then commits a CALayer transaction whose
+    /// `CGDrawingLayer.draw` rasterises every glyph again. The result
+    /// is the ~20% steady-state CPU users observed after first opening
+    /// the popover, even with the menu-bar label fully cached.
+    @State private var isVisible = false
+
     private var total: Double { store.latest(for: .cpuTotal)?.value ?? 0 }
     private var user: Double { store.latest(for: .cpuUser)?.value ?? 0 }
     private var system: Double { store.latest(for: .cpuSystem)?.value ?? 0 }
@@ -64,6 +76,26 @@ struct DashboardView: View {
     var netOutHistory: [MetricSample] { store.history(for: .netOutRate) }
 
     var body: some View {
+        Group {
+            if isVisible {
+                visibleContent
+            } else {
+                // Fixed-size placeholder so the popover keeps the same
+                // window geometry while hidden, and — critically — does
+                // *not* read any `store.*` property so the @Observable
+                // store no longer triggers `body` recomputes here.
+                Color.clear.frame(width: 300, height: 1)
+            }
+        }
+        .onAppear { isVisible = true }
+        .onDisappear { isVisible = false }
+    }
+
+    /// Real popover content. Lives in its own computed property so the
+    /// outer `body` does not even touch `store.*` while the popover is
+    /// hidden — the SwiftUI dependency tracker then has nothing to
+    /// invalidate on each `MetricsStore.ingest` tick.
+    private var visibleContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
 

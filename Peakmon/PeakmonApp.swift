@@ -10,6 +10,7 @@
 import OSLog
 import PeakmonCollectors
 import PeakmonCore
+import PeakmonUI
 import SwiftUI
 
 @main
@@ -124,18 +125,30 @@ private struct MenuBarLabel: View {
     @CardTintStorage(.disk) private var diskTint
     @CardTintStorage(.network) private var networkTint
 
-    /// Observing the store's latest tick forces this view to re-render
-    /// every second; without it the rasterised image would freeze on
-    /// whatever sample was current when the label first appeared.
-    @State private var refreshTick = 0
+    /// Cached rasterised label. Recomputed only when the source data
+    /// actually changes, so the menu-bar refresh loop costs ~0 % CPU
+    /// when metrics are stable. Boxed in a reference type so the body
+    /// getter can mutate it without violating SwiftUI's pure-body rule.
+    @State private var cache = MenuBarLabelCache()
 
     private var segments: [MenuBarSegment] {
         MenuBarComposition.decode(segmentsRaw)
     }
 
     var body: some View {
-        Group {
-            if let image = render() {
+        let items = segments
+        let signature = MenuBarLabelSignature.make(
+            store: store,
+            items: items,
+            cpuTint: cpuTint,
+            memoryTint: memoryTint,
+            diskTint: diskTint,
+            networkTint: networkTint,
+        )
+        let image = cache.image(for: signature) { render(items: items) }
+
+        return Group {
+            if let image {
                 Image(nsImage: image)
                     .renderingMode(.original)
                     .interpolation(.high)
@@ -143,15 +156,10 @@ private struct MenuBarLabel: View {
                 Text("Peakmon")
             }
         }
-        .task(id: refreshTick) {
-            try? await Task.sleep(for: .seconds(1))
-            refreshTick &+= 1
-        }
     }
 
     @MainActor
-    private func render() -> NSImage? {
-        let items = segments
+    private func render(items: [MenuBarSegment]) -> NSImage? {
         guard !items.isEmpty else { return nil }
 
         // Pick the text colour based on the current system appearance
@@ -284,5 +292,164 @@ private struct MenuBarLabel: View {
                 timestamp: left.timestamp,
             )
         }
+    }
+}
+
+/// Reference-typed cache for the rasterised menu-bar label. Kept in a
+/// `class` so the SwiftUI body can read and update the cache in-place
+/// without violating the "pure body" rule (`@State` value mutation
+/// would trigger a runtime warning).
+@MainActor
+private final class MenuBarLabelCache {
+    private var signature: MenuBarLabelSignature?
+    private var image: NSImage?
+
+    func image(
+        for signature: MenuBarLabelSignature,
+        render: () -> NSImage?,
+    ) -> NSImage? {
+        if let cached = self.signature, cached == signature, let image {
+            return image
+        }
+        let newImage = render()
+        self.signature = signature
+        self.image = newImage
+        return newImage
+    }
+}
+
+/// Compact, value-equatable fingerprint of every input that affects the
+/// rasterised menu-bar label. When two signatures match, the previously
+/// cached `NSImage` can be reused without re-running the SwiftUI
+/// renderer.
+private struct MenuBarLabelSignature: Equatable {
+    let segments: [MenuBarSegment]
+    let isDark: Bool
+    let tints: [String]      // [cpu, memory, disk, network] hex
+    let latestValues: [Double]
+    let historyHashes: [Int]
+
+    @MainActor
+    static func make(
+        store: MetricsStore,
+        items: [MenuBarSegment],
+        cpuTint: Color,
+        memoryTint: Color,
+        diskTint: Color,
+        networkTint: Color,
+    ) -> Self {
+        let match = NSApp.effectiveAppearance.bestMatch(
+            from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight],
+        )
+        let isDark = match == .darkAqua || match == .vibrantDark
+
+        var latests: [Double] = []
+        var historyHashes: [Int] = []
+        for segment in items {
+            switch segment {
+            case .cpuPercent:
+                latests.append(Self.round(store.latest(for: .cpuTotal)?.value))
+            case .cpuGraph:
+                historyHashes.append(Self.hashHistory(store.history(for: .cpuTotal), step: 1))
+            case .memoryPercent:
+                latests.append(Self.round(store.latest(for: .memoryPressure)?.value))
+            case .memoryGraph:
+                historyHashes.append(Self.hashHistory(store.history(for: .memoryPressure), step: 1))
+            case .networkRate:
+                latests.append(Self.bucketRate(store.latest(for: .netInRate)?.value))
+                latests.append(Self.bucketRate(store.latest(for: .netOutRate)?.value))
+            case .networkGraph:
+                historyHashes.append(Self.hashRateHistory(store.history(for: .netInRate)))
+                historyHashes.append(Self.hashRateHistory(store.history(for: .netOutRate)))
+            case .diskRate:
+                latests.append(Self.bucketRate(store.latest(for: .diskReadRate)?.value))
+                latests.append(Self.bucketRate(store.latest(for: .diskWriteRate)?.value))
+            case .diskGraph:
+                historyHashes.append(Self.hashRateHistory(store.history(for: .diskReadRate)))
+                historyHashes.append(Self.hashRateHistory(store.history(for: .diskWriteRate)))
+            case .batteryPercent:
+                latests.append(Self.round(store.latest(for: .batteryLevel)?.value))
+                latests.append(store.latest(for: .batteryPowerSource)?.value ?? -1)
+            }
+        }
+
+        return MenuBarLabelSignature(
+            segments: items,
+            isDark: isDark,
+            tints: [
+                cpuTint.hexString,
+                memoryTint.hexString,
+                diskTint.hexString,
+                networkTint.hexString,
+            ],
+            latestValues: latests,
+            historyHashes: historyHashes,
+        )
+    }
+
+    /// Quantises a metric value so 0.001-level jitter does not force a
+    /// re-render. `step = 1` keeps integer percent precision.
+    private static func round(_ value: Double?, _ step: Double = 1) -> Double {
+        guard let value else { return -1 }
+        return (value / step).rounded()
+    }
+
+    /// Quantises a byte/second rate to the granularity that
+    /// `MenuBarLabel.shortRate` actually displays:
+    ///   - <1 KiB/s  -> bucket 0  ("0K")
+    ///   - <1 MiB/s  -> KiB integer ("Nk")
+    ///   - <10 MiB/s -> 0.1 MiB ("X.YM")
+    ///   - >=10 MiB/s-> MiB integer ("NM")
+    /// Anything inside the same display bucket maps to the same key
+    /// and reuses the cached rasterised label.
+    ///
+    /// CRITICAL: this MUST use the *exact same* truncation as
+    /// `shortRate` — `Int(x)` truncates toward zero, whereas
+    /// `x.rounded()` is half-to-even. Mixing the two would cause two
+    /// different `value`s that render to *different* strings to map to
+    /// the same cache key, then display the wrong rasterised label.
+    /// E.g. `kib = 1023.6` renders as "1023K" but `(1023.6).rounded()
+    /// == 1024.0` would collide with the bucket key for the `1.0M`
+    /// branch. We therefore mirror `Int(...)` (`.rounded(.down)` for
+    /// non-negative input) and replicate the *exact* branch boundaries
+    /// of `shortRate`.
+    private static func bucketRate(_ value: Double?) -> Double {
+        guard let value, value > 0 else { return 0 }
+        let kib = value / 1024
+        if kib < 1 { return 0 }
+        if kib < 1024 { return kib.rounded(.down) }
+        let mib = kib / 1024
+        if mib < 10 { return ((mib * 10).rounded(.down)) / 10 + 10_000 }
+        return mib.rounded(.down) + 1_000_000
+    }
+
+    /// Hashes the visible window of a percent-style history (CPU/MEM)
+    /// using only the value channel so identical bar layouts produce
+    /// identical signatures regardless of how the timestamps advance.
+    /// `step` controls the quantisation grid: `1` ≈ 1 percentage point,
+    /// matching the resolution of a 16 px tall menu-bar bar chart.
+    private static func hashHistory(_ history: [MetricSample], step: Double) -> Int {
+        // 18 = MenuBarBarChart.barCount default. Hashing only the
+        // visible window means off-screen jitter is ignored.
+        let visible = history.suffix(18)
+        var hasher = Hasher()
+        hasher.combine(visible.count)
+        for sample in visible {
+            hasher.combine(Int((sample.value / step).rounded()))
+        }
+        return hasher.finalize()
+    }
+
+    /// Same as `hashHistory(_:step:)` but quantises through
+    /// `bucketRate(_:)` so the rate-style chart's signature changes
+    /// only when a displayed bar actually crosses a bucket boundary.
+    private static func hashRateHistory(_ history: [MetricSample]) -> Int {
+        let visible = history.suffix(18)
+        var hasher = Hasher()
+        hasher.combine(visible.count)
+        for sample in visible {
+            hasher.combine(Int(bucketRate(sample.value) * 10))
+        }
+        return hasher.finalize()
     }
 }

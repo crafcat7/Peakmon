@@ -125,7 +125,7 @@ final class MetricsRuntime {
         self.scheduler = scheduler
         Task { await scheduler.start() }
         spawnProcessLoop(processesStore: processesStore)
-        Log.app.info("Peakmon v0.1 runtime started")
+        Log.app.info("Peakmon runtime started")
     }
 
     /// Pushes a new sampling cadence into the running scheduler.

@@ -23,31 +23,43 @@ struct MenuBarLivePreview: View {
     @CardTintStorage(.gpu) private var gpuTint
 
     var body: some View {
-        HStack(spacing: 0) {
-            Spacer()
-            content
-                .padding(.horizontal, 12)
-                .frame(height: 30)
-                .background(
-                    LinearGradient(
-                        colors: [Color.black.opacity(0.9), Color.black.opacity(0.75)],
-                        startPoint: .top,
-                        endPoint: .bottom,
-                    ),
-                    in: .capsule,
-                )
-                .overlay {
-                    Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-                }
-            Spacer()
+        // Wrap the pill in a horizontal ScrollView so the preview's
+        // intrinsic width never feeds back into NavigationSplitView's
+        // column-sizing pass. Without this, adding every segment grows
+        // the pill past the window's ideal width and SwiftUI compensates
+        // by shrinking the sidebar column to near-zero.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                content
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.black.opacity(0.9), Color.black.opacity(0.75)],
+                            startPoint: .top,
+                            endPoint: .bottom,
+                        ),
+                        in: .capsule,
+                    )
+                    .overlay {
+                        Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                    }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 6)
+            .frame(minWidth: previewMinWidth)
         }
-        .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
         .background(
             Color.gray.opacity(0.08),
             in: .rect(cornerRadius: 8),
         )
     }
+
+    /// Match the typical settings detail width so short selections
+    /// stay centred while long ones become horizontally scrollable.
+    private var previewMinWidth: CGFloat { 520 }
 
     @ViewBuilder
     private var content: some View {

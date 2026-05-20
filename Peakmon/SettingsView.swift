@@ -56,7 +56,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
-                .navigationSplitViewColumnWidth(200)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 200)
                 .toolbar(removing: .sidebarToggle)
         } detail: {
             detailContent

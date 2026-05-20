@@ -499,7 +499,7 @@ struct DashboardView: View {
         let top = Array(sorted.prefix(5))
         let sortLabel = processesSortByMemory ? "by RAM" : "by CPU"
 
-        return MetricCardView(
+        return DashboardCardTemplate(
             title: "Top Processes",
             systemImage: "list.bullet.rectangle",
             tint: processesTint,
@@ -508,7 +508,7 @@ struct DashboardView: View {
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             },
-            content: {
+            body: {
                 VStack(alignment: .leading, spacing: 4) {
                     if top.isEmpty {
                         Text("Collecting…")
@@ -523,6 +523,7 @@ struct DashboardView: View {
                             )
                         }
                     }
+                    Spacer(minLength: 0)
                 }
             },
         )

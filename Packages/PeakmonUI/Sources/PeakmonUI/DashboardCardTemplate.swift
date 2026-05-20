@@ -87,37 +87,85 @@ public enum DashboardCardMetrics {
     /// matches the Disk/Network half-width target use case; full
     /// cards reveal the remainder.
     public static let halfStatsCap: Int = 2
+
+    /// Combined inner content height: `statsRowHeight` + spacing +
+    /// `chartHeight`. Cards that opt out of the stats-plus-chart
+    /// shape (e.g. a process list) use this as the pinned height
+    /// of their free-form body so they stay equal-height with the
+    /// rest of the dashboard.
+    public static var contentHeight: CGFloat {
+        statsRowHeight + interSlotSpacing + chartHeight
+    }
 }
 
-/// The template itself. Generic over the accessory, chart, and
+/// The template itself. Generic over the accessory, body, and
 /// overlay view types so SwiftUI preserves view identity across
-/// re-evaluations (no `AnyView` round-trips).
-public struct DashboardCardTemplate<Accessory: View, Chart: View, CardOverlay: View>: View {
+/// re-evaluations (no `AnyView` round-trips). Two layout modes are
+/// supported via the private `Layout` enum:
+///
+///   * `.statsAndChart` — the canonical metric shape (stats row +
+///     pinned-height chart slot). Built through the `chart:` init.
+///   * `.freeform` — caller-supplied content occupying the full
+///     content area at the pinned `contentHeight`. Built through
+///     the `body:` init. Used by Processes, where rows are not a
+///     sparkline and the stats row is not meaningful.
+///
+/// Both modes pin to `DashboardCardMetrics.contentHeight`, so every
+/// card on the dashboard has an identical outer height regardless
+/// of which init it uses.
+public struct DashboardCardTemplate<Accessory: View, Body: View, CardOverlay: View>: View {
     @Environment(\.cardDensity) private var density
 
     private let title: String
     private let systemImage: String
     private let tint: Color
     private let accessory: Accessory
-    private let stats: [CardStat]
-    private let chart: Chart
+    private let layout: Layout
     private let cardOverlay: CardOverlay
 
+    private enum Layout {
+        case statsAndChart(stats: [CardStat], chart: Body)
+        case freeform(body: Body)
+    }
+
+    /// `stats + chart` init: the metric-card shape. Most cards on
+    /// the dashboard use this.
     public init(
         title: String,
         systemImage: String,
         tint: Color = .accentColor,
         stats: [CardStat],
         @ViewBuilder accessory: () -> Accessory,
-        @ViewBuilder chart: () -> Chart,
+        @ViewBuilder chart: () -> Body,
         @ViewBuilder overlay: () -> CardOverlay = { EmptyView() },
     ) {
         self.title = title
         self.systemImage = systemImage
         self.tint = tint
         self.accessory = accessory()
-        self.stats = stats
-        self.chart = chart()
+        layout = .statsAndChart(stats: stats, chart: chart())
+        cardOverlay = overlay()
+    }
+
+    /// Free-form body init: the caller takes responsibility for the
+    /// content layout, but the template still pins the outer height
+    /// so the card stays equal-height with its neighbours. The body
+    /// closure receives the available height as its first argument
+    /// — actually, the wrapper just constrains the body's frame, so
+    /// the caller need not know the exact number.
+    public init(
+        title: String,
+        systemImage: String,
+        tint: Color = .accentColor,
+        @ViewBuilder accessory: () -> Accessory,
+        @ViewBuilder body: () -> Body,
+        @ViewBuilder overlay: () -> CardOverlay = { EmptyView() },
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.tint = tint
+        self.accessory = accessory()
+        layout = .freeform(body: body())
         cardOverlay = overlay()
     }
 
@@ -127,15 +175,29 @@ public struct DashboardCardTemplate<Accessory: View, Chart: View, CardOverlay: V
             systemImage: systemImage,
             tint: tint,
             accessory: { accessory },
-            content: {
-                VStack(alignment: .leading, spacing: DashboardCardMetrics.interSlotSpacing) {
-                    statsRow
-                    chart
-                        .frame(height: DashboardCardMetrics.chartHeight)
-                }
-            },
+            content: { contentView },
         )
         .overlay { cardOverlay }
+    }
+
+    @ViewBuilder
+    private var contentView: some View {
+        switch layout {
+        case let .statsAndChart(stats, chart):
+            VStack(alignment: .leading, spacing: DashboardCardMetrics.interSlotSpacing) {
+                statsRow(stats: stats)
+                chart
+                    .frame(height: DashboardCardMetrics.chartHeight)
+            }
+        case let .freeform(bodyContent):
+            bodyContent
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: DashboardCardMetrics.contentHeight,
+                    maxHeight: DashboardCardMetrics.contentHeight,
+                    alignment: .topLeading,
+                )
+        }
     }
 
     /// Renders the user-declared stats, truncated by `halfStatsCap`
@@ -143,7 +205,7 @@ public struct DashboardCardTemplate<Accessory: View, Chart: View, CardOverlay: V
     /// even when empty (e.g. Memory's single-stat case) so single-
     /// and triple-stat cards still align vertically.
     @ViewBuilder
-    private var statsRow: some View {
+    private func statsRow(stats: [CardStat]) -> some View {
         let visible = density == .half
             ? Array(stats.prefix(DashboardCardMetrics.halfStatsCap))
             : stats

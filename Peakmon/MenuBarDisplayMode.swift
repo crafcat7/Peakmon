@@ -34,32 +34,9 @@ enum MenuBarSegment: String, CaseIterable, Identifiable, Codable, Transferable {
         CodableRepresentation(contentType: .plainText)
     }
 
-    var title: String {
-        switch self {
-        case .cpuPercent: "CPU %"
-        case .cpuGraph: "CPU graph"
-        case .memoryPercent: "Memory %"
-        case .memoryGraph: "Memory graph"
-        case .networkRate: "Network ↓↑"
-        case .networkGraph: "Network graph"
-        case .diskRate: "Disk R/W"
-        case .diskGraph: "Disk graph"
-        case .batteryPercent: "Battery %"
-        case .gpuPercent: "GPU %"
-        case .gpuGraph: "GPU graph"
-        }
-    }
+    var title: String { descriptor.title }
 
-    var systemImage: String {
-        switch self {
-        case .cpuPercent, .cpuGraph: "cpu"
-        case .memoryPercent, .memoryGraph: "memorychip"
-        case .networkRate, .networkGraph: "network"
-        case .diskRate, .diskGraph: "internaldrive"
-        case .batteryPercent: "battery.100percent"
-        case .gpuPercent, .gpuGraph: "cpu.fill"
-        }
-    }
+    var systemImage: String { descriptor.systemImage }
 }
 
 /// Persists and reads the ordered set of selected segments. Stored as

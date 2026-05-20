@@ -108,6 +108,74 @@ enum TintRole {
     case cpu, memory, disk, network, gpu
 }
 
+// MARK: - Signature inputs
+
+/// One quantised data dependency of a `ValueTemplate`. The
+/// menu-bar rasteriser cache compares an array of these per
+/// segment, so identical inputs short-circuit a re-render even
+/// when the underlying `Double`s jitter below the display
+/// granularity. Encoding the dependency *here*, on the same enum
+/// that drives rendering, guarantees the cache key cannot drift
+/// away from what the value column actually shows.
+enum SignatureInput: Equatable {
+    /// Percent-style scalar quantised to integer percentage
+    /// points (`round`). Used by `.percent` / `.percentWithIndicator`.
+    case percent(MetricKind)
+    /// Byte/second rate quantised through `MenuBarLabelSignature`'s
+    /// `bucketRate`, matching the exact buckets `shortRate`
+    /// renders to. Used by `.dualRateStacked`.
+    case rate(MetricKind)
+    /// Percent-style 18-sample history hashed at integer
+    /// resolution. Used by `.miniBarChart` for non-rate metrics.
+    case history(MetricKind)
+    /// Rate-style 18-sample history hashed through `bucketRate`
+    /// per sample. Used by `.miniBarChart` for rate metrics and
+    /// by `.miniBarChartCombined`.
+    case rateHistory(MetricKind)
+    /// Unquantised scalar passed straight to `latestValues`. Used
+    /// for opaque state flags like the battery power source where
+    /// any value change should invalidate the cache.
+    case raw(MetricKind)
+}
+
+extension ValueTemplate {
+    /// Data dependencies of this template's rendering, in stable
+    /// order. `MenuBarLabelSignature.make` consumes the resulting
+    /// list to build the cache key without ever switching on
+    /// `MenuBarSegment` directly — so adding a new segment never
+    /// requires the signature builder to learn about it, only the
+    /// template enum.
+    var signatureInputs: [SignatureInput] {
+        switch self {
+        case let .percent(kind):
+            [.percent(kind)]
+        case let .percentWithIndicator(kind, indicator):
+            switch indicator {
+            case .batteryPowerSource:
+                [.percent(kind), .raw(.batteryPowerSource)]
+            }
+        case let .dualRateStacked(_, a, b):
+            [.rate(a), .rate(b)]
+        case let .miniBarChart(kind, _, _):
+            [Self.isRateKind(kind) ? .rateHistory(kind) : .history(kind)]
+        case let .miniBarChartCombined(a, b, _):
+            [.rateHistory(a), .rateHistory(b)]
+        }
+    }
+
+    /// Whitelist of metric kinds whose history should be bucketed
+    /// through `bucketRate`. Kept here (rather than on `MetricKind`)
+    /// because the bucketing strategy is a *display* concern owned
+    /// by `MenuBarSegmentBlock`, not a property of the metric
+    /// itself.
+    private static func isRateKind(_ kind: MetricKind) -> Bool {
+        switch kind {
+        case .netInRate, .netOutRate, .diskReadRate, .diskWriteRate: true
+        default: false
+        }
+    }
+}
+
 // MARK: - Segment block
 
 struct MenuBarSegmentBlock: View {
@@ -297,55 +365,133 @@ struct MenuBarSegmentBlock: View {
     }
 }
 
-// MARK: - Segment -> Template mapping
+// MARK: - Segment descriptor
+
+/// Single source of truth for everything `MenuBarSegment` exposes.
+/// Adding a new segment now requires exactly two edits: a new case
+/// on the enum and a new branch in `MenuBarSegment.descriptor`.
+/// Title, system image, vertical-glyph abbreviation, render
+/// template, and signature inputs all flow from this struct so
+/// they cannot drift out of sync.
+struct SegmentDescriptor {
+    let title: String
+    let systemImage: String
+    let shortName: String
+    let template: (label: LabelTemplate, value: ValueTemplate)
+}
 
 extension MenuBarSegment {
+    /// Single switch holding the entire per-segment configuration.
+    /// All other computed properties on this type forward into the
+    /// descriptor, so the menu-bar rasteriser, the settings UI, and
+    /// the cache-key builder never read divergent metadata.
+    var descriptor: SegmentDescriptor {
+        switch self {
+        case .cpuPercent:
+            SegmentDescriptor(
+                title: "CPU %",
+                systemImage: "cpu",
+                shortName: "CPU",
+                template: (.horizontal, .percent(.cpuTotal)),
+            )
+        case .cpuGraph:
+            SegmentDescriptor(
+                title: "CPU graph",
+                systemImage: "cpu",
+                shortName: "CPU",
+                template: (.verticalGlyphs, .miniBarChart(.cpuTotal, tintRole: .cpu, autoscale: false)),
+            )
+        case .memoryPercent:
+            SegmentDescriptor(
+                title: "Memory %",
+                systemImage: "memorychip",
+                shortName: "MEM",
+                template: (.horizontal, .percent(.memoryPressure)),
+            )
+        case .memoryGraph:
+            SegmentDescriptor(
+                title: "Memory graph",
+                systemImage: "memorychip",
+                shortName: "MEM",
+                template: (.verticalGlyphs, .miniBarChart(.memoryPressure, tintRole: .memory, autoscale: false)),
+            )
+        case .networkRate:
+            SegmentDescriptor(
+                title: "Network ↓↑",
+                systemImage: "network",
+                shortName: "NET",
+                template: (
+                    .horizontal,
+                    .dualRateStacked(prefixes: ("\u{2193}", "\u{2191}"), .netInRate, .netOutRate),
+                ),
+            )
+        case .networkGraph:
+            SegmentDescriptor(
+                title: "Network graph",
+                systemImage: "network",
+                shortName: "NET",
+                template: (
+                    .verticalGlyphs,
+                    .miniBarChartCombined(.netInRate, .netOutRate, tintRole: .network),
+                ),
+            )
+        case .diskRate:
+            SegmentDescriptor(
+                title: "Disk R/W",
+                systemImage: "internaldrive",
+                shortName: "DSK",
+                template: (
+                    .horizontal,
+                    .dualRateStacked(prefixes: ("R", "W"), .diskReadRate, .diskWriteRate),
+                ),
+            )
+        case .diskGraph:
+            SegmentDescriptor(
+                title: "Disk graph",
+                systemImage: "internaldrive",
+                shortName: "DSK",
+                template: (
+                    .verticalGlyphs,
+                    .miniBarChartCombined(.diskReadRate, .diskWriteRate, tintRole: .disk),
+                ),
+            )
+        case .batteryPercent:
+            SegmentDescriptor(
+                title: "Battery %",
+                systemImage: "battery.100percent",
+                shortName: "BAT",
+                template: (
+                    .horizontal,
+                    .percentWithIndicator(.batteryLevel, indicator: .batteryPowerSource),
+                ),
+            )
+        case .gpuPercent:
+            SegmentDescriptor(
+                title: "GPU %",
+                systemImage: "cpu.fill",
+                shortName: "GPU",
+                template: (.horizontal, .percent(.gpuUtilization)),
+            )
+        case .gpuGraph:
+            SegmentDescriptor(
+                title: "GPU graph",
+                systemImage: "cpu.fill",
+                shortName: "GPU",
+                template: (
+                    .verticalGlyphs,
+                    .miniBarChart(.gpuUtilization, tintRole: .gpu, autoscale: false),
+                ),
+            )
+        }
+    }
+
     /// 3-character abbreviation used as the leading text label. Same
     /// letters for both percent and graph variants so the user can
     /// visually pair them up.
-    var shortName: String {
-        switch self {
-        case .cpuPercent, .cpuGraph: "CPU"
-        case .memoryPercent, .memoryGraph: "MEM"
-        case .networkRate, .networkGraph: "NET"
-        case .diskRate, .diskGraph: "DSK"
-        case .batteryPercent: "BAT"
-        case .gpuPercent, .gpuGraph: "GPU"
-        }
-    }
+    var shortName: String { descriptor.shortName }
 
-    /// Composite render description. Adding a new segment is a matter
-    /// of adding a case here that returns one of the existing
-    /// (`LabelTemplate`, `ValueTemplate`) pairs.
-    var template: (label: LabelTemplate, value: ValueTemplate) {
-        switch self {
-        case .cpuPercent:
-            (.horizontal, .percent(.cpuTotal))
-        case .cpuGraph:
-            (.verticalGlyphs, .miniBarChart(.cpuTotal, tintRole: .cpu, autoscale: false))
-        case .memoryPercent:
-            (.horizontal, .percent(.memoryPressure))
-        case .memoryGraph:
-            (.verticalGlyphs, .miniBarChart(.memoryPressure, tintRole: .memory, autoscale: false))
-        case .networkRate:
-            (.horizontal, .dualRateStacked(prefixes: ("\u{2193}", "\u{2191}"), .netInRate, .netOutRate))
-        case .networkGraph:
-            (.verticalGlyphs, .miniBarChartCombined(.netInRate, .netOutRate, tintRole: .network))
-        case .diskRate:
-            (.horizontal, .dualRateStacked(prefixes: ("R", "W"), .diskReadRate, .diskWriteRate))
-        case .diskGraph:
-            (.verticalGlyphs, .miniBarChartCombined(.diskReadRate, .diskWriteRate, tintRole: .disk))
-        case .batteryPercent:
-            (
-                .horizontal,
-                .percentWithIndicator(.batteryLevel, indicator: .batteryPowerSource)
-            )
-        case .gpuPercent:
-            (.horizontal, .percent(.gpuUtilization))
-        case .gpuGraph:
-            (.verticalGlyphs, .miniBarChart(.gpuUtilization, tintRole: .gpu, autoscale: false))
-        }
-    }
+    /// Composite render description.
+    var template: (label: LabelTemplate, value: ValueTemplate) { descriptor.template }
 }
 
 // MARK: - Vertical glyph label

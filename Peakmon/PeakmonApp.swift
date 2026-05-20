@@ -374,34 +374,19 @@ private struct MenuBarLabelSignature: Equatable {
         var latests: [Double] = []
         var historyHashes: [Int] = []
         for segment in items {
-            switch segment {
-            case .cpuPercent:
-                latests.append(Self.round(store.latest(for: .cpuTotal)?.value))
-            case .cpuGraph:
-                historyHashes.append(Self.hashHistory(store.history(for: .cpuTotal), step: 1))
-            case .memoryPercent:
-                latests.append(Self.round(store.latest(for: .memoryPressure)?.value))
-            case .memoryGraph:
-                historyHashes.append(Self.hashHistory(store.history(for: .memoryPressure), step: 1))
-            case .networkRate:
-                latests.append(Self.bucketRate(store.latest(for: .netInRate)?.value))
-                latests.append(Self.bucketRate(store.latest(for: .netOutRate)?.value))
-            case .networkGraph:
-                historyHashes.append(Self.hashRateHistory(store.history(for: .netInRate)))
-                historyHashes.append(Self.hashRateHistory(store.history(for: .netOutRate)))
-            case .diskRate:
-                latests.append(Self.bucketRate(store.latest(for: .diskReadRate)?.value))
-                latests.append(Self.bucketRate(store.latest(for: .diskWriteRate)?.value))
-            case .diskGraph:
-                historyHashes.append(Self.hashRateHistory(store.history(for: .diskReadRate)))
-                historyHashes.append(Self.hashRateHistory(store.history(for: .diskWriteRate)))
-            case .batteryPercent:
-                latests.append(Self.round(store.latest(for: .batteryLevel)?.value))
-                latests.append(store.latest(for: .batteryPowerSource)?.value ?? -1)
-            case .gpuPercent:
-                latests.append(Self.round(store.latest(for: .gpuUtilization)?.value))
-            case .gpuGraph:
-                historyHashes.append(Self.hashHistory(store.history(for: .gpuUtilization), step: 1))
+            for input in segment.template.value.signatureInputs {
+                switch input {
+                case let .percent(kind):
+                    latests.append(Self.round(store.latest(for: kind)?.value))
+                case let .rate(kind):
+                    latests.append(Self.bucketRate(store.latest(for: kind)?.value))
+                case let .history(kind):
+                    historyHashes.append(Self.hashHistory(store.history(for: kind), step: 1))
+                case let .rateHistory(kind):
+                    historyHashes.append(Self.hashRateHistory(store.history(for: kind)))
+                case let .raw(kind):
+                    latests.append(store.latest(for: kind)?.value ?? -1)
+                }
             }
         }
 

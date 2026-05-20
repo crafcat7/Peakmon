@@ -293,18 +293,28 @@ private struct MenuBarLabel: View {
         let textColour: Color = usesLightText ? .white : .black
         let dividerColour: Color = usesLightText ? .white.opacity(0.55) : .black.opacity(0.45)
 
-        let composed = HStack(spacing: 4) {
+        let composed = HStack(spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, segment in
                 if index > 0 {
-                    Text("|").foregroundStyle(dividerColour)
+                    Rectangle()
+                        .fill(dividerColour)
+                        .frame(width: 0.5, height: 16)
                 }
-                segmentView(segment)
+                MenuBarSegmentBlock(
+                    segment: segment,
+                    store: store,
+                    cpuTint: cpuTint,
+                    memoryTint: memoryTint,
+                    diskTint: diskTint,
+                    networkTint: networkTint,
+                    gpuTint: gpuTint,
+                )
             }
         }
-        .font(.system(size: 12, weight: .medium).monospacedDigit())
+        .font(.system(size: 11, weight: .medium).monospacedDigit())
         .foregroundStyle(textColour)
         .padding(.horizontal, 2)
-        .frame(height: 18)
+        .frame(height: 22)
         .fixedSize()
 
         let renderer = ImageRenderer(content: composed)
@@ -312,113 +322,6 @@ private struct MenuBarLabel: View {
         let image = renderer.nsImage
         image?.isTemplate = false
         return image
-    }
-
-    @ViewBuilder
-    private func segmentView(_ segment: MenuBarSegment) -> some View {
-        switch segment {
-        case .cpuPercent:
-            let cpu = store.latest(for: .cpuTotal)?.value ?? 0
-            Text("CPU \(Int(cpu.rounded()))%")
-        case .cpuGraph:
-            HStack(spacing: 3) {
-                Text("CPU")
-                MenuBarBarChart(samples: store.history(for: .cpuTotal), tint: cpuTint)
-            }
-        case .memoryPercent:
-            let mem = store.latest(for: .memoryPressure)?.value ?? 0
-            Text("MEM \(Int(mem.rounded()))%")
-        case .memoryGraph:
-            HStack(spacing: 3) {
-                Text("MEM")
-                MenuBarBarChart(samples: store.history(for: .memoryPressure), tint: memoryTint)
-            }
-        case .networkRate:
-            let down = store.latest(for: .netInRate)?.value ?? 0
-            let up = store.latest(for: .netOutRate)?.value ?? 0
-            Text("↓\(Self.shortRate(down)) ↑\(Self.shortRate(up))")
-        case .networkGraph:
-            HStack(spacing: 3) {
-                Text("NET")
-                MenuBarBarChart(
-                    samples: Self.combinedHistory(store: store, kindA: .netInRate, kindB: .netOutRate),
-                    tint: networkTint,
-                    maxValue: nil,
-                )
-            }
-        case .diskRate:
-            let read = store.latest(for: .diskReadRate)?.value ?? 0
-            let write = store.latest(for: .diskWriteRate)?.value ?? 0
-            Text("R\(Self.shortRate(read)) W\(Self.shortRate(write))")
-        case .diskGraph:
-            HStack(spacing: 3) {
-                Text("DISK")
-                MenuBarBarChart(
-                    samples: Self.combinedHistory(store: store, kindA: .diskReadRate, kindB: .diskWriteRate),
-                    tint: diskTint,
-                    maxValue: nil,
-                )
-            }
-        case .batteryPercent:
-            batteryPercentView
-        case .gpuPercent:
-            let gpu = store.latest(for: .gpuUtilization)?.value ?? 0
-            Text("GPU \(Int(gpu.rounded()))%")
-        case .gpuGraph:
-            HStack(spacing: 3) {
-                Text("GPU")
-                MenuBarBarChart(samples: store.history(for: .gpuUtilization), tint: gpuTint)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var batteryPercentView: some View {
-        let pct = store.latest(for: .batteryLevel)?.value ?? 0
-        let source = store.latest(for: .batteryPowerSource).map {
-            BatteryPowerSource(metricValue: $0.value)
-        } ?? .onBattery
-        HStack(spacing: 2) {
-            Text("BAT \(Int(pct.rounded()))%")
-            if source == .charging {
-                Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold))
-            } else if source == .acPlugged {
-                Image(systemName: "powerplug.fill").font(.system(size: 9, weight: .semibold))
-            }
-        }
-    }
-
-    private static func shortRate(_ bytesPerSecond: Double) -> String {
-        let kib = bytesPerSecond / 1024
-        if kib < 1 { return "0K" }
-        if kib < 1024 { return "\(Int(kib))K" }
-        let mib = kib / 1024
-        if mib < 10 { return String(format: "%.1fM", mib) }
-        return "\(Int(mib))M"
-    }
-
-    /// Combines two metric histories (e.g. disk read+write, network
-    /// in+out) into a single series whose value is the sum of the
-    /// paired samples — used to drive a unified "activity" bar chart.
-    private static func combinedHistory(
-        store: MetricsStore,
-        kindA: MetricKind,
-        kindB: MetricKind,
-    ) -> [MetricSample] {
-        let lhs = store.history(for: kindA)
-        let rhs = store.history(for: kindB)
-        let count = min(lhs.count, rhs.count)
-        guard count > 0 else { return [] }
-        return (0 ..< count).map { index in
-            let left = lhs[lhs.count - count + index]
-            let right = rhs[rhs.count - count + index]
-            return MetricSample(
-                kind: kindA,
-                unit: left.unit,
-                value: left.value + right.value,
-                timestamp: left.timestamp,
-            )
-        }
     }
 }
 
@@ -525,32 +428,31 @@ private struct MenuBarLabelSignature: Equatable {
     }
 
     /// Quantises a byte/second rate to the granularity that
-    /// `MenuBarLabel.shortRate` actually displays:
-    ///   - <1 KiB/s  -> bucket 0  ("0K")
-    ///   - <1 MiB/s  -> KiB integer ("Nk")
-    ///   - <10 MiB/s -> 0.1 MiB ("X.YM")
-    ///   - >=10 MiB/s-> MiB integer ("NM")
+    /// `MenuBarSegmentBlock.shortRate` actually displays:
+    ///   - <1 KiB/s   -> bucket 0     ("  0K")
+    ///   - <1000 KiB/s-> KiB integer  (" 12K")
+    ///   - <10 MiB/s  -> 0.1 MiB      ("1.2M")
+    ///   - <1000 MiB/s-> MiB integer  (" 12M")
+    ///   - >=1000 MiB -> 0.1 GiB      ("1.2G")
     /// Anything inside the same display bucket maps to the same key
     /// and reuses the cached rasterised label.
     ///
     /// CRITICAL: this MUST use the *exact same* truncation as
-    /// `shortRate` — `Int(x)` truncates toward zero, whereas
-    /// `x.rounded()` is half-to-even. Mixing the two would cause two
-    /// different `value`s that render to *different* strings to map to
-    /// the same cache key, then display the wrong rasterised label.
-    /// E.g. `kib = 1023.6` renders as "1023K" but `(1023.6).rounded()
-    /// == 1024.0` would collide with the bucket key for the `1.0M`
-    /// branch. We therefore mirror `Int(...)` (`.rounded(.down)` for
-    /// non-negative input) and replicate the *exact* branch boundaries
-    /// of `shortRate`.
+    /// `shortRate` — `Int(x)` truncates toward zero (we mirror that
+    /// with `.rounded(.down)` for non-negative input) and replicate
+    /// the *exact* branch boundaries used in `shortRate`. Mixing
+    /// rounding modes would let two `value`s that render to
+    /// different strings collide on the cache key.
     private static func bucketRate(_ value: Double?) -> Double {
         guard let value, value > 0 else { return 0 }
         let kib = value / 1024
         if kib < 1 { return 0 }
-        if kib < 1024 { return kib.rounded(.down) }
+        if kib < 1000 { return kib.rounded(.down) }
         let mib = kib / 1024
         if mib < 10 { return ((mib * 10).rounded(.down)) / 10 + 10_000 }
-        return mib.rounded(.down) + 1_000_000
+        if mib < 1000 { return mib.rounded(.down) + 1_000_000 }
+        let gib = mib / 1024
+        return ((gib * 10).rounded(.down)) / 10 + 100_000_000
     }
 
     /// Hashes the visible window of a percent-style history (CPU/MEM)

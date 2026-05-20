@@ -27,7 +27,7 @@ struct MenuBarLivePreview: View {
             Spacer()
             content
                 .padding(.horizontal, 12)
-                .frame(height: 26)
+                .frame(height: 30)
                 .background(
                     LinearGradient(
                         colors: [Color.black.opacity(0.9), Color.black.opacity(0.75)],
@@ -56,120 +56,26 @@ struct MenuBarLivePreview: View {
                 .foregroundStyle(.white.opacity(0.85))
                 .font(.system(size: 12, weight: .medium))
         } else {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
                     if index > 0 {
-                        Text("|").foregroundStyle(.white.opacity(0.45))
+                        Rectangle()
+                            .fill(Color.white.opacity(0.35))
+                            .frame(width: 0.5, height: 16)
                     }
-                    segmentView(segment)
+                    MenuBarSegmentBlock(
+                        segment: segment,
+                        store: store,
+                        cpuTint: cpuTint,
+                        memoryTint: memoryTint,
+                        diskTint: diskTint,
+                        networkTint: networkTint,
+                        gpuTint: gpuTint,
+                    )
                 }
             }
-            .font(.system(size: 12, weight: .medium).monospacedDigit())
+            .font(.system(size: 11, weight: .medium).monospacedDigit())
             .foregroundStyle(.white)
-        }
-    }
-
-    @ViewBuilder
-    private func segmentView(_ segment: MenuBarSegment) -> some View {
-        switch segment {
-        case .cpuPercent:
-            let cpu = store.latest(for: .cpuTotal)?.value ?? 0
-            Text("CPU \(Int(cpu.rounded()))%")
-        case .cpuGraph:
-            HStack(spacing: 3) {
-                Text("CPU")
-                MenuBarBarChart(samples: store.history(for: .cpuTotal), tint: cpuTint)
-            }
-        case .memoryPercent:
-            let mem = store.latest(for: .memoryPressure)?.value ?? 0
-            Text("MEM \(Int(mem.rounded()))%")
-        case .memoryGraph:
-            HStack(spacing: 3) {
-                Text("MEM")
-                MenuBarBarChart(samples: store.history(for: .memoryPressure), tint: memoryTint)
-            }
-        case .networkRate:
-            let down = store.latest(for: .netInRate)?.value ?? 0
-            let up = store.latest(for: .netOutRate)?.value ?? 0
-            Text("↓\(Self.shortRate(down)) ↑\(Self.shortRate(up))")
-        case .networkGraph:
-            HStack(spacing: 3) {
-                Text("NET")
-                MenuBarBarChart(
-                    samples: Self.combinedHistory(store: store, kindA: .netInRate, kindB: .netOutRate),
-                    tint: networkTint,
-                    maxValue: nil,
-                )
-            }
-        case .diskRate:
-            let read = store.latest(for: .diskReadRate)?.value ?? 0
-            let write = store.latest(for: .diskWriteRate)?.value ?? 0
-            Text("R\(Self.shortRate(read)) W\(Self.shortRate(write))")
-        case .diskGraph:
-            HStack(spacing: 3) {
-                Text("DISK")
-                MenuBarBarChart(
-                    samples: Self.combinedHistory(store: store, kindA: .diskReadRate, kindB: .diskWriteRate),
-                    tint: diskTint,
-                    maxValue: nil,
-                )
-            }
-        case .batteryPercent:
-            batteryPercentView
-        case .gpuPercent:
-            let gpu = store.latest(for: .gpuUtilization)?.value ?? 0
-            Text("GPU \(Int(gpu.rounded()))%")
-        case .gpuGraph:
-            HStack(spacing: 3) {
-                Text("GPU")
-                MenuBarBarChart(samples: store.history(for: .gpuUtilization), tint: gpuTint)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var batteryPercentView: some View {
-        let pct = store.latest(for: .batteryLevel)?.value ?? 0
-        let source = store.latest(for: .batteryPowerSource).map {
-            BatteryPowerSource(metricValue: $0.value)
-        } ?? .onBattery
-        HStack(spacing: 2) {
-            Text("BAT \(Int(pct.rounded()))%")
-            if source == .charging {
-                Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold))
-            } else if source == .acPlugged {
-                Image(systemName: "powerplug.fill").font(.system(size: 9, weight: .semibold))
-            }
-        }
-    }
-
-    private static func shortRate(_ bytesPerSecond: Double) -> String {
-        let kib = bytesPerSecond / 1024
-        if kib < 1 { return "0K" }
-        if kib < 1024 { return "\(Int(kib))K" }
-        let mib = kib / 1024
-        if mib < 10 { return String(format: "%.1fM", mib) }
-        return "\(Int(mib))M"
-    }
-
-    private static func combinedHistory(
-        store: MetricsStore,
-        kindA: MetricKind,
-        kindB: MetricKind,
-    ) -> [MetricSample] {
-        let lhs = store.history(for: kindA)
-        let rhs = store.history(for: kindB)
-        let count = min(lhs.count, rhs.count)
-        guard count > 0 else { return [] }
-        return (0 ..< count).map { index in
-            let left = lhs[lhs.count - count + index]
-            let right = rhs[rhs.count - count + index]
-            return MetricSample(
-                kind: kindA,
-                unit: left.unit,
-                value: left.value + right.value,
-                timestamp: left.timestamp,
-            )
         }
     }
 }

@@ -273,13 +273,13 @@ private struct GeneralPage: View {
 // MARK: - Display
 
 private struct DisplayPage: View {
-    @AppStorage("showCPUCard") private var showCPU = true
-    @AppStorage("showMemoryCard") private var showMemory = true
-    @AppStorage("showBatteryCard") private var showBattery = true
-    @AppStorage("showDiskCard") private var showDisk = true
-    @AppStorage("showNetworkCard") private var showNetwork = true
-    @AppStorage("showProcessesCard") private var showProcesses = false
-    @AppStorage("showGPUCard") private var showGPU = true
+    @CardVisibilityStorage(.cpu) private var showCPU
+    @CardVisibilityStorage(.memory) private var showMemory
+    @CardVisibilityStorage(.battery) private var showBattery
+    @CardVisibilityStorage(.disk) private var showDisk
+    @CardVisibilityStorage(.network) private var showNetwork
+    @CardVisibilityStorage(.processes) private var showProcesses
+    @CardVisibilityStorage(.gpu) private var showGPU
     @AppStorage("processesSortByMemory") private var processesSortByMemory = false
 
     @CardTintStorage(.cpu) private var cpuTint

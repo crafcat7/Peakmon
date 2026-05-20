@@ -24,7 +24,7 @@ struct PeakmonApp: App {
 
     @AppStorage("silentLaunch") private var silentLaunch = false
     @AppStorage("samplingIntervalSeconds") private var samplingInterval: Double = 1.0
-    @AppStorage("showProcessesCard") private var showProcesses = false
+    @CardVisibilityStorage(.processes) private var showProcesses
 
     var body: some Scene {
         MenuBarExtra {

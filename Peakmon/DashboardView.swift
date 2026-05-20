@@ -16,13 +16,13 @@ struct DashboardView: View {
     @Environment(ProcessesStore.self) private var processesStore
     @Environment(\.openWindow) private var openWindow
 
-    @AppStorage("showCPUCard") private var showCPU = true
-    @AppStorage("showMemoryCard") private var showMemory = true
-    @AppStorage("showBatteryCard") private var showBattery = true
-    @AppStorage("showDiskCard") private var showDisk = true
-    @AppStorage("showNetworkCard") private var showNetwork = true
-    @AppStorage("showProcessesCard") private var showProcesses = false
-    @AppStorage("showGPUCard") private var showGPU = true
+    @CardVisibilityStorage(.cpu) private var showCPU
+    @CardVisibilityStorage(.memory) private var showMemory
+    @CardVisibilityStorage(.battery) private var showBattery
+    @CardVisibilityStorage(.disk) private var showDisk
+    @CardVisibilityStorage(.network) private var showNetwork
+    @CardVisibilityStorage(.processes) private var showProcesses
+    @CardVisibilityStorage(.gpu) private var showGPU
     @AppStorage("processesSortByMemory") private var processesSortByMemory = false
 
     @CardWidthStorage(.cpu) private var cpuWidth
@@ -161,39 +161,66 @@ struct DashboardView: View {
     /// place on the Settings › Display preview.
     private var visibleCards: [DashboardLayout.VisibleCard] {
         var cards: [DashboardLayout.VisibleCard] = []
-        for slot in cardOrder {
-            switch slot {
-            case .cpu:
-                if showCPU {
-                    cards.append(.init(slot: .cpu, width: cpuWidth, view: AnyView(cpuCard)))
-                }
-            case .memory:
-                if showMemory {
-                    cards.append(.init(slot: .memory, width: memoryWidth, view: AnyView(memoryCard)))
-                }
-            case .battery:
-                if showBattery, batterySample != nil {
-                    cards.append(.init(slot: .battery, width: batteryWidth, view: AnyView(batteryCard)))
-                }
-            case .disk:
-                if showDisk {
-                    cards.append(.init(slot: .disk, width: diskWidth, view: AnyView(diskCard)))
-                }
-            case .network:
-                if showNetwork {
-                    cards.append(.init(slot: .network, width: networkWidth, view: AnyView(networkCard)))
-                }
-            case .processes:
-                if showProcesses {
-                    cards.append(.init(slot: .processes, width: processesWidth, view: AnyView(processesCard)))
-                }
-            case .gpu:
-                if showGPU {
-                    cards.append(.init(slot: .gpu, width: gpuWidth, view: AnyView(gpuCard)))
-                }
-            }
+        for slot in cardOrder where isVisible(slot) && hasData(slot) {
+            cards.append(.init(slot: slot, width: width(of: slot), view: AnyView(cardView(for: slot))))
         }
         return cards
+    }
+
+    /// User's "show this card?" flag for the given slot. Centralises
+    /// the per-slot `@CardVisibilityStorage` lookups so callers
+    /// driven by `cardOrder` never have to mirror the slot ↔ flag
+    /// mapping.
+    private func isVisible(_ slot: CardTintSlot) -> Bool {
+        switch slot {
+        case .cpu: showCPU
+        case .memory: showMemory
+        case .battery: showBattery
+        case .disk: showDisk
+        case .network: showNetwork
+        case .processes: showProcesses
+        case .gpu: showGPU
+        }
+    }
+
+    /// User's persisted width preference for the given slot.
+    private func width(of slot: CardTintSlot) -> CardWidth {
+        switch slot {
+        case .cpu: cpuWidth
+        case .memory: memoryWidth
+        case .battery: batteryWidth
+        case .disk: diskWidth
+        case .network: networkWidth
+        case .processes: processesWidth
+        case .gpu: gpuWidth
+        }
+    }
+
+    /// Extra per-slot gating beyond the user's visibility flag.
+    /// Currently only Battery has a hard prerequisite (the machine
+    /// must actually report a battery sample); every other slot
+    /// always has data.
+    private func hasData(_ slot: CardTintSlot) -> Bool {
+        switch slot {
+        case .battery: batterySample != nil
+        default: true
+        }
+    }
+
+    /// Renders the concrete card body for a slot. This is the only
+    /// place that dispatches a `CardTintSlot` to a card view; the
+    /// caller (`visibleCards`) is now slot-agnostic.
+    @ViewBuilder
+    private func cardView(for slot: CardTintSlot) -> some View {
+        switch slot {
+        case .cpu: cpuCard
+        case .memory: memoryCard
+        case .battery: batteryCard
+        case .disk: diskCard
+        case .network: networkCard
+        case .processes: processesCard
+        case .gpu: gpuCard
+        }
     }
 
     /// Renders a single laid-out row. Half-card pairs are emitted as

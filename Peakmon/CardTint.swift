@@ -57,6 +57,31 @@ enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
 
     var storageKey: String { "cardTint.\(rawValue)" }
 
+    /// `@AppStorage` key for the user's "show this card?" preference.
+    /// Hardcoded to the historical key names so existing user
+    /// defaults survive this refactor without migration.
+    var visibilityStorageKey: String {
+        switch self {
+        case .cpu: "showCPUCard"
+        case .memory: "showMemoryCard"
+        case .gpu: "showGPUCard"
+        case .battery: "showBatteryCard"
+        case .disk: "showDiskCard"
+        case .network: "showNetworkCard"
+        case .processes: "showProcessesCard"
+        }
+    }
+
+    /// Factory default for the visibility flag. Everything is on by
+    /// default except `processes`, which can churn rapidly and is
+    /// opt-in.
+    var visibilityDefault: Bool {
+        switch self {
+        case .processes: false
+        default: true
+        }
+    }
+
     /// Hex string for the factory default tint.
     var defaultHex: String {
         switch self {
@@ -104,5 +129,30 @@ struct CardTintStorage: DynamicProperty {
     /// Reset the persisted tint to the factory default.
     func reset() {
         hex = slot.defaultHex
+    }
+}
+
+/// Reads/writes the per-slot "show this card?" preference. Wraps
+/// `@AppStorage(slot.visibilityStorageKey)` so callers no longer
+/// hand-roll a `Bool` `@AppStorage` per slot and cannot accidentally
+/// pair a slot with the wrong key.
+@MainActor
+@propertyWrapper
+struct CardVisibilityStorage: DynamicProperty {
+    let slot: CardTintSlot
+    @AppStorage private var visible: Bool
+
+    init(_ slot: CardTintSlot) {
+        self.slot = slot
+        _visible = AppStorage(wrappedValue: slot.visibilityDefault, slot.visibilityStorageKey)
+    }
+
+    var wrappedValue: Bool {
+        get { visible }
+        nonmutating set { visible = newValue }
+    }
+
+    var projectedValue: Binding<Bool> {
+        Binding(get: { visible }, set: { visible = $0 })
     }
 }

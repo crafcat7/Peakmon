@@ -208,11 +208,15 @@ struct DashboardView: View {
         case let .single(card):
             if card.width == .half {
                 HStack(spacing: 12) {
-                    card.view.frame(maxWidth: .infinity, alignment: .leading)
+                    card.view
+                        .environment(\.cardDensity, .half)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     Color.clear.frame(maxWidth: .infinity)
                 }
             } else {
-                card.view.frame(maxWidth: .infinity, alignment: .leading)
+                card.view
+                    .environment(\.cardDensity, .full)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         case let .pair(lhs, rhs):
             // Use a `Grid` for paired half-width cards so they
@@ -238,12 +242,14 @@ struct DashboardView: View {
             Grid(horizontalSpacing: 12, verticalSpacing: 0) {
                 GridRow {
                     lhs.view
+                        .environment(\.cardDensity, .half)
                         .frame(
                             maxWidth: .infinity,
                             maxHeight: .infinity,
                             alignment: .topLeading,
                         )
                     rhs.view
+                        .environment(\.cardDensity, .half)
                         .frame(
                             maxWidth: .infinity,
                             maxHeight: .infinity,
@@ -290,10 +296,14 @@ struct DashboardView: View {
     }
 
     private var cpuCard: some View {
-        MetricCardView(
+        DashboardCardTemplate(
             title: "CPU",
             systemImage: "cpu",
             tint: cpuTint,
+            stats: [
+                CardStat(label: "User", value: String(format: "%.1f%%", user), tint: .blue),
+                CardStat(label: "System", value: String(format: "%.1f%%", system), tint: .orange),
+            ],
             accessory: {
                 Text("\(total, specifier: "%.1f")%")
                     .font(.title3.monospacedDigit().weight(.semibold))
@@ -301,25 +311,24 @@ struct DashboardView: View {
                     .contentTransition(.numericText(value: total))
                     .animation(.smooth, value: total)
             },
-            content: {
-                VStack(alignment: .leading, spacing: 10) {
-                    breakdown
-                    MetricSparklineView(
-                        series: cpuSparklineSeries,
-                        yMin: 0,
-                        yMax: 100,
-                    )
-                    .frame(height: 48)
-                }
+            chart: {
+                MetricSparklineView(
+                    series: cpuSparklineSeries,
+                    yMin: 0,
+                    yMax: 100,
+                )
             },
         )
     }
 
     private var memoryCard: some View {
-        MetricCardView(
+        DashboardCardTemplate(
             title: "Memory",
             systemImage: "memorychip",
             tint: memoryTint,
+            stats: [
+                CardStat(label: "Used", value: Self.formatBytes(memoryUsed), tint: .purple),
+            ],
             accessory: {
                 Text("\(memoryPressure, specifier: "%.0f")%")
                     .font(.title3.monospacedDigit().weight(.semibold))
@@ -327,19 +336,8 @@ struct DashboardView: View {
                     .contentTransition(.numericText(value: memoryPressure))
                     .animation(.smooth, value: memoryPressure)
             },
-            content: {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 18) {
-                        MetricStatLabel(
-                            label: "Used",
-                            value: Self.formatBytes(memoryUsed),
-                            tint: .purple,
-                        )
-                        Spacer()
-                    }
-                    MetricSparklineView(samples: memoryHistory, style: .memory)
-                        .frame(height: 48)
-                }
+            chart: {
+                MetricSparklineView(samples: memoryHistory, style: .memory)
             },
         )
     }
@@ -347,19 +345,14 @@ struct DashboardView: View {
     private var batteryCard: some View {
         let level = batterySample?.value ?? 0
         let source = batteryPowerSource
-        return MetricCardView(
+        return DashboardCardTemplate(
             title: "Battery",
             systemImage: batteryIconName(for: level, source: source),
             tint: batteryTint,
+            stats: [
+                CardStat(label: "Source", value: source.displayLabel, tint: batteryTint),
+            ],
             accessory: {
-                // Badge + percentage in the full-width layout; falls
-                // back to percentage-only in half-width where the
-                // header row no longer has the horizontal budget for
-                // the badge. The power-state information is still
-                // visible via the card's leading SF symbol
-                // (`battery.100percent.bolt` etc.) and the
-                // charging/standby/low-battery overlays below, so
-                // dropping the textual badge is non-destructive.
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {
                         BatteryStatusBadge(source: source, tint: batteryTint)
@@ -368,22 +361,11 @@ struct DashboardView: View {
                     percentageText(level: level)
                 }
             },
-            content: {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 18) {
-                        MetricStatLabel(
-                            label: "Source",
-                            value: source.displayLabel,
-                            tint: batteryTint,
-                        )
-                        Spacer()
-                    }
-                    MetricSparklineView(
-                        samples: store.history(for: .batteryLevel),
-                        style: .battery,
-                    )
-                    .frame(height: 48)
-                }
+            chart: {
+                MetricSparklineView(
+                    samples: store.history(for: .batteryLevel),
+                    style: .battery,
+                )
             },
         )
         .overlay {
@@ -419,10 +401,15 @@ struct DashboardView: View {
 
     private var diskCard: some View {
         let usagePercent = diskTotal > 0 ? diskUsed / diskTotal * 100 : 0
-        return MetricCardView(
+        return DashboardCardTemplate(
             title: "Disk",
             systemImage: "internaldrive",
             tint: diskTint,
+            stats: [
+                CardStat(label: "Used", value: Self.formatBytes(diskUsed), tint: .cyan),
+                CardStat(label: "Read", value: Self.formatRate(diskRead), tint: .blue),
+                CardStat(label: "Write", value: Self.formatRate(diskWrite), tint: .orange),
+            ],
             accessory: {
                 Text("\(usagePercent, specifier: "%.0f")%")
                     .font(.title3.monospacedDigit().weight(.semibold))
@@ -430,41 +417,25 @@ struct DashboardView: View {
                     .contentTransition(.numericText(value: usagePercent))
                     .animation(.smooth, value: usagePercent)
             },
-            content: {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 18) {
-                        MetricStatLabel(
-                            label: "Used",
-                            value: Self.formatBytes(diskUsed),
-                            tint: .cyan,
-                        )
-                        MetricStatLabel(
-                            label: "Read",
-                            value: Self.formatRate(diskRead),
-                            tint: .blue,
-                        )
-                        MetricStatLabel(
-                            label: "Write",
-                            value: Self.formatRate(diskWrite),
-                            tint: .orange,
-                        )
-                    }
-                    MetricSparklineView(
-                        series: diskSparklineSeries,
-                        yMin: 0,
-                        yMax: nil,
-                    )
-                    .frame(height: 48)
-                }
+            chart: {
+                MetricSparklineView(
+                    series: diskSparklineSeries,
+                    yMin: 0,
+                    yMax: nil,
+                )
             },
         )
     }
 
     private var networkCard: some View {
-        MetricCardView(
+        DashboardCardTemplate(
             title: "Network",
             systemImage: "network",
             tint: networkTint,
+            stats: [
+                CardStat(label: "Down", value: Self.formatRate(netIn), tint: .green),
+                CardStat(label: "Up", value: Self.formatRate(netOut), tint: .pink),
+            ],
             accessory: {
                 let total = netIn + netOut
                 Text(Self.formatRate(total))
@@ -473,37 +444,28 @@ struct DashboardView: View {
                     .contentTransition(.numericText(value: total))
                     .animation(.smooth, value: total)
             },
-            content: {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 18) {
-                        MetricStatLabel(
-                            label: "Down",
-                            value: Self.formatRate(netIn),
-                            tint: .green,
-                        )
-                        MetricStatLabel(
-                            label: "Up",
-                            value: Self.formatRate(netOut),
-                            tint: .pink,
-                        )
-                        Spacer()
-                    }
-                    MetricSparklineView(
-                        series: networkSparklineSeries,
-                        yMin: 0,
-                        yMax: nil,
-                    )
-                    .frame(height: 48)
-                }
+            chart: {
+                MetricSparklineView(
+                    series: networkSparklineSeries,
+                    yMin: 0,
+                    yMax: nil,
+                )
             },
         )
     }
 
     private var gpuCard: some View {
-        MetricCardView(
+        DashboardCardTemplate(
             title: "GPU",
             systemImage: "cpu.fill",
             tint: gpuTint,
+            stats: {
+                var s = [CardStat(label: "Model", value: gpuInfo?.model ?? "Unknown", tint: gpuTint)]
+                if let cores = gpuInfo?.coreCount {
+                    s.append(CardStat(label: "Cores", value: "\(cores)", tint: gpuTint))
+                }
+                return s
+            }(),
             accessory: {
                 Text("\(gpuUtil, specifier: "%.0f")%")
                     .font(.title3.monospacedDigit().weight(.semibold))
@@ -511,30 +473,12 @@ struct DashboardView: View {
                     .contentTransition(.numericText(value: gpuUtil))
                     .animation(.smooth, value: gpuUtil)
             },
-            content: {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 18) {
-                        MetricStatLabel(
-                            label: "Model",
-                            value: gpuInfo?.model ?? "Unknown",
-                            tint: gpuTint,
-                        )
-                        if let cores = gpuInfo?.coreCount {
-                            MetricStatLabel(
-                                label: "Cores",
-                                value: "\(cores)",
-                                tint: gpuTint,
-                            )
-                        }
-                        Spacer()
-                    }
-                    MetricSparklineView(
-                        series: gpuSparklineSeries,
-                        yMin: 0,
-                        yMax: 100,
-                    )
-                    .frame(height: 48)
-                }
+            chart: {
+                MetricSparklineView(
+                    series: gpuSparklineSeries,
+                    yMin: 0,
+                    yMax: 100,
+                )
             },
         )
     }
@@ -636,22 +580,6 @@ struct DashboardView: View {
             Text(history.isEmpty ? "Warming up…" : "Live")
                 .font(.caption)
                 .foregroundStyle(history.isEmpty ? Color.secondary : Color.green)
-        }
-    }
-
-    private var breakdown: some View {
-        HStack(alignment: .top, spacing: 18) {
-            MetricStatLabel(
-                label: "User",
-                value: String(format: "%.1f%%", user),
-                tint: .blue,
-            )
-            MetricStatLabel(
-                label: "System",
-                value: String(format: "%.1f%%", system),
-                tint: .orange,
-            )
-            Spacer()
         }
     }
 

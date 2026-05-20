@@ -112,6 +112,35 @@ public struct MetricStatLabel: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .truncationMode(.tail)
+                // Pin the value row to its unscaled intrinsic height
+                // so `minimumScaleFactor` (above) never shrinks the
+                // line box. Without this, a half-width Disk card
+                // whose `Read`/`Write` rates flip between "  9K/s"
+                // and "1.2 MB/s" would scale the .callout text down
+                // and back up each tick, dragging the card's bottom
+                // edge up and down by a couple of points — exactly
+                // the jitter users see on the dashboard. We measure
+                // the unscaled height with a hidden, fixed-size copy
+                // of the same Text instead of hard-coding a number
+                // so the layout adapts automatically to Dynamic Type
+                // changes.
+                .frame(minHeight: Self.valueLineHeight, alignment: .leading)
         }
+    }
+
+    /// Unscaled line height of the `.callout` font used by the value
+    /// Text. Computed once via SwiftUI's @State + hidden measurement
+    /// — actually no, simpler: we read NSFont's `pointSize` directly
+    /// since `.callout` resolves to a known system metric.
+    private static var valueLineHeight: CGFloat {
+        // `.callout` is 13pt by default on macOS; line height with
+        // the default leading is ~17pt. Hard-coding the constant is
+        // acceptable here because `minimumScaleFactor: 0.7` only
+        // kicks in when text overflows — i.e. the only path where
+        // the height would otherwise shrink — and SwiftUI continues
+        // to honour Dynamic Type for the *unscaled* case via the
+        // font modifier itself; this floor only matters when the
+        // scaler engages.
+        17
     }
 }

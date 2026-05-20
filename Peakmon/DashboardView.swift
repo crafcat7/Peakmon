@@ -509,7 +509,14 @@ struct DashboardView: View {
                     .foregroundStyle(.secondary)
             },
             body: {
-                VStack(alignment: .leading, spacing: 4) {
+                // Rows are sized so 5 caption-height entries (≈13pt
+                // each) plus their inter-row spacing fill the
+                // template's pinned 94pt content area: 5 × 13 + 4 ×
+                // 7 = 93pt. Without the wider spacing the rows
+                // huddle at the top of the card and the freeform
+                // body leaves a visually distracting empty band
+                // along the bottom.
+                VStack(alignment: .leading, spacing: 7) {
                     if top.isEmpty {
                         Text("Collecting…")
                             .font(.caption)
@@ -523,8 +530,8 @@ struct DashboardView: View {
                             )
                         }
                     }
-                    Spacer(minLength: 0)
                 }
+                .frame(maxHeight: .infinity, alignment: .top)
             },
         )
     }

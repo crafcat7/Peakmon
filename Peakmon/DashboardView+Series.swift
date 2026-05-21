@@ -137,4 +137,47 @@ extension DashboardView {
         }
         return lines
     }
+
+    /// Power sparkline payload. Overlays whichever of the four
+    /// sub-rails (CPU / GPU / ANE / DRAM) the user has enabled.
+    /// Falls back to the CPU rail so the chart never goes blank.
+    var powerSparklineSeries: [SparklineSeries] {
+        var lines: [SparklineSeries] = []
+        if powerCPUEnabled {
+            lines.append(SparklineSeries(
+                id: ChartSeries.powerCPU.rawValue,
+                samples: powerCPUHistory,
+                color: ChartSeries.powerCPU.storedTint,
+            ))
+        }
+        if powerGPUEnabled {
+            lines.append(SparklineSeries(
+                id: ChartSeries.powerGPU.rawValue,
+                samples: powerGPUHistory,
+                color: ChartSeries.powerGPU.storedTint,
+            ))
+        }
+        if powerANEEnabled {
+            lines.append(SparklineSeries(
+                id: ChartSeries.powerANE.rawValue,
+                samples: powerANEHistory,
+                color: ChartSeries.powerANE.storedTint,
+            ))
+        }
+        if powerDRAMEnabled {
+            lines.append(SparklineSeries(
+                id: ChartSeries.powerDRAM.rawValue,
+                samples: powerDRAMHistory,
+                color: ChartSeries.powerDRAM.storedTint,
+            ))
+        }
+        if lines.isEmpty {
+            lines.append(SparklineSeries(
+                id: "power.cpu",
+                samples: powerCPUHistory,
+                color: powerTint,
+            ))
+        }
+        return lines
+    }
 }

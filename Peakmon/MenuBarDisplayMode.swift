@@ -27,6 +27,8 @@ enum MenuBarSegment: String, CaseIterable, Identifiable, Codable, Transferable {
     case batteryPercent
     case gpuPercent
     case gpuGraph
+    case powerWatts
+    case powerGraph
 
     var id: String { rawValue }
 

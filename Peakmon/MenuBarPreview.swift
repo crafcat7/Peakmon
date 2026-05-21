@@ -21,6 +21,7 @@ struct MenuBarLivePreview: View {
     @CardTintStorage(.disk) private var diskTint
     @CardTintStorage(.network) private var networkTint
     @CardTintStorage(.gpu) private var gpuTint
+    @CardTintStorage(.power) private var powerTint
 
     var body: some View {
         // Wrap the pill in a horizontal ScrollView so the preview's
@@ -28,38 +29,44 @@ struct MenuBarLivePreview: View {
         // column-sizing pass. Without this, adding every segment grows
         // the pill past the window's ideal width and SwiftUI compensates
         // by shrinking the sidebar column to near-zero.
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                content
-                    .padding(.horizontal, 12)
-                    .frame(height: 30)
-                    .background(
-                        LinearGradient(
-                            colors: [Color.black.opacity(0.9), Color.black.opacity(0.75)],
-                            startPoint: .top,
-                            endPoint: .bottom,
-                        ),
-                        in: .capsule,
-                    )
-                    .overlay {
-                        Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-                    }
-                Spacer(minLength: 0)
+        //
+        // GeometryReader supplies the viewport width as a `minWidth`
+        // on the inner HStack so:
+        //  - short selections: HStack stretches to viewport width,
+        //    the two Spacers centre the pill;
+        //  - long selections: HStack falls back to the pill's own
+        //    intrinsic width, Spacers collapse, and ScrollView pans.
+        GeometryReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    content
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.black.opacity(0.9), Color.black.opacity(0.75)],
+                                startPoint: .top,
+                                endPoint: .bottom,
+                            ),
+                            in: .capsule,
+                        )
+                        .overlay {
+                            Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                        }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 6)
+                .frame(minWidth: proxy.size.width)
             }
-            .padding(.vertical, 6)
-            .frame(minWidth: previewMinWidth)
         }
+        .frame(height: 42)
         .frame(maxWidth: .infinity)
         .background(
             Color.gray.opacity(0.08),
             in: .rect(cornerRadius: 8),
         )
     }
-
-    /// Match the typical settings detail width so short selections
-    /// stay centred while long ones become horizontally scrollable.
-    private var previewMinWidth: CGFloat { 520 }
 
     @ViewBuilder
     private var content: some View {
@@ -83,6 +90,7 @@ struct MenuBarLivePreview: View {
                         diskTint: diskTint,
                         networkTint: networkTint,
                         gpuTint: gpuTint,
+                        powerTint: powerTint,
                     )
                 }
             }

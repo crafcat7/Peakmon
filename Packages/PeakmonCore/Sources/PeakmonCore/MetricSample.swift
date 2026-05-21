@@ -30,6 +30,11 @@ public enum MetricKind: String, Hashable, Codable, Sendable, CaseIterable {
     case gpuUtilization = "gpu.utilization"
     case gpuRenderer = "gpu.renderer"
     case gpuTiler = "gpu.tiler"
+    case powerCPU = "power.cpu"
+    case powerGPU = "power.gpu"
+    case powerANE = "power.ane"
+    case powerDRAM = "power.dram"
+    case powerPackage = "power.package"
 }
 
 /// Unit of measurement attached to a `MetricSample`.
@@ -41,6 +46,7 @@ public enum MetricUnit: String, Hashable, Codable, Sendable {
     case bytesPerSecond = "bytes_per_second"
     case count
     case ratio
+    case watts
 }
 
 /// A single point-in-time observation produced by a `MetricCollector`.

@@ -280,6 +280,7 @@ private struct DisplayPage: View {
     @CardVisibilityStorage(.network) private var showNetwork
     @CardVisibilityStorage(.processes) private var showProcesses
     @CardVisibilityStorage(.gpu) private var showGPU
+    @CardVisibilityStorage(.power) private var showPower
     @AppStorage("processesSortByMemory") private var processesSortByMemory = false
 
     @CardTintStorage(.cpu) private var cpuTint
@@ -289,6 +290,7 @@ private struct DisplayPage: View {
     @CardTintStorage(.network) private var networkTint
     @CardTintStorage(.processes) private var processesTint
     @CardTintStorage(.gpu) private var gpuTint
+    @CardTintStorage(.power) private var powerTint
 
     @CardWidthStorage(.cpu) private var cpuWidth
     @CardWidthStorage(.memory) private var memoryWidth
@@ -297,6 +299,7 @@ private struct DisplayPage: View {
     @CardWidthStorage(.network) private var networkWidth
     @CardWidthStorage(.processes) private var processesWidth
     @CardWidthStorage(.gpu) private var gpuWidth
+    @CardWidthStorage(.power) private var powerWidth
 
     @CardOrderStorage private var cardOrder: [CardTintSlot]
 
@@ -336,6 +339,7 @@ private struct DisplayPage: View {
             .network: showNetwork,
             .processes: showProcesses,
             .gpu: showGPU,
+            .power: showPower,
         ]
     }
 
@@ -348,6 +352,7 @@ private struct DisplayPage: View {
             .network: networkWidth,
             .processes: processesWidth,
             .gpu: gpuWidth,
+            .power: powerWidth,
         ]
     }
 
@@ -360,6 +365,7 @@ private struct DisplayPage: View {
             .network: networkTint,
             .processes: processesTint,
             .gpu: gpuTint,
+            .power: powerTint,
         ]
     }
 
@@ -421,6 +427,15 @@ private struct DisplayPage: View {
                 iconTint: gpuTint,
                 isOn: $showGPU,
                 series: [.gpuDevice, .gpuRenderer, .gpuTiler],
+            ))
+        case .power:
+            metricSection(.init(
+                title: "Power",
+                systemImage: "bolt.fill",
+                slot: .power,
+                iconTint: powerTint,
+                isOn: $showPower,
+                series: [.powerCPU, .powerGPU, .powerANE, .powerDRAM],
             ))
         }
     }

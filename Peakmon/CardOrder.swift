@@ -31,7 +31,7 @@ struct CardOrderStorage: DynamicProperty {
     @AppStorage("cardOrder") private var raw: String = Self.encode(Self.defaultOrder)
 
     static let defaultOrder: [CardTintSlot] = [
-        .cpu, .memory, .battery, .disk, .network, .gpu, .processes,
+        .cpu, .gpu, .memory, .battery, .disk, .network, .power, .processes,
     ]
 
     var wrappedValue: [CardTintSlot] {

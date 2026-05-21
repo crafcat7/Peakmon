@@ -41,12 +41,19 @@ enum CardWidth: String, CaseIterable, Identifiable {
         "cardWidth.\(slot.rawValue)"
     }
 
-    /// Factory default. CPU and Memory are full-width because their
-    /// sparklines + multi-stat headers crowd badly at half width;
-    /// battery / disk / network / processes default to full too so
-    /// the new feature is purely opt-in and does not visually disturb
-    /// users on first launch after upgrading.
-    static func defaultValue(for _: CardTintSlot) -> CardWidth { .full }
+    /// Factory default. The dashboard ships with a paired-row layout:
+    /// CPU/GPU, Memory/Battery, Disk/Network occupy three half-width
+    /// rows, and Processes spans full width on the fourth row because
+    /// its content (a process table) does not shrink usefully. New
+    /// users see this packed layout on first launch; users with an
+    /// existing `cardWidth.<slot>` preference are unaffected because
+    /// `@AppStorage` only consults the default when the key is absent.
+    static func defaultValue(for slot: CardTintSlot) -> CardWidth {
+        switch slot {
+        case .processes: .full
+        case .cpu, .memory, .battery, .disk, .network, .gpu, .power: .half
+        }
+    }
 }
 
 /// Property wrapper mirroring `CardTintStorage` for the width

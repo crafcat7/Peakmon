@@ -34,6 +34,10 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
     case gpuDevice
     case gpuRenderer
     case gpuTiler
+    case powerCPU
+    case powerGPU
+    case powerANE
+    case powerDRAM
 
     var id: String { rawValue }
 
@@ -50,6 +54,10 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .gpuDevice: .gpuUtilization
         case .gpuRenderer: .gpuRenderer
         case .gpuTiler: .gpuTiler
+        case .powerCPU: .powerCPU
+        case .powerGPU: .powerGPU
+        case .powerANE: .powerANE
+        case .powerDRAM: .powerDRAM
         }
     }
 
@@ -66,6 +74,10 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .gpuDevice: "Device"
         case .gpuRenderer: "Renderer"
         case .gpuTiler: "Tiler"
+        case .powerCPU: "CPU"
+        case .powerGPU: "GPU"
+        case .powerANE: "ANE"
+        case .powerDRAM: "DRAM"
         }
     }
 
@@ -83,6 +95,10 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .gpuDevice: .indigo
         case .gpuRenderer: .mint
         case .gpuTiler: .orange
+        case .powerCPU: .blue
+        case .powerGPU: .indigo
+        case .powerANE: .pink
+        case .powerDRAM: .teal
         }
     }
 
@@ -100,6 +116,10 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .gpuDevice: "#5856D6"
         case .gpuRenderer: "#00C7BE"
         case .gpuTiler: "#FF9500"
+        case .powerCPU: "#007AFF"
+        case .powerGPU: "#5856D6"
+        case .powerANE: "#FF2D55"
+        case .powerDRAM: "#5AC8FA"
         }
     }
 

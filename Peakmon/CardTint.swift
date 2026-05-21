@@ -19,6 +19,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
     case battery
     case disk
     case network
+    case power
     case processes
 
     var id: String { rawValue }
@@ -39,6 +40,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
         case .battery: "Battery"
         case .disk: "Disk"
         case .network: "Network"
+        case .power: "Power"
         case .processes: "Processes"
         }
     }
@@ -51,6 +53,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
         case .battery: "battery.100percent"
         case .disk: "internaldrive"
         case .network: "network"
+        case .power: "bolt.fill"
         case .processes: "list.bullet.rectangle"
         }
     }
@@ -68,19 +71,16 @@ enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
         case .battery: "showBatteryCard"
         case .disk: "showDiskCard"
         case .network: "showNetworkCard"
+        case .power: "showPowerCard"
         case .processes: "showProcessesCard"
         }
     }
 
-    /// Factory default for the visibility flag. Everything is on by
-    /// default except `processes`, which can churn rapidly and is
-    /// opt-in.
-    var visibilityDefault: Bool {
-        switch self {
-        case .processes: false
-        default: true
-        }
-    }
+    /// Factory default for the visibility flag. Every card is on by
+    /// default so a fresh install shows the full paired-row layout
+    /// (`CPU|GPU`, `Memory|Battery`, `Disk|Network`, `Processes`).
+    /// Users can opt cards out from Settings › Display.
+    var visibilityDefault: Bool { true }
 
     /// Hex string for the factory default tint.
     var defaultHex: String {
@@ -91,6 +91,7 @@ enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
         case .battery: "#34C759" // .green
         case .disk: "#32ADE6" // .cyan
         case .network: "#FF2D55" // .pink
+        case .power: "#FFCC00" // .yellow
         case .processes: "#FF9500" // .orange
         }
     }

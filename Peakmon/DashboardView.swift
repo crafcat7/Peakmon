@@ -23,6 +23,7 @@ struct DashboardView: View {
     @CardVisibilityStorage(.network) private var showNetwork
     @CardVisibilityStorage(.processes) private var showProcesses
     @CardVisibilityStorage(.gpu) private var showGPU
+    @CardVisibilityStorage(.power) private var showPower
     @AppStorage("processesSortByMemory") private var processesSortByMemory = false
 
     @CardWidthStorage(.cpu) private var cpuWidth
@@ -32,6 +33,7 @@ struct DashboardView: View {
     @CardWidthStorage(.network) private var networkWidth
     @CardWidthStorage(.processes) private var processesWidth
     @CardWidthStorage(.gpu) private var gpuWidth
+    @CardWidthStorage(.power) private var powerWidth
 
     @CardOrderStorage private var cardOrder: [CardTintSlot]
 
@@ -42,6 +44,7 @@ struct DashboardView: View {
     @CardTintStorage(.network) var networkTint
     @CardTintStorage(.processes) var processesTint
     @CardTintStorage(.gpu) var gpuTint
+    @CardTintStorage(.power) var powerTint
 
     @ChartSeriesEnabled(.cpuTotal) var cpuTotalEnabled
     @ChartSeriesEnabled(.cpuUser) var cpuUserEnabled
@@ -53,6 +56,10 @@ struct DashboardView: View {
     @ChartSeriesEnabled(.gpuDevice) var gpuDeviceEnabled
     @ChartSeriesEnabled(.gpuRenderer) var gpuRendererEnabled
     @ChartSeriesEnabled(.gpuTiler) var gpuTilerEnabled
+    @ChartSeriesEnabled(.powerCPU) var powerCPUEnabled
+    @ChartSeriesEnabled(.powerGPU) var powerGPUEnabled
+    @ChartSeriesEnabled(.powerANE) var powerANEEnabled
+    @ChartSeriesEnabled(.powerDRAM) var powerDRAMEnabled
 
     /// `true` only while the popover window is on-screen. Used to gate
     /// every `store.*` read so the popover stops subscribing to the
@@ -106,6 +113,17 @@ struct DashboardView: View {
     var gpuUtilHistory: [MetricSample] { store.history(for: .gpuUtilization) }
     var gpuRendererHistory: [MetricSample] { store.history(for: .gpuRenderer) }
     var gpuTilerHistory: [MetricSample] { store.history(for: .gpuTiler) }
+
+    private var powerCPU: Double { store.latest(for: .powerCPU)?.value ?? 0 }
+    private var powerGPU: Double { store.latest(for: .powerGPU)?.value ?? 0 }
+    private var powerANE: Double { store.latest(for: .powerANE)?.value ?? 0 }
+    private var powerDRAM: Double { store.latest(for: .powerDRAM)?.value ?? 0 }
+    private var powerPackage: Double { store.latest(for: .powerPackage)?.value ?? 0 }
+    var powerCPUHistory: [MetricSample] { store.history(for: .powerCPU) }
+    var powerGPUHistory: [MetricSample] { store.history(for: .powerGPU) }
+    var powerANEHistory: [MetricSample] { store.history(for: .powerANE) }
+    var powerDRAMHistory: [MetricSample] { store.history(for: .powerDRAM) }
+    var powerPackageHistory: [MetricSample] { store.history(for: .powerPackage) }
 
     /// Popover width, in points. Bumped from 300 → 420 to give two
     /// half-width cards enough horizontal room to render without
@@ -180,6 +198,7 @@ struct DashboardView: View {
         case .network: showNetwork
         case .processes: showProcesses
         case .gpu: showGPU
+        case .power: showPower
         }
     }
 
@@ -193,16 +212,21 @@ struct DashboardView: View {
         case .network: networkWidth
         case .processes: processesWidth
         case .gpu: gpuWidth
+        case .power: powerWidth
         }
     }
 
     /// Extra per-slot gating beyond the user's visibility flag.
-    /// Currently only Battery has a hard prerequisite (the machine
-    /// must actually report a battery sample); every other slot
-    /// always has data.
+    /// Battery needs an actual battery sample. Power needs at least
+    /// one telemetry tick from the IOReport collector — when the
+    /// libIOReport dylib is missing or the user is on a host that
+    /// does not expose the Energy Model group, the collector emits
+    /// nothing and we hide the card entirely instead of showing
+    /// "0.0 W" rows forever.
     private func hasData(_ slot: CardTintSlot) -> Bool {
         switch slot {
         case .battery: batterySample != nil
+        case .power: store.latest(for: .powerPackage) != nil
         default: true
         }
     }
@@ -220,6 +244,7 @@ struct DashboardView: View {
         case .network: networkCard
         case .processes: processesCard
         case .gpu: gpuCard
+        case .power: powerCard
         }
     }
 
@@ -297,12 +322,13 @@ struct DashboardView: View {
     private var anyCardVisible: Bool {
         showCPU || showMemory || (showBattery && batterySample != nil)
             || showDisk || showNetwork || showProcesses || showGPU
+            || (showPower && store.latest(for: .powerPackage) != nil)
     }
 
     private var visibilityKey: String {
-        "\(showCPU)\(showMemory)\(showBattery)\(showDisk)\(showNetwork)\(showProcesses)\(showGPU)" +
+        "\(showCPU)\(showMemory)\(showBattery)\(showDisk)\(showNetwork)\(showProcesses)\(showGPU)\(showPower)" +
             "|\(cpuWidth.rawValue)\(memoryWidth.rawValue)\(batteryWidth.rawValue)" +
-            "\(diskWidth.rawValue)\(networkWidth.rawValue)\(processesWidth.rawValue)\(gpuWidth.rawValue)" +
+            "\(diskWidth.rawValue)\(networkWidth.rawValue)\(processesWidth.rawValue)\(gpuWidth.rawValue)\(powerWidth.rawValue)" +
             "|" + cardOrder.map(\.rawValue).joined(separator: ",")
     }
 
@@ -372,10 +398,15 @@ struct DashboardView: View {
     private var batteryCard: some View {
         let level = batterySample?.value ?? 0
         let source = batteryPowerSource
+        let isLow = source == .onBattery && level < 20
+        let iconTint: Color = isLow ? .red : batteryTint
+        let iconName = isLow
+            ? "battery.0percent"
+            : batteryIconName(for: level, source: source)
         return DashboardCardTemplate(
             title: "Battery",
-            systemImage: batteryIconName(for: level, source: source),
-            tint: batteryTint,
+            systemImage: iconName,
+            tint: iconTint,
             stats: [
                 CardStat(label: "Source", value: source.displayLabel, tint: batteryTint),
             ],
@@ -383,9 +414,9 @@ struct DashboardView: View {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {
                         BatteryStatusBadge(source: source, tint: batteryTint)
-                        percentageText(level: level)
+                        percentageText(level: level, source: source)
                     }
-                    percentageText(level: level)
+                    percentageText(level: level, source: source)
                 }
             },
             chart: {
@@ -395,22 +426,25 @@ struct DashboardView: View {
                 )
             },
         )
-        .overlay {
-            if source == .charging {
-                ChargingFlowOverlay(tint: batteryTint)
-            }
-        }
         .overlay(alignment: .topLeading) {
-            if source == .acPlugged {
-                StandbyIndicator(tint: batteryTint)
-            }
-        }
-        .overlay {
-            if source == .onBattery, level < 20 {
-                LowBatteryPulse(level: level)
+            if let dotColor = batteryCornerDotColor(for: source) {
+                BatteryCornerDot(color: dotColor)
             }
         }
         .animation(.easeInOut(duration: 0.35), value: source)
+    }
+
+    /// Chooses the colour of the top-leading status dot on the
+    /// battery card. Matches the amber/green convention Apple uses
+    /// on its MagSafe and LED indicators: amber while charging,
+    /// green once the battery is full (or charging has paused).
+    /// Returns `nil` when on battery (no dot).
+    private func batteryCornerDotColor(for source: BatteryPowerSource) -> Color? {
+        switch source {
+        case .charging: Color(red: 1.00, green: 0.65, blue: 0.10) // amber
+        case .acPlugged: Color(red: 0.20, green: 0.80, blue: 0.30) // green
+        case .onBattery: nil
+        }
     }
 
     /// Shared accessory text for the battery card; extracted so both
@@ -418,10 +452,11 @@ struct DashboardView: View {
     /// fits-check could pick the smaller branch even when the larger
     /// would fit, because differing fonts produce different intrinsic
     /// widths).
-    private func percentageText(level: Double) -> some View {
-        Text("\(level, specifier: "%.0f")%")
+    private func percentageText(level: Double, source: BatteryPowerSource = .onBattery) -> some View {
+        let isLow = source == .onBattery && level < 20
+        return Text("\(level, specifier: "%.0f")%")
             .font(.title3.monospacedDigit().weight(.semibold))
-            .foregroundStyle(.primary)
+            .foregroundStyle(isLow ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
             .contentTransition(.numericText(value: level))
             .animation(.smooth, value: level)
     }
@@ -510,6 +545,40 @@ struct DashboardView: View {
         )
     }
 
+    /// Per-subsystem power draw, in watts. The headline `accessory`
+    /// shows the package total (CPU + GPU + ANE + DRAM) and the
+    /// stats row breaks out the three biggest contributors (CPU,
+    /// GPU, ANE) so users can see at a glance which subsystem is
+    /// currently dominating power use. The sparkline overlays
+    /// however many of the four sub-rails the user has enabled in
+    /// Settings › Display.
+    private var powerCard: some View {
+        DashboardCardTemplate(
+            title: "Power",
+            systemImage: "bolt.fill",
+            tint: powerTint,
+            stats: [
+                CardStat(label: "CPU", value: Self.formatWatts(powerCPU), tint: .blue),
+                CardStat(label: "GPU", value: Self.formatWatts(powerGPU), tint: .indigo),
+                CardStat(label: "ANE", value: Self.formatWatts(powerANE), tint: .pink),
+            ],
+            accessory: {
+                Text(Self.formatWatts(powerPackage))
+                    .font(.title3.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .contentTransition(.numericText(value: powerPackage))
+                    .animation(.smooth, value: powerPackage)
+            },
+            chart: {
+                MetricSparklineView(
+                    series: powerSparklineSeries,
+                    yMin: 0,
+                    yMax: nil,
+                )
+            },
+        )
+    }
+
     /// Top-5 process card. Reads `processesStore.latestProcesses` which
     /// the ProcessCollector refreshes every 2 s on a background task.
     /// Sort order is controlled by `processesSortByMemory`; rows are
@@ -578,16 +647,34 @@ struct DashboardView: View {
         return "\(value)/s"
     }
 
+    /// Compact watt formatter shared by the Power card and its
+    /// related menu-bar segment. Sub-watt readings (idle SoC) show
+    /// one decimal; once draw exceeds 10 W the integer part already
+    /// carries enough precision and the decimal just adds noise.
+    static func formatWatts(_ watts: Double) -> String {
+        let clamped = max(0, watts)
+        if clamped < 10 {
+            return String(format: "%.1fW", clamped)
+        }
+        return String(format: "%.0fW", clamped)
+    }
+
     private func batteryIconName(for percent: Double, source: BatteryPowerSource) -> String {
-        // Charging or full-and-plugged states show the dedicated SF
-        // symbols so the icon itself conveys power state at a glance.
-        switch source {
-        case .charging:
+        // Charging icons mirror the current charge level via the
+        // `.bolt` variants so the symbol itself communicates both
+        // "I am charging" and "how full I am". SF Symbols ships
+        // bolt variants at 25/50/75/100 — clamp <25% to the 25
+        // variant so the bolt stays present.
+        if source == .charging {
+            return switch percent {
+            case ..<25: "battery.25percent.bolt"
+            case ..<50: "battery.50percent.bolt"
+            case ..<75: "battery.75percent.bolt"
+            default: "battery.100percent.bolt"
+            }
+        }
+        if source == .acPlugged, percent >= 99 {
             return "battery.100percent.bolt"
-        case .acPlugged where percent >= 99:
-            return "battery.100percent.bolt"
-        default:
-            break
         }
         return switch percent {
         case ..<10: "battery.0percent"

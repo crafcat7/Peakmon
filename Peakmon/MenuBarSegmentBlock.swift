@@ -58,6 +58,9 @@ enum SegmentMetrics {
     /// Slot width for a single percent value at 11pt monospaced.
     /// Fits "100%" with a hair of trailing slack.
     static let percentValueWidth: CGFloat = 30
+    /// Slot width for a watts value at 11pt monospaced. Fits "999W"
+    /// and "9.9W" — single decimal under 10W, integer thereafter.
+    static let wattsValueWidth: CGFloat = 34
     /// Slot width for the 4-character rate column (e.g. "1.2M").
     static let rateValueWidth: CGFloat = 32
     /// Width of the leading prefix glyph column inside a stacked-rate
@@ -93,6 +96,7 @@ enum ValueTemplate {
     case dualRateStacked(prefixes: (String, String), MetricKind, MetricKind)
     case miniBarChart(MetricKind, tintRole: TintRole, autoscale: Bool)
     case miniBarChartCombined(MetricKind, MetricKind, tintRole: TintRole)
+    case watts(MetricKind)
 }
 
 /// Status glyph kinds emitted by `percentWithIndicator`. Currently only
@@ -105,7 +109,7 @@ enum IndicatorKind {
 /// Logical accent role used by a value template; resolved at draw
 /// time against the user's per-card tint AppStorage.
 enum TintRole {
-    case cpu, memory, disk, network, gpu
+    case cpu, memory, disk, network, gpu, power
 }
 
 // MARK: - Signature inputs
@@ -136,6 +140,9 @@ enum SignatureInput: Equatable {
     /// for opaque state flags like the battery power source where
     /// any value change should invalidate the cache.
     case raw(MetricKind)
+    /// Watts scalar quantised to the granularity `shortWatts`
+    /// actually renders: 0.1 W under 10 W, 1 W thereafter.
+    case watts(MetricKind)
 }
 
 extension ValueTemplate {
@@ -160,6 +167,8 @@ extension ValueTemplate {
             [Self.isRateKind(kind) ? .rateHistory(kind) : .history(kind)]
         case let .miniBarChartCombined(a, b, _):
             [.rateHistory(a), .rateHistory(b)]
+        case let .watts(kind):
+            [.watts(kind)]
         }
     }
 
@@ -186,6 +195,7 @@ struct MenuBarSegmentBlock: View {
     let diskTint: Color
     let networkTint: Color
     let gpuTint: Color
+    let powerTint: Color
 
     var body: some View {
         let template = segment.template
@@ -233,6 +243,8 @@ struct MenuBarSegmentBlock: View {
                 tint: resolveTint(tintRole),
                 maxValue: nil,
             )
+        case let .watts(kind):
+            wattsView(kind: kind)
         }
     }
 
@@ -243,6 +255,13 @@ struct MenuBarSegmentBlock: View {
         let v = store.latest(for: kind)?.value ?? 0
         Text("\(Int(v.rounded()))%")
             .frame(width: SegmentMetrics.percentValueWidth, alignment: .trailing)
+    }
+
+    @ViewBuilder
+    private func wattsView(kind: MetricKind) -> some View {
+        let v = store.latest(for: kind)?.value ?? 0
+        Text(Self.shortWatts(v))
+            .frame(width: SegmentMetrics.wattsValueWidth, alignment: .trailing)
     }
 
     @ViewBuilder
@@ -323,6 +342,7 @@ struct MenuBarSegmentBlock: View {
         case .disk: diskTint
         case .network: networkTint
         case .gpu: gpuTint
+        case .power: powerTint
         }
     }
 
@@ -341,6 +361,16 @@ struct MenuBarSegmentBlock: View {
         if mib < 1000 { return String(format: "%3dM", Int(mib)) }
         let gib = mib / 1024
         return String(format: "%.1fG", gib)
+    }
+
+    /// Fixed-width watts string. Single-decimal precision under
+    /// 10 W (`9.9W`), integer precision thereafter (` 12W`, `999W`).
+    /// Quantisation matches `MenuBarLabelSignature.bucketWatts` so
+    /// the label cache keys stay aligned with what is actually drawn.
+    static func shortWatts(_ watts: Double) -> String {
+        let clamped = max(0, watts)
+        if clamped < 10 { return String(format: "%.1fW", clamped) }
+        return String(format: "%3.0fW", clamped)
     }
 
     static func combinedHistory(
@@ -480,6 +510,23 @@ extension MenuBarSegment {
                 template: (
                     .verticalGlyphs,
                     .miniBarChart(.gpuUtilization, tintRole: .gpu, autoscale: false),
+                ),
+            )
+        case .powerWatts:
+            SegmentDescriptor(
+                title: "Power W",
+                systemImage: "bolt.fill",
+                shortName: "PWR",
+                template: (.horizontal, .watts(.powerPackage)),
+            )
+        case .powerGraph:
+            SegmentDescriptor(
+                title: "Power graph",
+                systemImage: "bolt.fill",
+                shortName: "PWR",
+                template: (
+                    .verticalGlyphs,
+                    .miniBarChart(.powerPackage, tintRole: .power, autoscale: true),
                 ),
             )
         }

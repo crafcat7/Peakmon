@@ -121,6 +121,7 @@ final class MetricsRuntime {
                 DiskCollector(),
                 NetworkCollector(),
                 GPUCollector(),
+                PowerCollector(),
             ],
             interval: Self.duration(seconds: interval),
         )
@@ -242,6 +243,7 @@ private struct MenuBarLabel: View {
     @CardTintStorage(.disk) private var diskTint
     @CardTintStorage(.network) private var networkTint
     @CardTintStorage(.gpu) private var gpuTint
+    @CardTintStorage(.power) private var powerTint
 
     /// Cached rasterised label. Recomputed only when the source data
     /// actually changes, so the menu-bar refresh loop costs ~0 % CPU
@@ -263,6 +265,7 @@ private struct MenuBarLabel: View {
             diskTint: diskTint,
             networkTint: networkTint,
             gpuTint: gpuTint,
+            powerTint: powerTint,
         )
         let image = cache.image(for: signature) { render(items: items) }
 
@@ -308,6 +311,7 @@ private struct MenuBarLabel: View {
                     diskTint: diskTint,
                     networkTint: networkTint,
                     gpuTint: gpuTint,
+                    powerTint: powerTint,
                 )
             }
         }
@@ -355,7 +359,7 @@ private final class MenuBarLabelCache {
 private struct MenuBarLabelSignature: Equatable {
     let segments: [MenuBarSegment]
     let usesLightText: Bool
-    let tints: [String]      // [cpu, memory, disk, network, gpu] hex
+    let tints: [String]      // [cpu, memory, disk, network, gpu, power] hex
     let latestValues: [Double]
     let historyHashes: [Int]
 
@@ -368,6 +372,7 @@ private struct MenuBarLabelSignature: Equatable {
         diskTint: Color,
         networkTint: Color,
         gpuTint: Color,
+        powerTint: Color,
     ) -> Self {
         let usesLightText = WallpaperLuminance.shared.usesLightText()
 
@@ -386,6 +391,8 @@ private struct MenuBarLabelSignature: Equatable {
                     historyHashes.append(Self.hashRateHistory(store.history(for: kind)))
                 case let .raw(kind):
                     latests.append(store.latest(for: kind)?.value ?? -1)
+                case let .watts(kind):
+                    latests.append(Self.bucketWatts(store.latest(for: kind)?.value))
                 }
             }
         }
@@ -399,6 +406,7 @@ private struct MenuBarLabelSignature: Equatable {
                 diskTint.hexString,
                 networkTint.hexString,
                 gpuTint.hexString,
+                powerTint.hexString,
             ],
             latestValues: latests,
             historyHashes: historyHashes,
@@ -438,6 +446,19 @@ private struct MenuBarLabelSignature: Equatable {
         if mib < 1000 { return mib.rounded(.down) + 1_000_000 }
         let gib = mib / 1024
         return ((gib * 10).rounded(.down)) / 10 + 100_000_000
+    }
+
+    /// Quantises a watts value to the granularity
+    /// `MenuBarSegmentBlock.shortWatts` actually renders:
+    ///   - <10W  -> 0.1W steps  ("9.9W")
+    ///   - >=10W -> 1W steps    (" 12W", "999W")
+    /// Mirrors `shortWatts`'s formatter rounding (`%.1f` → half-even,
+    /// `%.0f` → half-even) closely enough that visible label
+    /// boundaries also cross signature boundaries.
+    private static func bucketWatts(_ value: Double?) -> Double {
+        guard let value, value > 0 else { return 0 }
+        if value < 10 { return (value * 10).rounded() / 10 }
+        return value.rounded() + 10_000
     }
 
     /// Hashes the visible window of a percent-style history (CPU/MEM)
@@ -514,8 +535,21 @@ private final class WallpaperLuminance {
     /// (i.e. the wallpaper top strip is dark). Falls back to the
     /// previous decision when the wallpaper cannot be loaded.
     func usesLightText() -> Bool {
+        // When another app is full-screen, macOS overlays the menu
+        // bar with a near-opaque dark backing whenever the user
+        // hovers it back into view, regardless of wallpaper. The
+        // wallpaper-luminance heuristic then picks the wrong colour
+        // and the label glyphs become invisible against the dark
+        // overlay. Detect any on-screen window that covers an
+        // entire NSScreen — that is the public CGWindowList signal
+        // for "another app is full-screen", and it requires neither
+        // Screen Recording nor Accessibility entitlements.
         let now = Date()
         guard let screen = NSScreen.main else { return cachedUsesLightText }
+        if Self.anyFullScreenWindowPresent() {
+            return true
+        }
+
         let url = NSWorkspace.shared.desktopImageURL(for: screen)
 
         let urlChanged = url != cachedURL
@@ -592,5 +626,45 @@ private final class WallpaperLuminance {
         // perceived brightness and what AppKit uses for its own
         // contrast decisions on template imagery.
         return 0.299 * r + 0.587 * g + 0.114 * b
+    }
+
+    /// Returns `true` when any on-screen window covers an entire
+    /// screen — the public proxy for "another app is full-screen".
+    ///
+    /// `CGWindowListCopyWindowInfo` returns metadata only and does
+    /// not require Screen Recording or Accessibility permissions.
+    /// We compare each window's `kCGWindowBounds` to every screen's
+    /// frame (in display points) and treat a match as full-screen.
+    /// Windows on layer 0 (normal app windows) are the only ones
+    /// considered; the Dock, menu bar shadow, and other system
+    /// chrome live on higher layers and are skipped.
+    private static func anyFullScreenWindowPresent() -> Bool {
+        guard let raw = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID,
+        ) as? [[String: Any]] else {
+            return false
+        }
+        let screenFrames = NSScreen.screens.map(\.frame)
+        for info in raw {
+            guard let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
+                  let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
+                  let rect = CGRect(dictionaryRepresentation: boundsDict)
+            else { continue }
+            for frame in screenFrames {
+                // Width should match the screen width; height may
+                // be up to ~30pt shorter than the screen because
+                // hovering the cursor at the top re-exposes the
+                // menu bar and macOS temporarily shrinks the
+                // full-screen window to make room. Accept any
+                // shortfall less than 40pt as still "full-screen".
+                let widthMatches = abs(rect.width - frame.width) < 2
+                let heightDelta = frame.height - rect.height
+                if widthMatches, heightDelta >= -2, heightDelta < 40 {
+                    return true
+                }
+            }
+        }
+        return false
     }
 }

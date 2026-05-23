@@ -37,6 +37,8 @@ public enum MetricKind: String, Hashable, Codable, Sendable, CaseIterable {
     case powerPackage = "power.package"
     case thermalCPU = "thermal.cpu"
     case thermalGPU = "thermal.gpu"
+    case fanLeftRPM = "fan.left.rpm"
+    case fanRightRPM = "fan.right.rpm"
 }
 
 /// Unit of measurement attached to a `MetricSample`.

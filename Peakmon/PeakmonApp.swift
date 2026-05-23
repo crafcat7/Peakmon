@@ -123,6 +123,7 @@ final class MetricsRuntime {
                 GPUCollector(),
                 PowerCollector(),
                 ThermalCollector(),
+                FanCollector(),
             ],
             interval: Self.duration(seconds: interval),
         )

@@ -35,6 +35,7 @@ public enum MetricKind: String, Hashable, Codable, Sendable, CaseIterable {
     case powerANE = "power.ane"
     case powerDRAM = "power.dram"
     case powerPackage = "power.package"
+    case powerSystem = "power.system"
     case thermalCPU = "thermal.cpu"
     case thermalGPU = "thermal.gpu"
     case fanLeftRPM = "fan.left.rpm"

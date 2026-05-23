@@ -122,6 +122,7 @@ final class MetricsRuntime {
                 NetworkCollector(),
                 GPUCollector(),
                 PowerCollector(),
+                SystemPowerCollector(),
                 ThermalCollector(),
                 FanCollector(),
             ],

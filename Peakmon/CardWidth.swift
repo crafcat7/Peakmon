@@ -43,15 +43,17 @@ enum CardWidth: String, CaseIterable, Identifiable {
 
     /// Factory default. The dashboard ships with a paired-row layout:
     /// CPU/GPU, Memory/Battery, Disk/Network occupy three half-width
-    /// rows, and Processes spans full width on the fourth row because
-    /// its content (a process table) does not shrink usefully. New
-    /// users see this packed layout on first launch; users with an
-    /// existing `cardWidth.<slot>` preference are unaffected because
-    /// `@AppStorage` only consults the default when the key is absent.
+    /// rows; Power and Processes each take their own full-width row
+    /// because their content (the SMC system-power headline + DISP/
+    /// DRAM/FAN sub-rails for Power; the process table for Processes)
+    /// does not compress usefully. New users see this packed layout
+    /// on first launch; users with an existing `cardWidth.<slot>`
+    /// preference are unaffected because `@AppStorage` only consults
+    /// the default when the key is absent.
     static func defaultValue(for slot: CardTintSlot) -> CardWidth {
         switch slot {
-        case .processes: .full
-        case .cpu, .memory, .battery, .disk, .network, .gpu, .power: .half
+        case .power, .processes: .full
+        case .cpu, .memory, .battery, .disk, .network, .gpu: .half
         }
     }
 }

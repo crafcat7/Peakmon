@@ -11,7 +11,6 @@
 //
 
 import AppKit
-import OSLog
 import PeakmonCore
 import SwiftUI
 
@@ -78,10 +77,6 @@ final class ActivationPolicyController {
         let desired: NSApplication.ActivationPolicy = hasUserWindow ? .regular : .accessory
         if NSApp.activationPolicy() != desired {
             NSApp.setActivationPolicy(desired)
-            Log.app
-                .debug(
-                    "Activation policy → \(desired == .regular ? "regular" : "accessory", privacy: .public)",
-                )
         }
     }
 }

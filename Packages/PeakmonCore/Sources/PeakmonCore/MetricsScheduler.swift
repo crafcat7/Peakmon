@@ -35,18 +35,12 @@ public actor MetricsScheduler {
     public func start() {
         guard task == nil else { return }
         spawnLoop()
-        Log.scheduler
-            .info(
-                // swiftlint:disable:next line_length
-                "MetricsScheduler started (\(self.collectors.count, privacy: .public) collectors, interval=\(String(describing: self.interval), privacy: .public))",
-            )
     }
 
     /// Cancel the polling loop. Safe to call multiple times.
     public func stop() {
         task?.cancel()
         task = nil
-        Log.scheduler.info("MetricsScheduler stopped")
     }
 
     /// Swap the polling cadence on the fly. If the scheduler is
@@ -56,9 +50,6 @@ public actor MetricsScheduler {
     public func updateInterval(_ newValue: Duration) {
         guard newValue != interval else { return }
         interval = newValue
-        Log.scheduler.info(
-            "MetricsScheduler interval -> \(String(describing: newValue), privacy: .public)",
-        )
         guard task != nil else { return }
         task?.cancel()
         task = nil
@@ -87,16 +78,7 @@ public actor MetricsScheduler {
             await withTaskGroup(of: [MetricSample].self) { group in
                 for collector in collectors {
                     group.addTask {
-                        do {
-                            return try await collector.collect()
-                        } catch {
-                            Log.collectors
-                                .error(
-                                    // swiftlint:disable:next line_length
-                                    "Collector \(collector.identifier, privacy: .public) failed: \(String(describing: error), privacy: .public)",
-                                )
-                            return []
-                        }
+                        (try? await collector.collect()) ?? []
                     }
                 }
                 var batch: [MetricSample] = []

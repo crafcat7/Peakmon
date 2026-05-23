@@ -8,7 +8,6 @@
 //  in System Settings → Login Items.
 //
 
-import OSLog
 import PeakmonCore
 import ServiceManagement
 import SwiftUI
@@ -47,9 +46,6 @@ final class LaunchAtLoginController {
         let status = service.status
         isEnabled = status == .enabled
         requiresApproval = status == .requiresApproval
-        Log.app.debug(
-            "LaunchAtLogin status -> \(String(describing: status), privacy: .public)",
-        )
     }
 
     /// Registers or unregisters the app as a login item. Updates
@@ -69,10 +65,6 @@ final class LaunchAtLoginController {
             return isEnabled == desired
         } catch {
             lastError = error.localizedDescription
-            let verb = desired ? "register" : "unregister"
-            Log.app.error(
-                "LaunchAtLogin \(verb, privacy: .public) failed: \(error.localizedDescription, privacy: .public)",
-            )
             refresh()
             return false
         }

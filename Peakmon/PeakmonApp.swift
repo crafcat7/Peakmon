@@ -9,7 +9,6 @@
 
 import AppKit
 import CoreGraphics
-import OSLog
 import PeakmonCollectors
 import PeakmonCore
 import PeakmonUI
@@ -131,7 +130,6 @@ final class MetricsRuntime {
         self.scheduler = scheduler
         Task { await scheduler.start() }
         spawnProcessLoop(processesStore: processesStore)
-        Log.app.info("Peakmon runtime started")
     }
 
     /// Pushes a new sampling cadence into the running scheduler.
@@ -166,10 +164,9 @@ final class MetricsRuntime {
                         }
                     }
                 } catch {
-                    Log.collectors.error(
-                        // swiftlint:disable:next line_length
-                        "ProcessCollector failed: \(String(describing: error), privacy: .public)",
-                    )
+                    // Process enumeration is best-effort; failures are
+                    // dropped silently so a single bad tick doesn't
+                    // tear the loop down.
                 }
                 do {
                     try await Task.sleep(for: Self.processInterval)
@@ -530,7 +527,6 @@ private final class WallpaperLuminance {
     private var cachedURL: URL?
     private var cachedUsesLightText = true
     private var lastSampledAt: Date = .distantPast
-    private let log = Logger(subsystem: "com.crafcat7.Peakmon", category: "menubar.luminance")
 
     private init() {}
 

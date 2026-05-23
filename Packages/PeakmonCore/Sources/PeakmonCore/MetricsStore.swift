@@ -57,6 +57,17 @@ public final class MetricsStore {
         samples[kind]?.last
     }
 
+    /// Most recent numeric value for `kind`, or `fallback` if none.
+    ///
+    /// Convenience wrapper used throughout the dashboard and menu-bar
+    /// rasteriser, where `store.latest(for: .x)?.value ?? 0` was
+    /// repeated upwards of 30 times. Centralising the unwrap keeps
+    /// `kind` and the fallback obviously paired and makes
+    /// negative-sentinel callers (`-1`) easier to spot.
+    public func value(for kind: MetricKind, default fallback: Double = 0) -> Double {
+        samples[kind]?.last?.value ?? fallback
+    }
+
     /// Rolling window for `kind`, oldest first.
     public func history(for kind: MetricKind) -> [MetricSample] {
         samples[kind] ?? []

@@ -47,6 +47,8 @@ public enum MetricUnit: String, Hashable, Codable, Sendable {
     case count
     case ratio
     case watts
+    case celsius
+    case rpm
 }
 
 /// A single point-in-time observation produced by a `MetricCollector`.

@@ -97,3 +97,23 @@ struct LowBatteryPulse: View {
         }
     }
 }
+
+// MARK: - Battery corner dot
+
+/// Solid corner dot with a soft glow. Hosted as a top-leading
+/// overlay on the battery card. Replaces the older animated
+/// `ChargingFlowOverlay` / `StandbyIndicator` / `LowBatteryPulse`
+/// treatments in a later refactor.
+struct BatteryCornerDot: View {
+    let color: Color
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 5, height: 5)
+            .shadow(color: color.opacity(0.6), radius: 2)
+            .padding(.top, 10)
+            .padding(.leading, 10)
+            .allowsHitTesting(false)
+    }
+}

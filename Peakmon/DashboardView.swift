@@ -54,8 +54,6 @@ struct DashboardView: View {
     @ChartSeriesEnabled(.netIn) var netInEnabled
     @ChartSeriesEnabled(.netOut) var netOutEnabled
     @ChartSeriesEnabled(.gpuDevice) var gpuDeviceEnabled
-    @ChartSeriesEnabled(.gpuRenderer) var gpuRendererEnabled
-    @ChartSeriesEnabled(.gpuTiler) var gpuTilerEnabled
     @ChartSeriesEnabled(.powerCPU) var powerCPUEnabled
     @ChartSeriesEnabled(.powerGPU) var powerGPUEnabled
     @ChartSeriesEnabled(.powerDRAM) var powerDRAMEnabled
@@ -110,8 +108,6 @@ struct DashboardView: View {
 
     private var gpuUtil: Double { store.latest(for: .gpuUtilization)?.value ?? 0 }
     var gpuUtilHistory: [MetricSample] { store.history(for: .gpuUtilization) }
-    var gpuRendererHistory: [MetricSample] { store.history(for: .gpuRenderer) }
-    var gpuTilerHistory: [MetricSample] { store.history(for: .gpuTiler) }
 
     private var powerCPU: Double { store.latest(for: .powerCPU)?.value ?? 0 }
     private var powerGPU: Double { store.latest(for: .powerGPU)?.value ?? 0 }

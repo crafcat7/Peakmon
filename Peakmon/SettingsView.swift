@@ -426,7 +426,7 @@ private struct DisplayPage: View {
                 slot: .gpu,
                 iconTint: gpuTint,
                 isOn: $showGPU,
-                series: [.gpuDevice, .gpuRenderer, .gpuTiler],
+                series: [.gpuDevice],
             ))
         case .power:
             metricSection(.init(

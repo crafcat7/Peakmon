@@ -114,20 +114,6 @@ extension DashboardView {
                 color: ChartSeries.gpuDevice.storedTint,
             ))
         }
-        if gpuRendererEnabled {
-            lines.append(SparklineSeries(
-                id: ChartSeries.gpuRenderer.rawValue,
-                samples: gpuRendererHistory,
-                color: ChartSeries.gpuRenderer.storedTint,
-            ))
-        }
-        if gpuTilerEnabled {
-            lines.append(SparklineSeries(
-                id: ChartSeries.gpuTiler.rawValue,
-                samples: gpuTilerHistory,
-                color: ChartSeries.gpuTiler.storedTint,
-            ))
-        }
         if lines.isEmpty {
             lines.append(SparklineSeries(
                 id: "gpu.utilization",

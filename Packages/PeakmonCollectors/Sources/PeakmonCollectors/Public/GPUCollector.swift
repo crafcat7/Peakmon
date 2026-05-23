@@ -2,12 +2,17 @@
 //  GPUCollector.swift
 //  PeakmonCollectors
 //
-//  Reports GPU utilization (Device / Renderer / Tiler) by reading the
-//  `PerformanceStatistics` CFDictionary exposed by IOKit's
-//  `IOAccelerator` service class. The same path is used by Apple's
-//  Activity Monitor and well-known OSS tools (stats, mactop, iStats);
-//  it is public API, signs cleanly, and works on Intel, AMD, and
-//  Apple Silicon GPUs alike.
+//  Reports GPU utilization by reading the `PerformanceStatistics`
+//  CFDictionary exposed by IOKit's `IOAccelerator` service class.
+//  The same path is used by Apple's Activity Monitor and well-known
+//  OSS tools (stats, mactop, iStats); it is public API, signs cleanly,
+//  and works on Intel, AMD, and Apple Silicon GPUs alike.
+//
+//  Only the `Device Utilization %` field is surfaced. The driver also
+//  exposes `Renderer Utilization %` and `Tiler Utilization %`, but on
+//  Apple Silicon (TBDR) all three values track each other within ~1 %,
+//  so reporting them as separate series would just produce overlapping
+//  lines with no extra information.
 //
 //  Apple Silicon machines may expose more than one IOAccelerator node
 //  (e.g. a real GPU + a wired display accelerator). The collector
@@ -73,13 +78,9 @@ public final class GPUCollector: MetricCollector {
         }
         let now = Date.now
         let device = Self.percent(stats["Device Utilization %"])
-        let renderer = Self.percent(stats["Renderer Utilization %"])
-        let tiler = Self.percent(stats["Tiler Utilization %"])
 
         return [
             MetricSample(kind: .gpuUtilization, unit: .percent, value: device, timestamp: now),
-            MetricSample(kind: .gpuRenderer, unit: .percent, value: renderer, timestamp: now),
-            MetricSample(kind: .gpuTiler, unit: .percent, value: tiler, timestamp: now),
         ]
     }
 

@@ -32,8 +32,6 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
     case netIn
     case netOut
     case gpuDevice
-    case gpuRenderer
-    case gpuTiler
     case powerCPU
     case powerGPU
     case powerDRAM
@@ -51,8 +49,6 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .netIn: .netInRate
         case .netOut: .netOutRate
         case .gpuDevice: .gpuUtilization
-        case .gpuRenderer: .gpuRenderer
-        case .gpuTiler: .gpuTiler
         case .powerCPU: .powerCPU
         case .powerGPU: .powerGPU
         case .powerDRAM: .powerDRAM
@@ -70,8 +66,6 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .netIn: "Download"
         case .netOut: "Upload"
         case .gpuDevice: "Device"
-        case .gpuRenderer: "Renderer"
-        case .gpuTiler: "Tiler"
         case .powerCPU: "CPU"
         case .powerGPU: "GPU"
         case .powerDRAM: "DRAM"
@@ -90,8 +84,6 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .netIn: .green
         case .netOut: .indigo
         case .gpuDevice: .indigo
-        case .gpuRenderer: .mint
-        case .gpuTiler: .orange
         case .powerCPU: .blue
         case .powerGPU: .indigo
         case .powerDRAM: .teal
@@ -110,8 +102,6 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
         case .netIn: "#34C759"
         case .netOut: "#5856D6"
         case .gpuDevice: "#5856D6"
-        case .gpuRenderer: "#00C7BE"
-        case .gpuTiler: "#FF9500"
         case .powerCPU: "#007AFF"
         case .powerGPU: "#5856D6"
         case .powerDRAM: "#5AC8FA"
@@ -135,7 +125,7 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
     /// Macs + eGPU) can opt back in from Settings › Display.
     var defaultEnabled: Bool {
         switch self {
-        case .cpuTotal, .gpuRenderer, .gpuTiler: false
+        case .cpuTotal: false
         default: true
         }
     }

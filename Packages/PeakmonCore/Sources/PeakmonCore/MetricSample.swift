@@ -28,8 +28,6 @@ public enum MetricKind: String, Hashable, Codable, Sendable, CaseIterable {
     case netInRate = "net.in_rate"
     case netOutRate = "net.out_rate"
     case gpuUtilization = "gpu.utilization"
-    case gpuRenderer = "gpu.renderer"
-    case gpuTiler = "gpu.tiler"
     case powerCPU = "power.cpu"
     case powerGPU = "power.gpu"
     case powerDRAM = "power.dram"

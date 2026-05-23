@@ -157,13 +157,6 @@ extension DashboardView {
                 color: ChartSeries.powerGPU.storedTint,
             ))
         }
-        if powerANEEnabled {
-            lines.append(SparklineSeries(
-                id: ChartSeries.powerANE.rawValue,
-                samples: powerANEHistory,
-                color: ChartSeries.powerANE.storedTint,
-            ))
-        }
         if powerDRAMEnabled {
             lines.append(SparklineSeries(
                 id: ChartSeries.powerDRAM.rawValue,

@@ -58,7 +58,6 @@ struct DashboardView: View {
     @ChartSeriesEnabled(.gpuTiler) var gpuTilerEnabled
     @ChartSeriesEnabled(.powerCPU) var powerCPUEnabled
     @ChartSeriesEnabled(.powerGPU) var powerGPUEnabled
-    @ChartSeriesEnabled(.powerANE) var powerANEEnabled
     @ChartSeriesEnabled(.powerDRAM) var powerDRAMEnabled
 
     /// `true` only while the popover window is on-screen. Used to gate
@@ -116,12 +115,10 @@ struct DashboardView: View {
 
     private var powerCPU: Double { store.latest(for: .powerCPU)?.value ?? 0 }
     private var powerGPU: Double { store.latest(for: .powerGPU)?.value ?? 0 }
-    private var powerANE: Double { store.latest(for: .powerANE)?.value ?? 0 }
     private var powerDRAM: Double { store.latest(for: .powerDRAM)?.value ?? 0 }
     private var powerPackage: Double { store.latest(for: .powerPackage)?.value ?? 0 }
     var powerCPUHistory: [MetricSample] { store.history(for: .powerCPU) }
     var powerGPUHistory: [MetricSample] { store.history(for: .powerGPU) }
-    var powerANEHistory: [MetricSample] { store.history(for: .powerANE) }
     var powerDRAMHistory: [MetricSample] { store.history(for: .powerDRAM) }
     var powerPackageHistory: [MetricSample] { store.history(for: .powerPackage) }
 
@@ -560,7 +557,6 @@ struct DashboardView: View {
             stats: [
                 CardStat(label: "CPU", value: Self.formatWatts(powerCPU), tint: .blue),
                 CardStat(label: "GPU", value: Self.formatWatts(powerGPU), tint: .indigo),
-                CardStat(label: "ANE", value: Self.formatWatts(powerANE), tint: .pink),
             ],
             accessory: {
                 Text(Self.formatWatts(powerPackage))

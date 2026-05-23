@@ -435,7 +435,7 @@ private struct DisplayPage: View {
                 slot: .power,
                 iconTint: powerTint,
                 isOn: $showPower,
-                series: [.powerCPU, .powerGPU, .powerANE, .powerDRAM],
+                series: [.powerCPU, .powerGPU, .powerDRAM],
             ))
         }
     }

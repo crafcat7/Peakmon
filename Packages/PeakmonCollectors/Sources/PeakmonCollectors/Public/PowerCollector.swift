@@ -2,8 +2,8 @@
 //  PowerSampler.swift
 //  PeakmonCollectors
 //
-//  Reports per-subsystem power draw (CPU / GPU / ANE / DRAM / Package)
-//  in watts by subscribing to the IOReport "Energy Model" group.
+//  Reports per-subsystem power draw (CPU / GPU / Package) in watts by
+//  subscribing to the IOReport "Energy Model" group.
 //
 //  The "Energy Model" group exposes ~325 channels on Apple Silicon, all
 //  in millijoules. Each tick we capture a fresh snapshot, diff it
@@ -11,19 +11,26 @@
 //  window, then divide by that window to convert to mJ/s = mW, and
 //  finally by 1000 to land on watts.
 //
-//  Channel aggregation follows what `powermetrics --samplers cpu_power
-//  gpu_power ane_power` prints:
+//  Channel aggregation (channel-name suffix `0` is stripped first so
+//  M3-style `GPU0` and M4-style `GPU` reach the same branch):
 //
-//    CPU      = EACC_* + PACC*_* (energy + SRAM rails per cluster)
-//    GPU      = GPU0 + GPU CS0 + GPU SRAM0 + GPU CS SRAM0
-//    ANE      = ANE0
-//    DRAM     = DCS0
-//    Package  = sum of the above
+//    CPU      = "CPU Energy" if present (SoC-provided sum) else
+//               EACC_CPUn + PACCx_CPUn leaves
+//               (cluster summary rows EACC_CPU / PACCx_CPU are
+//                skipped to avoid double-counting their children)
+//    GPU      = GPU + GPU CS + GPU SRAM + GPU CS SRAM if present,
+//               else fall back to "GPU Energy" (in nJ → /1e6 mJ)
+//    DRAM     = DCS + DRAM + AMCC                  (memory PHY + fabric)
+//    Display  = DISP + DISPEXT                     (internal + external)
+//    Package  = CPU + GPU                          (Activity-Monitor-style total)
 //
-//  Anything else in the group (display, network PHYs, secondary
-//  accelerators) is ignored — the goal here is the same five totals
-//  users see in Activity Monitor's Energy tab and on Apple's spec
-//  sheets, not a full per-rail breakdown.
+//  ANE and the media engines (ISP / AVE / MSR / VDEC) are intentionally
+//  not broken out: their Energy Model channels sit at a steady 0 W
+//  when the block is power-gated (the default) and only briefly spike
+//  under specific workloads, which adds noise to the dashboard
+//  without telling users anything actionable. The SMC system headline
+//  emitted by SystemPowerCollector already captures their contribution
+//  to total draw.
 //
 //  Public API of PeakmonCollectors — no entitlement, no sudo. Uses the
 //  ad-hoc-friendly `IOReportBridge` from PeakmonCore, which dlopens
@@ -39,10 +46,7 @@ import PeakmonCore
 public final class PowerCollector: MetricCollector {
     public let identifier = "power.ioreport"
 
-    /// `Bridge + previous snapshot + previous timestamp` mutated under
-    /// the actor lock. `nil` either before the first tick or whenever
-    /// the bridge could not be constructed (in which case `collect()`
-    /// returns `[]` quietly).
+    /// Bridge + previous-snapshot cache, guarded by an actor.
     private let state = State()
 
     public init() {}
@@ -60,32 +64,14 @@ public final class PowerCollector: MetricCollector {
         private var bridgeAttempted = false
 
         func sample() -> [MetricSample] {
-            // Lazy construct on first call so a missing dylib does not
-            // crash app launch; cache the result either way.
             if !bridgeAttempted {
                 bridgeAttempted = true
-                do {
-                    bridge = try IOReportBridge(group: "Energy Model")
-                } catch {
-                    Log.collectors.error(
-                        // swiftlint:disable:next line_length
-                        "PowerCollector disabled: \(String(describing: error), privacy: .public)",
-                    )
-                    bridge = nil
-                }
+                bridge = try? IOReportBridge(group: "Energy Model")
             }
             guard let bridge else { return [] }
 
             let now = Date.now
-            let snapshot: IOReportBridge.Snapshot
-            do {
-                snapshot = try bridge.snapshot()
-            } catch {
-                Log.collectors.error(
-                    "PowerCollector snapshot failed: \(String(describing: error), privacy: .public)",
-                )
-                return []
-            }
+            guard let snapshot = try? bridge.snapshot() else { return [] }
 
             defer {
                 previous = snapshot
@@ -102,46 +88,87 @@ public final class PowerCollector: MetricCollector {
             let readings = snapshot.delta(against: previous)
             guard !readings.isEmpty else { return [] }
 
-            var cpuMJ: Int64 = 0
-            var gpuMJ: Int64 = 0
-            var aneMJ: Int64 = 0
-            var dramMJ: Int64 = 0
-
-            for reading in readings {
-                guard reading.unit == "mJ" else { continue }
-                let name = reading.channel
-                if name.hasPrefix("EACC") || name.hasPrefix("PACC") {
-                    cpuMJ &+= reading.value
-                } else if name == "GPU0"
-                    || name == "GPU CS0"
-                    || name == "GPU SRAM0"
-                    || name == "GPU CS SRAM0"
-                {
-                    gpuMJ &+= reading.value
-                } else if name == "ANE0" {
-                    aneMJ &+= reading.value
-                } else if name == "DCS0" {
-                    dramMJ &+= reading.value
-                }
-            }
-            let packageMJ = cpuMJ &+ gpuMJ &+ aneMJ &+ dramMJ
+            let agg = Self.aggregate(readings: readings)
 
             func watts(_ mJ: Int64) -> Double {
                 Double(mJ) / elapsed / 1000.0
             }
 
             return [
-                MetricSample(kind: .powerCPU, unit: .watts, value: watts(cpuMJ), timestamp: now),
-                MetricSample(kind: .powerGPU, unit: .watts, value: watts(gpuMJ), timestamp: now),
-                MetricSample(kind: .powerANE, unit: .watts, value: watts(aneMJ), timestamp: now),
-                MetricSample(kind: .powerDRAM, unit: .watts, value: watts(dramMJ), timestamp: now),
+                MetricSample(kind: .powerCPU, unit: .watts, value: watts(agg.cpuMJ), timestamp: now),
+                MetricSample(kind: .powerGPU, unit: .watts, value: watts(agg.gpuMJ), timestamp: now),
+                MetricSample(kind: .powerDRAM, unit: .watts, value: watts(agg.dramMJ), timestamp: now),
+                MetricSample(
+                    kind: .powerDisplay,
+                    unit: .watts,
+                    value: watts(agg.displayMJ),
+                    timestamp: now,
+                ),
                 MetricSample(
                     kind: .powerPackage,
                     unit: .watts,
-                    value: watts(packageMJ),
+                    value: watts(agg.cpuMJ + agg.gpuMJ),
                     timestamp: now,
                 ),
             ]
+        }
+
+        /// Per-rail energy totals for a single delta window (mJ).
+        private struct Aggregation {
+            var cpuMJ: Int64 = 0
+            var gpuMJ: Int64 = 0
+            var dramMJ: Int64 = 0
+            var displayMJ: Int64 = 0
+        }
+
+        /// Walk the channel deltas once and produce a per-rail energy
+        /// total. Aggregation rules are documented at the top of this
+        /// file; the only subtlety in code is the trailing-`0` strip
+        /// that lets M3-style `GPU0` and M4-style `GPU` hit the same
+        /// branch.
+        private static func aggregate(readings: [IOReportBridge.Reading]) -> Aggregation {
+            var agg = Aggregation()
+            var cpuLeafMJ: Int64 = 0
+            var gpuEnergyMJ: Int64 = 0
+            var hasCPUSummary = false
+
+            for reading in readings {
+                let name = reading.channel
+                let base = name.hasSuffix("0") ? String(name.dropLast()) : name
+                switch reading.unit {
+                case "mJ":
+                    if name == "CPU Energy" {
+                        agg.cpuMJ = reading.value
+                        hasCPUSummary = true
+                    } else if (name.hasPrefix("EACC_CPU") || name.hasPrefix("PACC"))
+                        // Skip cluster summary rows so leaves can sum
+                        // without overlap.
+                        && name != "EACC_CPU"
+                        && !(name.hasPrefix("PACC") && name.hasSuffix("_CPU"))
+                    {
+                        cpuLeafMJ += reading.value
+                    } else if base == "GPU"
+                        || base == "GPU CS"
+                        || base == "GPU SRAM"
+                        || base == "GPU CS SRAM"
+                    {
+                        agg.gpuMJ += reading.value
+                    } else if base == "DCS" || base == "DRAM" || base == "AMCC" {
+                        agg.dramMJ += reading.value
+                    } else if base == "DISP" || base == "DISPEXT" {
+                        agg.displayMJ += reading.value
+                    }
+                case "nJ":
+                    if name == "GPU Energy" {
+                        gpuEnergyMJ = reading.value / 1_000_000
+                    }
+                default:
+                    continue
+                }
+            }
+            if !hasCPUSummary { agg.cpuMJ = cpuLeafMJ }
+            if agg.gpuMJ == 0 { agg.gpuMJ = gpuEnergyMJ }
+            return agg
         }
     }
 }

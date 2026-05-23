@@ -108,8 +108,25 @@ enum IndicatorKind {
 
 /// Logical accent role used by a value template; resolved at draw
 /// time against the user's per-card tint AppStorage.
+///
+/// `TintRole` is intentionally a strict subset of `CardTintSlot` —
+/// the menu bar never references thermal/fan/battery accents — so
+/// the type system rules out a `.thermal` or `.fan` segment by
+/// construction. `slot` projects the role back into `CardTintSlot`
+/// for storage lookups.
 enum TintRole {
     case cpu, memory, disk, network, gpu, power
+
+    var slot: CardTintSlot {
+        switch self {
+        case .cpu: .cpu
+        case .memory: .memory
+        case .disk: .disk
+        case .network: .network
+        case .gpu: .gpu
+        case .power: .power
+        }
+    }
 }
 
 // MARK: - Signature inputs
@@ -190,12 +207,7 @@ extension ValueTemplate {
 struct MenuBarSegmentBlock: View {
     let segment: MenuBarSegment
     let store: MetricsStore
-    let cpuTint: Color
-    let memoryTint: Color
-    let diskTint: Color
-    let networkTint: Color
-    let gpuTint: Color
-    let powerTint: Color
+    let tints: [CardTintSlot: Color]
 
     var body: some View {
         let template = segment.template
@@ -336,14 +348,7 @@ struct MenuBarSegmentBlock: View {
     }
 
     private func resolveTint(_ role: TintRole) -> Color {
-        switch role {
-        case .cpu: cpuTint
-        case .memory: memoryTint
-        case .disk: diskTint
-        case .network: networkTint
-        case .gpu: gpuTint
-        case .power: powerTint
-        }
+        tints[role.slot] ?? .primary
     }
 
     // MARK: Helpers

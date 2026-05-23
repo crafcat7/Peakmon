@@ -273,35 +273,8 @@ private struct GeneralPage: View {
 // MARK: - Display
 
 private struct DisplayPage: View {
-    @CardVisibilityStorage(.cpu) private var showCPU
-    @CardVisibilityStorage(.memory) private var showMemory
-    @CardVisibilityStorage(.battery) private var showBattery
-    @CardVisibilityStorage(.disk) private var showDisk
-    @CardVisibilityStorage(.network) private var showNetwork
-    @CardVisibilityStorage(.processes) private var showProcesses
-    @CardVisibilityStorage(.gpu) private var showGPU
-    @CardVisibilityStorage(.power) private var showPower
+    @Environment(\.cardSettings) private var cardSettings
     @AppStorage("processesSortByMemory") private var processesSortByMemory = false
-
-    @CardTintStorage(.cpu) private var cpuTint
-    @CardTintStorage(.memory) private var memoryTint
-    @CardTintStorage(.battery) private var batteryTint
-    @CardTintStorage(.disk) private var diskTint
-    @CardTintStorage(.network) private var networkTint
-    @CardTintStorage(.processes) private var processesTint
-    @CardTintStorage(.gpu) private var gpuTint
-    @CardTintStorage(.power) private var powerTint
-
-    @CardWidthStorage(.cpu) private var cpuWidth
-    @CardWidthStorage(.memory) private var memoryWidth
-    @CardWidthStorage(.battery) private var batteryWidth
-    @CardWidthStorage(.disk) private var diskWidth
-    @CardWidthStorage(.network) private var networkWidth
-    @CardWidthStorage(.processes) private var processesWidth
-    @CardWidthStorage(.gpu) private var gpuWidth
-    @CardWidthStorage(.power) private var powerWidth
-
-    @CardOrderStorage private var cardOrder: [CardTintSlot]
 
     var body: some View {
         SettingsPage(
@@ -317,126 +290,43 @@ private struct DisplayPage: View {
                 footer: "Drag a tile onto another tile to insert it there. Hidden cards stay visible here so you can pre-arrange them.",
             ) {
                 DisplayCardPreview(
-                    order: $cardOrder,
-                    visibility: visibility,
-                    widths: widths,
-                    tints: tints,
+                    order: cardSettings.orderBinding(),
+                    visibility: cardSettings.visibilityMap(),
+                    widths: cardSettings.widthMap(),
+                    tints: cardSettings.tintMap(),
                 )
             }
 
-            ForEach(cardOrder) { slot in
+            ForEach(cardSettings.order()) { slot in
                 section(for: slot)
             }
         }
     }
 
-    private var visibility: [CardTintSlot: Bool] {
-        [
-            .cpu: showCPU,
-            .memory: showMemory,
-            .battery: showBattery,
-            .disk: showDisk,
-            .network: showNetwork,
-            .processes: showProcesses,
-            .gpu: showGPU,
-            .power: showPower,
-        ]
-    }
-
-    private var widths: [CardTintSlot: CardWidth] {
-        [
-            .cpu: cpuWidth,
-            .memory: memoryWidth,
-            .battery: batteryWidth,
-            .disk: diskWidth,
-            .network: networkWidth,
-            .processes: processesWidth,
-            .gpu: gpuWidth,
-            .power: powerWidth,
-        ]
-    }
-
-    private var tints: [CardTintSlot: Color] {
-        [
-            .cpu: cpuTint,
-            .memory: memoryTint,
-            .battery: batteryTint,
-            .disk: diskTint,
-            .network: networkTint,
-            .processes: processesTint,
-            .gpu: gpuTint,
-            .power: powerTint,
-        ]
-    }
-
     @ViewBuilder
     private func section(for slot: CardTintSlot) -> some View {
-        switch slot {
-        case .cpu:
-            metricSection(.init(
-                title: "CPU",
-                systemImage: "cpu",
-                slot: .cpu,
-                iconTint: cpuTint,
-                isOn: $showCPU,
-                series: [.cpuTotal, .cpuUser, .cpuSystem],
-            ))
-        case .memory:
-            metricSection(.init(
-                title: "Memory",
-                systemImage: "memorychip",
-                slot: .memory,
-                iconTint: memoryTint,
-                isOn: $showMemory,
-                series: [],
-            ))
-        case .battery:
-            metricSection(.init(
-                title: "Battery",
-                systemImage: "battery.100percent",
-                slot: .battery,
-                iconTint: batteryTint,
-                isOn: $showBattery,
-                series: [],
-            ))
-        case .disk:
-            metricSection(.init(
-                title: "Disk",
-                systemImage: "internaldrive",
-                slot: .disk,
-                iconTint: diskTint,
-                isOn: $showDisk,
-                series: [.diskRead, .diskWrite],
-            ))
-        case .network:
-            metricSection(.init(
-                title: "Network",
-                systemImage: "network",
-                slot: .network,
-                iconTint: networkTint,
-                isOn: $showNetwork,
-                series: [.netIn, .netOut],
-            ))
-        case .processes:
+        if slot == .processes {
             processesSection
-        case .gpu:
+        } else {
             metricSection(.init(
-                title: "GPU",
-                systemImage: "cpu.fill",
-                slot: .gpu,
-                iconTint: gpuTint,
-                isOn: $showGPU,
-                series: [.gpuDevice],
+                slot: slot,
+                iconTint: cardSettings.tint(slot),
+                isOn: cardSettings.visibilityBinding(slot),
+                series: chartSeries(for: slot),
             ))
-        case .power:
-            metricSection(.init(
-                title: "Power",
-                systemImage: "bolt.fill",
-                slot: .power,
-                iconTint: powerTint,
-                isOn: $showPower,
-                series: [.powerCPU, .powerGPU, .powerDRAM],
-            ))
+        }
+    }
+
+    /// Chart series that the per-card settings section should expose
+    /// as toggleable rows. Cards without per-series controls (Memory,
+    /// Battery, GPU) return an empty list.
+    private func chartSeries(for slot: CardTintSlot) -> [ChartSeries] {
+        switch slot {
+        case .cpu: [.cpuTotal, .cpuUser, .cpuSystem]
+        case .disk: [.diskRead, .diskWrite]
+        case .network: [.netIn, .netOut]
+        case .power: [.powerCPU, .powerGPU, .powerDRAM]
+        case .memory, .battery, .gpu, .processes: []
         }
     }
 
@@ -451,7 +341,7 @@ private struct DisplayPage: View {
         SettingsSection(
             "Top Processes",
             systemImage: "list.bullet.rectangle",
-            iconTint: processesTint,
+            iconTint: cardSettings.tint(.processes),
             footer: "Sampled every 2 seconds via libproc.",
         ) {
             VStack(spacing: 0) {
@@ -459,7 +349,7 @@ private struct DisplayPage: View {
                     title: "Top Processes",
                     systemImage: "eye",
                     slot: .processes,
-                    isOn: $showProcesses,
+                    isOn: cardSettings.visibilityBinding(.processes),
                 )
                 Divider().padding(.vertical, 4)
                 CardTintRow(slot: .processes, hideIcon: true)
@@ -489,13 +379,18 @@ private struct DisplayPage: View {
     /// Renders one full metric block: header section containing
     /// `Show in dashboard`, `Tint`, and (when applicable) `Series`
     /// rows. Sections are titled by the metric name so each block
-    /// reads as a self-contained unit.
+    /// reads as a self-contained unit. Slot-derived fields (title /
+    /// system image) come straight from `CardTintSlot`.
     @ViewBuilder
     private func metricSection(_ config: MetricSectionConfig) -> some View {
-        SettingsSection(config.title, systemImage: config.systemImage, iconTint: config.iconTint) {
+        SettingsSection(
+            config.slot.title,
+            systemImage: config.slot.systemImage,
+            iconTint: config.iconTint,
+        ) {
             VStack(spacing: 0) {
                 MetricShowRow(
-                    title: config.title,
+                    title: config.slot.title,
                     systemImage: "eye",
                     slot: config.slot,
                     isOn: config.isOn,
@@ -513,11 +408,10 @@ private struct DisplayPage: View {
     }
 }
 
-/// Bundles every value `metricSection(_:)` needs so its parameter
-/// list stays inside SwiftLint's `function_parameter_count` ceiling.
+/// Bundles every value `metricSection(_:)` needs. `title` and
+/// `systemImage` are no longer carried — both are derived from the
+/// `slot`'s `CardTintSlot` properties.
 private struct MetricSectionConfig {
-    let title: String
-    let systemImage: String
     let slot: CardTintSlot
     let iconTint: Color
     let isOn: Binding<Bool>

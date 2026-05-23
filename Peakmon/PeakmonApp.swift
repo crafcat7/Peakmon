@@ -27,9 +27,11 @@ struct PeakmonApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            DashboardView()
-                .environment(store)
-                .environment(processesStore)
+            CardSettingsScope {
+                DashboardView()
+                    .environment(store)
+                    .environment(processesStore)
+            }
         } label: {
             MenuBarLabel(store: store)
         }
@@ -53,8 +55,10 @@ struct PeakmonApp: App {
         }
 
         Window("Peakmon Settings", id: "settings") {
-            SettingsView()
-                .environment(store)
+            CardSettingsScope {
+                SettingsView()
+                    .environment(store)
+            }
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 820, height: 560)
@@ -236,6 +240,12 @@ private actor ProcessCollectorGate {
 private struct MenuBarLabel: View {
     let store: MetricsStore
 
+    // The `MenuBarExtra` `label:` parameter must resolve to a single
+    // `Text` or `Image`, so this view cannot live inside the
+    // `CardSettingsScope` environment-injection wrapper (the extra
+    // intermediate View prevents MenuBarExtra from rendering at all
+    // and the status item never appears). Hold the 6 tints needed
+    // for label compositing directly here instead.
     @AppStorage(MenuBarComposition.storageKey)
     private var segmentsRaw = MenuBarComposition.encode(MenuBarComposition.defaultSegments)
     @CardTintStorage(.cpu) private var cpuTint
@@ -244,6 +254,16 @@ private struct MenuBarLabel: View {
     @CardTintStorage(.network) private var networkTint
     @CardTintStorage(.gpu) private var gpuTint
     @CardTintStorage(.power) private var powerTint
+
+    /// Snapshot of the 6 tints that menu-bar segments may reference.
+    /// Materialised lazily so the property wrappers above stay the
+    /// single source of truth.
+    private var tints: [CardTintSlot: Color] {
+        [
+            .cpu: cpuTint, .memory: memoryTint, .disk: diskTint,
+            .network: networkTint, .gpu: gpuTint, .power: powerTint,
+        ]
+    }
 
     /// Cached rasterised label. Recomputed only when the source data
     /// actually changes, so the menu-bar refresh loop costs ~0 % CPU
@@ -257,17 +277,13 @@ private struct MenuBarLabel: View {
 
     var body: some View {
         let items = segments
+        let tints = self.tints
         let signature = MenuBarLabelSignature.make(
             store: store,
             items: items,
-            cpuTint: cpuTint,
-            memoryTint: memoryTint,
-            diskTint: diskTint,
-            networkTint: networkTint,
-            gpuTint: gpuTint,
-            powerTint: powerTint,
+            tints: tints,
         )
-        let image = cache.image(for: signature) { render(items: items) }
+        let image = cache.image(for: signature) { render(items: items, tints: tints) }
 
         return Group {
             if let image {
@@ -281,7 +297,7 @@ private struct MenuBarLabel: View {
     }
 
     @MainActor
-    private func render(items: [MenuBarSegment]) -> NSImage? {
+    private func render(items: [MenuBarSegment], tints: [CardTintSlot: Color]) -> NSImage? {
         guard !items.isEmpty else { return nil }
 
         // Pick the text colour based on the *wallpaper* under the
@@ -306,12 +322,7 @@ private struct MenuBarLabel: View {
                 MenuBarSegmentBlock(
                     segment: segment,
                     store: store,
-                    cpuTint: cpuTint,
-                    memoryTint: memoryTint,
-                    diskTint: diskTint,
-                    networkTint: networkTint,
-                    gpuTint: gpuTint,
-                    powerTint: powerTint,
+                    tints: tints,
                 )
             }
         }
@@ -367,12 +378,7 @@ private struct MenuBarLabelSignature: Equatable {
     static func make(
         store: MetricsStore,
         items: [MenuBarSegment],
-        cpuTint: Color,
-        memoryTint: Color,
-        diskTint: Color,
-        networkTint: Color,
-        gpuTint: Color,
-        powerTint: Color,
+        tints: [CardTintSlot: Color],
     ) -> Self {
         let usesLightText = WallpaperLuminance.shared.usesLightText()
 
@@ -397,17 +403,17 @@ private struct MenuBarLabelSignature: Equatable {
             }
         }
 
+        // Stable ordering by `CardTintSlot.allCases` so signature
+        // equality compares apples to apples across calls. The 3
+        // dashboard-only slots (battery/thermal/fan) are absent from
+        // `tints` and serialise as empty strings, which is fine —
+        // their presence/absence in the map is itself constant.
+        let tintHexes = CardTintSlot.allCases.map { tints[$0]?.hexString ?? "" }
+
         return MenuBarLabelSignature(
             segments: items,
             usesLightText: usesLightText,
-            tints: [
-                cpuTint.hexString,
-                memoryTint.hexString,
-                diskTint.hexString,
-                networkTint.hexString,
-                gpuTint.hexString,
-                powerTint.hexString,
-            ],
+            tints: tintHexes,
             latestValues: latests,
             historyHashes: historyHashes,
         )

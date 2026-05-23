@@ -16,12 +16,7 @@ struct MenuBarLivePreview: View {
     let segments: [MenuBarSegment]
     let store: MetricsStore
 
-    @CardTintStorage(.cpu) private var cpuTint
-    @CardTintStorage(.memory) private var memoryTint
-    @CardTintStorage(.disk) private var diskTint
-    @CardTintStorage(.network) private var networkTint
-    @CardTintStorage(.gpu) private var gpuTint
-    @CardTintStorage(.power) private var powerTint
+    @Environment(\.cardSettings) private var cardSettings
 
     var body: some View {
         // Wrap the pill in a horizontal ScrollView so the preview's
@@ -85,12 +80,14 @@ struct MenuBarLivePreview: View {
                     MenuBarSegmentBlock(
                         segment: segment,
                         store: store,
-                        cpuTint: cpuTint,
-                        memoryTint: memoryTint,
-                        diskTint: diskTint,
-                        networkTint: networkTint,
-                        gpuTint: gpuTint,
-                        powerTint: powerTint,
+                        tints: [
+                            .cpu: cardSettings.tint(.cpu),
+                            .memory: cardSettings.tint(.memory),
+                            .disk: cardSettings.tint(.disk),
+                            .network: cardSettings.tint(.network),
+                            .gpu: cardSettings.tint(.gpu),
+                            .power: cardSettings.tint(.power),
+                        ],
                     )
                 }
             }

@@ -499,138 +499,46 @@ private struct MenuBarLabelSignature: Equatable {
 }
 
 /// Decides whether the menu bar label should render with light or
-/// dark text by sampling the **wallpaper** under the menu bar strip.
+/// dark text.
 ///
-/// macOS's menu bar is a translucent vibrancy layer, so its visible
-/// tone is dictated by whatever sits beneath it. In a Light-Mode
-/// session with a dark photo wallpaper the menu bar is dark; in a
-/// Dark-Mode session with a bright wallpaper it is bright. Neither
-/// `NSApp.effectiveAppearance` nor `NSColor.labelColor` reflects
-/// that, so the label colour had to be derived from the actual
-/// background. Reading the wallpaper file does not require any
-/// entitlement (unlike screen capture), at the cost of being unable
-/// to detect dynamic / live wallpapers or opaque windows behind the
-/// menu bar.
+/// Earlier revisions sampled the actual wallpaper pixels under the
+/// menu bar to handle the case where a dark photo wallpaper makes
+/// the translucent menu bar visually dark even in Light Mode. That
+/// approach called `NSWorkspace.desktopImageURL(for:)` and then
+/// `CGImageSourceCreateWithURL` on the resulting file. On macOS 14+
+/// the system treats those reads as access to "data from another
+/// app" because wallpapers live under `~/Library/Application
+/// Support/com.apple.wallpaper/…`, which triggers an uncancellable
+/// TCC prompt at first launch.
 ///
-/// The result is cached and re-derived only when the wallpaper URL
-/// changes or `sampleInterval` seconds have elapsed, keeping the
-/// per-tick signature work essentially free.
+/// To stay zero-prompt and zero-entitlement, this version decides
+/// purely from `NSApp.effectiveAppearance` plus a CGWindowList
+/// full-screen probe. That matches what the system menu bar itself
+/// does: in Dark Mode (or while another app is full-screen, which
+/// macOS overlays with a dark backing) it draws light glyphs, and
+/// in Light Mode it draws dark glyphs. The wallpaper-aware path
+/// would have been slightly more pleasant on a dark photo wallpaper
+/// in Light Mode, but the trade-off is not worth a TCC prompt.
 @MainActor
 private final class WallpaperLuminance {
     static let shared = WallpaperLuminance()
 
-    /// Luminance threshold above which the wallpaper is treated as
-    /// "light" (so the label switches to dark text). 0.5 is the
-    /// midpoint; anything brighter than mid-grey gets dark glyphs.
-    private let luminanceThreshold: CGFloat = 0.5
-
-    /// How often to re-check the wallpaper URL even when it appears
-    /// unchanged. Catches the case where the user replaces the file
-    /// in place (e.g. a dynamic wallpaper rotating its asset on a
-    /// macOS schedule) without renaming it.
-    private let sampleInterval: TimeInterval = 5.0
-
-    private var cachedURL: URL?
-    private var cachedUsesLightText = true
-    private var lastSampledAt: Date = .distantPast
-
     private init() {}
 
-    /// Returns `true` if the menu bar text should be drawn in white
-    /// (i.e. the wallpaper top strip is dark). Falls back to the
-    /// previous decision when the wallpaper cannot be loaded.
+    /// Returns `true` if the menu bar text should be drawn in white.
     func usesLightText() -> Bool {
         // When another app is full-screen, macOS overlays the menu
-        // bar with a near-opaque dark backing whenever the user
-        // hovers it back into view, regardless of wallpaper. The
-        // wallpaper-luminance heuristic then picks the wrong colour
-        // and the label glyphs become invisible against the dark
-        // overlay. Detect any on-screen window that covers an
-        // entire NSScreen — that is the public CGWindowList signal
-        // for "another app is full-screen", and it requires neither
-        // Screen Recording nor Accessibility entitlements.
-        let now = Date()
-        guard let screen = NSScreen.main else { return cachedUsesLightText }
+        // bar with a near-opaque dark backing. Detect that via the
+        // public CGWindowList API (no entitlement required) so the
+        // label stays legible regardless of the user's appearance
+        // setting.
         if Self.anyFullScreenWindowPresent() {
             return true
         }
-
-        let url = NSWorkspace.shared.desktopImageURL(for: screen)
-
-        let urlChanged = url != cachedURL
-        let stale = now.timeIntervalSince(lastSampledAt) >= sampleInterval
-        guard urlChanged || stale else { return cachedUsesLightText }
-
-        lastSampledAt = now
-        cachedURL = url
-
-        guard let url, let luminance = Self.topStripLuminance(of: url) else {
-            // Fall back to system appearance when the wallpaper file
-            // is missing, unreadable, or a non-image asset (e.g. an
-            // .mov live wallpaper). This is strictly better than
-            // randomly flipping the cached value.
-            let match = NSApp.effectiveAppearance.bestMatch(
-                from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight],
-            )
-            let isDark = match == .darkAqua || match == .vibrantDark
-            cachedUsesLightText = isDark
-            return cachedUsesLightText
-        }
-
-        cachedUsesLightText = luminance < luminanceThreshold
-        return cachedUsesLightText
-    }
-
-    /// Loads `url` as a CGImage and averages the Rec. 601 luminance
-    /// of its top ~3 % horizontal strip (the slice that visually
-    /// underlies the menu bar). Returns `nil` if the URL cannot be
-    /// decoded.
-    private static func topStripLuminance(of url: URL) -> CGFloat? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
-        else { return nil }
-
-        let width = cgImage.width
-        let height = cgImage.height
-        guard width > 0, height > 0 else { return nil }
-
-        // Crop the top ~3 % of the image (matches the proportion of a
-        // ~24 pt menu bar on a typical retina wallpaper roughly
-        // 800 px tall in points). Clamp to at least 1 px so tiny
-        // wallpapers still produce a sample.
-        let stripHeight = max(height / 32, 1)
-        guard let strip = cgImage.cropping(to: CGRect(
-            x: 0, y: 0, width: width, height: stripHeight,
-        )) else { return averageLuminance(of: cgImage) }
-
-        return averageLuminance(of: strip)
-    }
-
-    /// Mean Rec. 601 luminance of `cgImage`, computed by box-filtering
-    /// the whole image down to a single pixel via `CGContext`. This
-    /// avoids walking every pixel of a multi-megapixel wallpaper on
-    /// every sample.
-    private static func averageLuminance(of cgImage: CGImage) -> CGFloat? {
-        var pixel: [UInt8] = [0, 0, 0, 0]
-        let colourSpace = CGColorSpaceCreateDeviceRGB()
-        guard let context = CGContext(
-            data: &pixel,
-            width: 1,
-            height: 1,
-            bitsPerComponent: 8,
-            bytesPerRow: 4,
-            space: colourSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue,
-        ) else { return nil }
-        context.interpolationQuality = .medium
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-        let r = CGFloat(pixel[0]) / 255
-        let g = CGFloat(pixel[1]) / 255
-        let b = CGFloat(pixel[2]) / 255
-        // Rec. 601 luma — green-heavy, matches the human eye's
-        // perceived brightness and what AppKit uses for its own
-        // contrast decisions on template imagery.
-        return 0.299 * r + 0.587 * g + 0.114 * b
+        let match = NSApp.effectiveAppearance.bestMatch(
+            from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight],
+        )
+        return match == .darkAqua || match == .vibrantDark
     }
 
     /// Returns `true` when any on-screen window covers an entire

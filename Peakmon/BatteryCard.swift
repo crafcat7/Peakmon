@@ -21,6 +21,15 @@ struct BatteryCard: View {
         guard let s = store.latest(for: .batteryPowerSource) else { return .onBattery }
         return BatteryPowerSource(metricValue: s.value)
     }
+    private var cycles: Int? {
+        store.latest(for: .batteryCycleCount).map { Int($0.value) }
+    }
+    private var health: Double? {
+        store.latest(for: .batteryHealth)?.value
+    }
+    private var timeRemainingSeconds: Double? {
+        store.latest(for: .batteryTimeRemaining)?.value
+    }
 
     var body: some View {
         let level = sample?.value ?? 0
@@ -33,9 +42,7 @@ struct BatteryCard: View {
             title: "Battery",
             systemImage: iconName,
             tint: iconTint,
-            stats: [
-                CardStat(label: "Source", value: src.displayLabel, tint: tint),
-            ],
+            stats: batteryStats(source: src),
             accessory: {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {
@@ -58,6 +65,66 @@ struct BatteryCard: View {
             }
         }
         .animation(.easeInOut(duration: 0.35), value: src)
+    }
+
+    /// Builds the stats row. Always shows Source; appends Health
+    /// and Cycles when AppleSmartBattery exposed them. Time-remaining
+    /// is folded into the Source stat as a secondary line because
+    /// the template's stat layout is single-value-per-block.
+    private func batteryStats(source src: BatteryPowerSource) -> [CardStat] {
+        var stats: [CardStat] = []
+        stats.append(CardStat(
+            label: "Source",
+            value: sourceValue(src: src),
+            tint: tint,
+        ))
+        if let health {
+            stats.append(CardStat(
+                label: "Health",
+                value: String(format: "%.0f%%", health),
+                tint: Self.healthTint(health: health, base: tint),
+            ))
+        }
+        if let cycles {
+            stats.append(CardStat(
+                label: "Cycles",
+                value: "\(cycles)",
+                tint: tint,
+            ))
+        }
+        return stats
+    }
+
+    /// Source-stat value. When AppleSmartBattery reported a time
+    /// estimate we append it (e.g. "Battery · 3h 12m"); when on AC
+    /// while charging we show e.g. "Charging · 42m".
+    private func sourceValue(src: BatteryPowerSource) -> String {
+        let label = src.displayLabel
+        guard src != .acPlugged,
+              let seconds = timeRemainingSeconds,
+              let formatted = Self.formatRemaining(seconds: seconds) else {
+            return label
+        }
+        return "\(label) · \(formatted)"
+    }
+
+    private static func formatRemaining(seconds: Double) -> String? {
+        guard seconds.isFinite, seconds >= 60 else { return nil }
+        let total = Int(seconds.rounded())
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        return "\(minutes)m"
+    }
+
+    private static func healthTint(health: Double, base: Color) -> Color {
+        switch health {
+        case ..<60: .red
+        case ..<80: .orange
+        default: base
+        }
     }
 
     /// Shared accessory text; extracted so both `ViewThatFits`

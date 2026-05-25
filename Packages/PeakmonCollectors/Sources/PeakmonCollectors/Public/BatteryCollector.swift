@@ -2,13 +2,19 @@
 //  BatteryCollector.swift
 //  PeakmonCollectors
 //
-//  Reports battery level (% of design capacity) plus the current
-//  power-source state (on battery / charging / plugged in & full)
-//  via IOKit's `IOPSCopyPowerSourcesInfo`. On desktops with no
-//  battery this collector returns an empty array.
+//  Reports battery level (% of design capacity), power-source state,
+//  and — when an AppleSmartBattery IOService is present — cycle count,
+//  health (AppleRawMaxCapacity / DesignCapacity, in %), and estimated
+//  time remaining (seconds, charge-direction implicit by power source).
+//
+//  Level / source come from `IOPSCopyPowerSourcesInfo`, which is also
+//  the source of truth for desktops + external batteries. The extra
+//  three metrics come from `AppleSmartBattery` via IORegistry. They
+//  are emitted only when the keys are present and sensible.
 //
 
 import Foundation
+import IOKit
 import IOKit.ps
 import PeakmonCore
 
@@ -18,6 +24,15 @@ public final class BatteryCollector: MetricCollector {
     public init() {}
 
     public func collect() async throws -> [MetricSample] {
+        var samples = collectFromPowerSources()
+        guard !samples.isEmpty else { return [] }
+        samples.append(contentsOf: collectFromSmartBattery())
+        return samples
+    }
+
+    // MARK: - IOPS (level + source)
+
+    private func collectFromPowerSources() -> [MetricSample] {
         guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef]
         else {
@@ -60,5 +75,82 @@ public final class BatteryCollector: MetricCollector {
             return isCharging ? .charging : .acPlugged
         }
         return .onBattery
+    }
+
+    // MARK: - AppleSmartBattery (health + cycles + time)
+
+    private func collectFromSmartBattery() -> [MetricSample] {
+        let service = IOServiceGetMatchingService(
+            kIOMainPortDefault,
+            IOServiceMatching("AppleSmartBattery"),
+        )
+        guard service != 0 else { return [] }
+        defer { IOObjectRelease(service) }
+
+        var props: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0)
+            == KERN_SUCCESS,
+              let dict = props?.takeRetainedValue() as? [String: Any]
+        else { return [] }
+
+        var out: [MetricSample] = []
+
+        if let cycles = dict["CycleCount"] as? Int, cycles >= 0 {
+            out.append(MetricSample(
+                kind: .batteryCycleCount,
+                unit: .count,
+                value: Double(cycles),
+            ))
+        }
+
+        // Health: matches macOS Settings → Battery (within rounding).
+        // System Settings uses NominalChargeCapacity / DesignCapacity,
+        // a smoothed/calibrated estimate that includes Apple's
+        // age/temperature compensation. AppleRawMaxCapacity is the
+        // unfiltered cell-side number (coconutBattery / Stats use
+        // that one); it typically reads a few percent lower. We
+        // intentionally pick the system value so the dashboard
+        // agrees with the user-visible Settings panel.
+        if let nominal = dict["NominalChargeCapacity"] as? Int,
+           let design = dict["DesignCapacity"] as? Int,
+           design > 0, nominal > 0 {
+            let health = min(Double(nominal) / Double(design) * 100.0, 100.0)
+            out.append(MetricSample(
+                kind: .batteryHealth,
+                unit: .percent,
+                value: health,
+            ))
+        } else if let raw = dict["AppleRawMaxCapacity"] as? Int,
+                  let design = dict["DesignCapacity"] as? Int,
+                  design > 0 {
+            // Fallback for hosts where NominalChargeCapacity is
+            // absent (older T2 / Intel chassis). Slightly under-
+            // reports vs. System Settings but is still a usable
+            // wear indicator.
+            let health = min(Double(raw) / Double(design) * 100.0, 100.0)
+            out.append(MetricSample(
+                kind: .batteryHealth,
+                unit: .percent,
+                value: health,
+            ))
+        }
+
+        // TimeRemaining is reported in minutes by AppleSmartBattery.
+        // 0xFFFF (65535) means "still computing" — skip in that case.
+        // While charging, TimeToFullCharge takes over; pick whichever
+        // is sensible based on IsCharging.
+        let isCharging = (dict["IsCharging"] as? Bool) ?? false
+        let candidate: Int? = isCharging
+            ? dict["TimeToFullCharge"] as? Int
+            : dict["TimeRemaining"] as? Int
+        if let minutes = candidate, minutes > 0, minutes < 0xFFFF {
+            out.append(MetricSample(
+                kind: .batteryTimeRemaining,
+                unit: .count,
+                value: Double(minutes) * 60.0,
+            ))
+        }
+
+        return out
     }
 }

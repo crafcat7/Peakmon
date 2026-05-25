@@ -2,9 +2,17 @@
 //  MemoryCollector.swift
 //  PeakmonCollectors
 //
-//  Reports memory used (bytes) and memory pressure (% of physical RAM)
-//  using `host_statistics64(HOST_VM_INFO64)`. Matches the "App Memory"
-//  style accounting: active + wired + compressed.
+//  Reports memory used / pressure plus the three depth metrics the
+//  Activity Monitor "Memory" tab surfaces: wired (kernel-pinned),
+//  compressed (live pages held in the compressor), and swap-used
+//  (bytes paged out to the swap files). Used + pressure come from
+//  `host_statistics64(HOST_VM_INFO64)`; swap comes from
+//  `sysctl(CTL_VM, VM_SWAPUSAGE)` which returns an `xsw_usage`
+//  struct populated by the kernel. The discrete VM-pressure level
+//  (1 = normal, 2 = warning, 4 = urgent, 8 = critical) is read from
+//  the `kern.memorystatus_vm_pressure_level` sysctl so the UI can
+//  recolour to match the same green/yellow/red bands Activity
+//  Monitor's pressure graph uses.
 //
 
 import Darwin
@@ -22,17 +30,44 @@ public final class MemoryCollector: MetricCollector {
 
     public func collect() async throws -> [MetricSample] {
         let stats = try Self.readVMStats()
-        let pageSize = Self.pageSize()
-        let usedPages = UInt64(stats.active_count)
-            + UInt64(stats.wire_count)
-            + UInt64(stats.compressor_page_count)
-        let usedBytes = Double(usedPages) * Double(pageSize)
+        let pageSize = Double(Self.pageSize())
+        let wiredBytes = Double(stats.wire_count) * pageSize
+        let compressedBytes = Double(stats.compressor_page_count) * pageSize
+        let activeBytes = Double(stats.active_count) * pageSize
+        let usedBytes = activeBytes + wiredBytes + compressedBytes
         let pressure = totalBytes > 0 ? (usedBytes / totalBytes) * 100.0 : 0
+        let swapBytes = Self.readSwapUsedBytes()
+        let pressureLevel = Self.readPressureLevel()
         let now = Date.now
-        return [
+
+        var samples: [MetricSample] = [
             MetricSample(kind: .memoryUsed, unit: .bytes, value: usedBytes, timestamp: now),
             MetricSample(kind: .memoryPressure, unit: .percent, value: pressure, timestamp: now),
+            MetricSample(kind: .memoryWired, unit: .bytes, value: wiredBytes, timestamp: now),
+            MetricSample(
+                kind: .memoryCompressed,
+                unit: .bytes,
+                value: compressedBytes,
+                timestamp: now,
+            ),
         ]
+        if let swapBytes {
+            samples.append(MetricSample(
+                kind: .memorySwapUsed,
+                unit: .bytes,
+                value: swapBytes,
+                timestamp: now,
+            ))
+        }
+        if let pressureLevel {
+            samples.append(MetricSample(
+                kind: .memoryPressureLevel,
+                unit: .count,
+                value: Double(pressureLevel),
+                timestamp: now,
+            ))
+        }
+        return samples
     }
 
     // MARK: - Private
@@ -62,5 +97,49 @@ public final class MemoryCollector: MetricCollector {
         var size: vm_size_t = 0
         host_page_size(mach_host_self(), &size)
         return size == 0 ? vm_size_t(getpagesize()) : size
+    }
+
+    /// Reads `xsw_usage.xsu_used` (bytes currently on swap) via
+    /// `sysctl(CTL_VM, VM_SWAPUSAGE)`. Returns `nil` if the kernel
+    /// declines the call (rare; would also mean swap is unavailable).
+    private static func readSwapUsedBytes() -> Double? {
+        var usage = xsw_usage()
+        var size = MemoryLayout<xsw_usage>.size
+        var mib: [Int32] = [CTL_VM, VM_SWAPUSAGE]
+        let result = mib.withUnsafeMutableBufferPointer { mibPtr -> Int32 in
+            sysctl(mibPtr.baseAddress, 2, &usage, &size, nil, 0)
+        }
+        guard result == 0 else { return nil }
+        return Double(usage.xsu_used)
+    }
+
+    /// Reads the discrete VM-pressure level from
+    /// `kern.memorystatus_vm_pressure_level`. The XNU kernel exposes
+    /// the same enum it dispatches `DISPATCH_SOURCE_TYPE_MEMORYPRESSURE`
+    /// events from:
+    ///
+    ///   1 = normal, 2 = warning, 4 = urgent, 8 = critical.
+    ///
+    /// These are the buckets Activity Monitor's pressure graph maps
+    /// to green / yellow / red bands, so surfacing the raw value lets
+    /// the UI tint its menu-bar segment in lockstep with what the user
+    /// sees in Activity Monitor instead of guessing from an
+    /// occupancy percentage.
+    ///
+    /// Returns `nil` if the sysctl is unavailable (none of the
+    /// supported macOS versions actually decline it, but stay
+    /// defensive so the rest of the sample batch still ships).
+    private static func readPressureLevel() -> Int? {
+        var level: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        let result = sysctlbyname(
+            "kern.memorystatus_vm_pressure_level",
+            &level,
+            &size,
+            nil,
+            0,
+        )
+        guard result == 0 else { return nil }
+        return Int(level)
     }
 }

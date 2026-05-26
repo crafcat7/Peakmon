@@ -23,38 +23,42 @@ public final class MetricsStore {
     /// Maximum number of samples retained per `MetricKind`.
     public let historyLimit: Int
 
-    private var samples: [MetricKind: [MetricSample]] = [:]
+    /// One fixed-capacity ring per metric kind. Each ring is lazily
+    /// instantiated on the first ingest for that kind so we don't
+    /// pre-allocate `MetricKind.allCases × historyLimit` slots up
+    /// front for kinds the user's machine never produces (e.g. fan
+    /// keys on a fanless MacBook Air).
+    private var rings: [MetricKind: MetricRingBuffer] = [:]
 
     public init(historyLimit: Int = 120) {
         precondition(historyLimit > 0, "historyLimit must be positive")
         self.historyLimit = historyLimit
     }
 
-    /// Append a batch of samples, trimming to the rolling window.
+    /// Append a batch of samples to per-kind ring buffers.
     ///
-    /// Uses the in-place subscript `samples[kind, default: []]` so the
-    /// underlying `Array` is mutated through Swift's `_modify`
-    /// accessor instead of being copied out, mutated, and written
-    /// back — that pattern triggers a buffer reassignment on every
-    /// ingest tick, which in turn forces SwiftUI to treat the
-    /// `history(for:)` result as a fresh array on every popover body
-    /// pass. Trim cost is the steady-state minimum: a single
-    /// `removeFirst()` per overflow rather than `removeFirst(n)`'s
-    /// arithmetic + range path, since at the 1 Hz cadence overflow
-    /// is always exactly one element.
+    /// Each ring is fixed-capacity, so both append and overflow
+    /// eviction are O(1) regardless of `historyLimit`. The previous
+    /// `Array.removeFirst()`-based implementation was O(n) per
+    /// overflow, which became measurable at the 1-hour /
+    /// 3600-sample window the v1.3 dashboard requires.
+    ///
+    /// `Dictionary` subscript-with-default still triggers a COW
+    /// roundtrip on the ring value, but the ring itself only owns a
+    /// `ContiguousArray` header and indices — copying it is bounded
+    /// by header size, not by sample count.
     public func ingest(_ batch: [MetricSample]) {
         guard !batch.isEmpty else { return }
         for sample in batch {
-            samples[sample.kind, default: []].append(sample)
-            while samples[sample.kind]!.count > historyLimit {
-                samples[sample.kind]!.removeFirst()
-            }
+            var ring = rings[sample.kind] ?? MetricRingBuffer(capacity: historyLimit)
+            ring.append(sample)
+            rings[sample.kind] = ring
         }
     }
 
     /// Most recent sample for `kind`, or `nil` if none yet.
     public func latest(for kind: MetricKind) -> MetricSample? {
-        samples[kind]?.last
+        rings[kind]?.last
     }
 
     /// Most recent numeric value for `kind`, or `fallback` if none.
@@ -65,16 +69,22 @@ public final class MetricsStore {
     /// `kind` and the fallback obviously paired and makes
     /// negative-sentinel callers (`-1`) easier to spot.
     public func value(for kind: MetricKind, default fallback: Double = 0) -> Double {
-        samples[kind]?.last?.value ?? fallback
+        rings[kind]?.last?.value ?? fallback
     }
 
     /// Rolling window for `kind`, oldest first.
+    ///
+    /// Materialises a fresh `[MetricSample]` per call. This is the
+    /// one O(n) operation in the hot path; callers that re-render
+    /// many times per second (the menu-bar rasteriser, SwiftUI
+    /// Charts) already iterate the full window anyway, so the
+    /// allocation is amortised.
     public func history(for kind: MetricKind) -> [MetricSample] {
-        samples[kind] ?? []
+        rings[kind]?.asArray() ?? []
     }
 
     /// Drop all retained samples. Primarily useful in tests.
     public func reset() {
-        samples.removeAll(keepingCapacity: true)
+        rings.removeAll(keepingCapacity: true)
     }
 }

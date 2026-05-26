@@ -2,10 +2,24 @@
 //  SettingsView.swift
 //  Peakmon
 //
-//  Standalone Settings window. NavigationSplitView with three
-//  categories: General (menu bar, sampling, login items), Display
-//  (which cards & accent colors), and About. Animations are kept
-//  spring-based and restrained.
+//  v1.0–v1.2 housed both the `SettingsCategory` enum and a
+//  standalone `SettingsView` root that ran inside its own
+//  `Window("settings")` scene. In v1.3 the dashboard and the
+//  settings pages were folded into a single `Window("main")`
+//  scene (see `MainWindow/`), so this file now only defines:
+//
+//    • `SettingsCategory`        — enum used by the main window
+//                                   sidebar to label the SETTINGS
+//                                   rows.
+//    • `GeneralPage` / `DisplayPage` / `AboutPage`
+//                                — page bodies. Promoted from
+//                                   `private` to internal access so
+//                                   `MainWindowView.detailContent`
+//                                   can switch over them directly.
+//
+//  Everything else (the old `SettingsView` struct, its sidebar
+//  helper, and the `SettingsView_Previews` block) was retired
+//  when the scene moved into `MainWindow/`.
 //
 
 import PeakmonCore
@@ -18,7 +32,6 @@ import SwiftUI
 enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     case general
     case display
-    case about
 
     var id: String { rawValue }
 
@@ -26,7 +39,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .general: "General"
         case .display: "Display"
-        case .about: "About"
         }
     }
 
@@ -34,7 +46,6 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .general: "gearshape.fill"
         case .display: "paintpalette.fill"
-        case .about: "info.circle.fill"
         }
     }
 
@@ -42,127 +53,27 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .general: .blue
         case .display: .purple
-        case .about: .gray
         }
-    }
-}
-
-// MARK: - Root
-
-struct SettingsView: View {
-    @State private var selection: SettingsCategory = .general
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
-
-    var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            sidebar
-                .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 200)
-                .toolbar(removing: .sidebarToggle)
-        } detail: {
-            detailContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(Color(NSColor.windowBackgroundColor))
-        }
-        .navigationSplitViewStyle(.balanced)
-        // Suppress the implicit window title entirely so the title
-        // bar stays clean — traffic-light buttons sit on a bare
-        // toolbar with no left-aligned or capsule-wrapped label.
-        .navigationTitle("")
-        .frame(
-            minWidth: 720,
-            idealWidth: 820,
-            maxWidth: .infinity,
-            minHeight: 480,
-            idealHeight: 560,
-            maxHeight: .infinity,
-        )
-    }
-
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(SettingsCategory.allCases) { category in
-                SettingsSidebarRow(
-                    category: category,
-                    isSelected: category == selection,
-                ) {
-                    selection = category
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .padding(.top, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var detailContent: some View {
-        ZStack {
-            switch selection {
-            case .general:
-                GeneralPage()
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
-            case .display:
-                DisplayPage()
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
-            case .about:
-                AboutPage()
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
-            }
-        }
-        .animation(.spring(response: 0.45, dampingFraction: 0.86), value: selection)
     }
 }
 
 // MARK: - General
 
-private struct GeneralPage: View {
-    @Environment(MetricsStore.self) private var store
-    @AppStorage(MenuBarComposition.storageKey)
-    private var segmentsRaw = MenuBarComposition.encode(MenuBarComposition.defaultSegments)
+struct GeneralPage: View {
     @AppStorage("samplingIntervalSeconds") private var samplingInterval: Double = 1.0
     @AppStorage("silentLaunch") private var silentLaunch = false
     @State private var loginController = LaunchAtLoginController()
 
-    private var selectedSegments: [MenuBarSegment] {
-        MenuBarComposition.decode(segmentsRaw)
+    private var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
     }
 
-    private var availableSegments: [MenuBarSegment] {
-        let selected = Set(selectedSegments)
-        return MenuBarSegment.allCases.filter { !selected.contains($0) }
+    private var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
     }
 
     var body: some View {
-        SettingsPage(
-            .general,
-            subtitle: "Configure the menu bar appearance and runtime behaviour.",
-        ) {
-            SettingsSection(
-                "Menu Bar",
-                footer: "Drag to reorder visible items. Tap to add or remove.",
-            ) {
-                VStack(alignment: .leading, spacing: 20) {
-                    MenuBarLivePreview(segments: selectedSegments, store: store)
-
-                    MenuBarSegmentList(
-                        title: "Visible",
-                        items: selectedSegments,
-                        emptyHint: "No items selected — pick from below.",
-                        reorderable: true,
-                        onToggle: toggle,
-                        onMove: moveBefore,
-                    )
-
-                    MenuBarSegmentList(
-                        title: "Available",
-                        items: availableSegments,
-                        emptyHint: "All items are visible.",
-                        reorderable: false,
-                        onToggle: toggle,
-                    )
-                }
-            }
-
+        SettingsPage(.general) {
             SettingsSection("Sampling", footer: "Lower intervals refresh data faster but use more CPU.") {
                 HStack {
                     Text("Refresh every")
@@ -215,7 +126,7 @@ private struct GeneralPage: View {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Silent launch")
-                            Text("Skip opening this Settings window when Peakmon starts.")
+                            Text("Skip opening the main window when Peakmon starts.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -226,6 +137,74 @@ private struct GeneralPage: View {
                             .controlSize(.small)
                     }
                     .frame(maxWidth: .infinity)
+                }
+            }
+
+            // About section absorbed from the former AboutPage as
+            // part of the v1.3 D1 v3 settings restructure. Layout
+            // mirrors the macOS "About this Mac" card: a centred
+            // hero block (icon + name + version + tagline) over a
+            // divider, with a single trailing row for project
+            // links. The section title chrome from `SettingsSection`
+            // is intentionally NOT used here — the centred hero
+            // already announces what this block is, and an extra
+            // "ABOUT" caption above it duplicates that.
+            VStack(alignment: .leading, spacing: 8) {
+                Text("About")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                VStack(spacing: 14) {
+                    AppIconArtwork()
+                        .frame(width: 88, height: 88)
+                        .shadow(color: .blue.opacity(0.35), radius: 10, y: 4)
+                        .padding(.top, 6)
+
+                    VStack(spacing: 4) {
+                        Text("Peakmon")
+                            .font(.title2.weight(.semibold))
+                        Text("Version \(version) · Build \(build)")
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("A focused, native macOS system monitor for your menu bar.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 360)
+
+                    Divider()
+                        .padding(.horizontal, 40)
+                        .padding(.top, 4)
+
+                    HStack(spacing: 14) {
+                        Link(destination: URL(string: "https://github.com/crafcat7/Peakmon")!) {
+                            Label("GitHub", systemImage: "link")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Link(destination: URL(string: "https://github.com/crafcat7/Peakmon/issues")!) {
+                            Label("Report Issue", systemImage: "exclamationmark.bubble")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    Text("© 2026 crafcat7")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 2)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .padding(.horizontal, 14)
+                .background(.background.secondary, in: .rect(cornerRadius: 10))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.gray.opacity(0.18), lineWidth: 0.5)
                 }
             }
         }
@@ -242,45 +221,59 @@ private struct GeneralPage: View {
             "Start automatically after you sign in."
         }
     }
-
-    private func toggle(_ segment: MenuBarSegment) {
-        var current = selectedSegments
-        if let idx = current.firstIndex(of: segment) {
-            current.remove(at: idx)
-        } else {
-            // Append in user-chosen order; the persisted list is
-            // free-form and gets reordered through the drag handle
-            // in the Selected list above.
-            current.append(segment)
-        }
-        segmentsRaw = MenuBarComposition.encode(current)
-    }
-
-    private func moveBefore(source: MenuBarSegment, target: MenuBarSegment) {
-        var current = selectedSegments
-        guard let fromIndex = current.firstIndex(of: source) else { return }
-        current.remove(at: fromIndex)
-        guard let toIndex = current.firstIndex(of: target) else {
-            current.append(source)
-            segmentsRaw = MenuBarComposition.encode(current)
-            return
-        }
-        current.insert(source, at: toIndex)
-        segmentsRaw = MenuBarComposition.encode(current)
-    }
 }
 
 // MARK: - Display
 
-private struct DisplayPage: View {
+struct DisplayPage: View {
+    @Environment(MetricsStore.self) private var store
     @Environment(\.cardSettings) private var cardSettings
+    @AppStorage(MenuBarComposition.storageKey)
+    private var segmentsRaw = MenuBarComposition.encode(MenuBarComposition.defaultSegments)
     @AppStorage("processesSortByMemory") private var processesSortByMemory = false
 
+    private var selectedSegments: [MenuBarSegment] {
+        MenuBarComposition.decode(segmentsRaw)
+    }
+
+    private var availableSegments: [MenuBarSegment] {
+        let selected = Set(selectedSegments)
+        return MenuBarSegment.allCases.filter { !selected.contains($0) }
+    }
+
     var body: some View {
-        SettingsPage(
-            .display,
-            subtitle: "Drag the cards below to reorder. Configure each card's appearance further down.",
-        ) {
+        SettingsPage(.display) {
+            // Menu Bar section absorbed from the former GeneralPage
+            // as part of the v1.3 D1 v3 restructure. It lives on
+            // the Display page because what it controls — the live
+            // preview, the order of glyphs in the menu bar — is
+            // fundamentally a *display* concern, not a runtime one.
+            SettingsSection(
+                "Menu Bar",
+                footer: "Drag to reorder visible items. Tap to add or remove.",
+            ) {
+                VStack(alignment: .leading, spacing: 20) {
+                    MenuBarLivePreview(segments: selectedSegments, store: store)
+
+                    MenuBarSegmentList(
+                        title: "Visible",
+                        items: selectedSegments,
+                        emptyHint: "No items selected — pick from below.",
+                        reorderable: true,
+                        onToggle: toggle,
+                        onMove: moveBefore,
+                    )
+
+                    MenuBarSegmentList(
+                        title: "Available",
+                        items: availableSegments,
+                        emptyHint: "All items are visible.",
+                        reorderable: false,
+                        onToggle: toggle,
+                    )
+                }
+            }
+
             // Drag-and-drop reorder lives on lightweight thumbnail
             // tiles in the preview, not on the per-card config
             // sections. See `DisplayCardPreview.swift` for the
@@ -301,6 +294,29 @@ private struct DisplayPage: View {
                 section(for: slot)
             }
         }
+    }
+
+    private func toggle(_ segment: MenuBarSegment) {
+        var current = selectedSegments
+        if let idx = current.firstIndex(of: segment) {
+            current.remove(at: idx)
+        } else {
+            current.append(segment)
+        }
+        segmentsRaw = MenuBarComposition.encode(current)
+    }
+
+    private func moveBefore(source: MenuBarSegment, target: MenuBarSegment) {
+        var current = selectedSegments
+        guard let fromIndex = current.firstIndex(of: source) else { return }
+        current.remove(at: fromIndex)
+        guard let toIndex = current.firstIndex(of: target) else {
+            current.append(source)
+            segmentsRaw = MenuBarComposition.encode(current)
+            return
+        }
+        current.insert(source, at: toIndex)
+        segmentsRaw = MenuBarComposition.encode(current)
     }
 
     @ViewBuilder
@@ -418,60 +434,9 @@ private struct MetricSectionConfig {
     let series: [ChartSeries]
 }
 
-// MARK: - About
-
-private struct AboutPage: View {
-    private var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
-    }
-
-    private var build: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
-    }
-
-    var body: some View {
-        SettingsPage(.about) {
-            VStack(spacing: 16) {
-                AppIconArtwork()
-                    .frame(width: 88, height: 88)
-                    .shadow(color: .blue.opacity(0.3), radius: 12, y: 4)
-                    .padding(.top, 8)
-
-                VStack(spacing: 4) {
-                    Text("Peakmon")
-                        .font(.title.weight(.semibold))
-                    Text("Version \(version)")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                Text("A focused, native macOS system monitor for your menu bar.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 360)
-
-                HStack(spacing: 12) {
-                    Link(destination: URL(string: "https://github.com/crafcat7/Peakmon")!) {
-                        Label("GitHub", systemImage: "link")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(.top, 4)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-        }
-    }
-}
-
 // MARK: - Menu bar preview + segment row
 
 //
 // See `MenuBarPreview.swift` for `MenuBarLivePreview` and
 // `MenuBarSegmentRow`.
 
-#Preview {
-    SettingsView()
-        .environment(MetricsStore())
-}

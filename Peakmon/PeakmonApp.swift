@@ -19,6 +19,13 @@ struct PeakmonApp: App {
     @State private var store = MetricsStore(historyLimit: 120)
     @State private var processesStore = ProcessesStore()
     @State private var runtime = MetricsRuntime()
+    /// Current page of the unified main window. Persists across
+    /// window close/reopen during the running process so reopening
+    /// via ⌘, returns the user to wherever they were last. Not
+    /// `@AppStorage` because v1.3 anchors first-open on
+    /// `MainWindowSelection.defaultLanding` (Dashboard) rather
+    /// than restoring across launches.
+    @State private var mainSelection: MainWindowSelection = .defaultLanding
     @Environment(\.openWindow) private var openWindow
 
     @AppStorage("silentLaunch") private var silentLaunch = false
@@ -54,15 +61,26 @@ struct PeakmonApp: App {
             runtime.processesEnabled = newValue
         }
 
-        Window("Peakmon Settings", id: "settings") {
+        // Unified main window introduced in v1.3. Replaces the
+        // v1.0–v1.2 `Window("settings")` scene; the same scene now
+        // hosts both the dashboard surface and the three settings
+        // pages, distinguished by `MainWindowSelection` from the
+        // sidebar. Window minimum sizes are set inside
+        // `MainWindowView` so they can vary by mode if needed.
+        Window("Peakmon", id: "main") {
             CardSettingsScope {
-                SettingsView()
+                MainWindowView(selection: $mainSelection)
                     .environment(store)
+                    .environment(processesStore)
             }
         }
         .windowResizability(.contentMinSize)
-        .defaultSize(width: 820, height: 560)
-        .windowToolbarStyle(.unified)
+        .defaultSize(width: 1000, height: 680)
+        // Hide the native title bar so the floating pill is the
+        // only chrome at the top of the window. Window drag still
+        // works on the empty area around the pill because hidden
+        // title bars retain their hit-test region.
+        .windowStyle(.hiddenTitleBar)
     }
 
     private func bootstrap() {
@@ -72,7 +90,7 @@ struct PeakmonApp: App {
         if !silentLaunch {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(150))
-                openWindow(id: "settings")
+                openWindow(id: "main")
                 ActivationPolicyController.shared.activateRegular()
             }
         }

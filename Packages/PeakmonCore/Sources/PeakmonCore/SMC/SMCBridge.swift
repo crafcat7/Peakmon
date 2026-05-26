@@ -157,6 +157,24 @@ public final class SMCBridge: @unchecked Sendable {
     private let connection: io_connect_t
     private let queue = DispatchQueue(label: "com.crafcat7.Peakmon.smc")
 
+    /// Cache of static per-key metadata (`dataSize` / `dataType` /
+    /// `dataAttributes`). Populated lazily on the first `info(_:)`
+    /// or `readDouble(_:)` for a given key.
+    ///
+    /// SMC key metadata is *static* for the life of the running
+    /// kernel — the type and width of `PSTR` does not change between
+    /// reads. Without this cache `readDouble` paid **three**
+    /// `IOConnectCallStructMethod` round-trips per value (info →
+    /// readBytes-internal info → readBytes), turning a 10-key 1 Hz
+    /// dashboard into 30 SMC syscalls per second. With it the
+    /// steady-state cost drops to one syscall per value (just the
+    /// actual `readBytes`).
+    ///
+    /// Only mutated inside `queue.sync`, so the unsynchronised
+    /// dictionary is safe even though the type is nominally
+    /// `@unchecked Sendable`.
+    private var keyInfoCache: [SMCKey: SMCKeyInfo] = [:]
+
     /// Process-wide shared bridge. `nil` if `AppleSMC` is not
     /// available (stripped VM, future macOS removal, …). Lazy:
     /// constructing it does an `IOServiceOpen`, so callers that
@@ -203,55 +221,86 @@ public final class SMCBridge: @unchecked Sendable {
 
     /// Read static type/size metadata for `key`. Used to probe whether
     /// a key exists on this machine before bothering to read it.
+    ///
+    /// Results are memoised in `keyInfoCache` (see the field doc on
+    /// why this is safe) so repeat calls for the same key cost zero
+    /// syscalls. A cache miss issues exactly one `readKeyInfo`
+    /// command and stores the result before returning.
     public func info(_ key: SMCKey) throws -> SMCKeyInfo {
         try queue.sync {
-            var input = SMCParamStruct()
-            input.key = key.raw
-            input.data8 = Command.readKeyInfo
-            let output = try call(input)
-            return SMCKeyInfo(
-                dataSize: output.keyInfo.dataSize,
-                dataType: output.keyInfo.dataType,
-                dataAttributes: output.keyInfo.dataAttributes,
-            )
+            try cachedInfoLocked(key)
         }
+    }
+
+    /// Queue-internal cached lookup. Caller MUST already be inside
+    /// `queue.sync`; this is the single place that mutates
+    /// `keyInfoCache`.
+    private func cachedInfoLocked(_ key: SMCKey) throws -> SMCKeyInfo {
+        if let cached = keyInfoCache[key] {
+            return cached
+        }
+        var input = SMCParamStruct()
+        input.key = key.raw
+        input.data8 = Command.readKeyInfo
+        let output = try call(input)
+        let info = SMCKeyInfo(
+            dataSize: output.keyInfo.dataSize,
+            dataType: output.keyInfo.dataType,
+            dataAttributes: output.keyInfo.dataAttributes,
+        )
+        keyInfoCache[key] = info
+        return info
     }
 
     /// Returns the key's raw value bytes (up to 32). Use the typed
     /// `read(_ key:as:)` helpers below in most code.
+    ///
+    /// Issues at most one extra `readKeyInfo` per *unfamiliar* key
+    /// (cached afterwards) and then exactly one `readBytes` per
+    /// call; previous revisions paid for the `readKeyInfo` on every
+    /// invocation.
     public func readBytes(_ key: SMCKey) throws -> Data {
         try queue.sync {
-            // Step 1: get type/size.
-            var probe = SMCParamStruct()
-            probe.key = key.raw
-            probe.data8 = Command.readKeyInfo
-            let info = try call(probe)
-            let size = Int(info.keyInfo.dataSize)
-            guard size > 0, size <= 32 else {
-                throw SMCError.keyNotFound(key)
-            }
+            let info = try cachedInfoLocked(key)
+            return try readBytesLocked(key, info: info)
+        }
+    }
 
-            // Step 2: read bytes. AppleSMC's `readBytes` command
-            // (data8 = 5) only validates `dataSize`; the dataType
-            // field is ignored by the kernel and intentionally left
-            // zero here (matches stats, iStats, SMCKit, libsmc).
-            var read = SMCParamStruct()
-            read.key = key.raw
-            read.keyInfo.dataSize = info.keyInfo.dataSize
-            read.data8 = Command.readBytes
-            let result = try call(read)
-            return withUnsafeBytes(of: result.bytes) { raw in
-                Data(raw.prefix(size))
-            }
+    /// Queue-internal byte read that assumes the caller has already
+    /// resolved `SMCKeyInfo` (typically via `cachedInfoLocked`).
+    /// Caller MUST already be inside `queue.sync`.
+    private func readBytesLocked(_ key: SMCKey, info: SMCKeyInfo) throws -> Data {
+        let size = Int(info.dataSize)
+        guard size > 0, size <= 32 else {
+            throw SMCError.keyNotFound(key)
+        }
+        // AppleSMC's `readBytes` command (data8 = 5) only validates
+        // `dataSize`; the dataType field is ignored by the kernel
+        // and intentionally left zero here (matches stats, iStats,
+        // SMCKit, libsmc).
+        var read = SMCParamStruct()
+        read.key = key.raw
+        read.keyInfo.dataSize = info.dataSize
+        read.data8 = Command.readBytes
+        let result = try call(read)
+        return withUnsafeBytes(of: result.bytes) { raw in
+            Data(raw.prefix(size))
         }
     }
 
     /// Read `key` and decode as `Double`, regardless of underlying
     /// SMC numeric type (`flt`, `fp*`, `sp*`, `ui8/16/32`, `si16`).
     /// Throws `unsupportedType` for unknown type codes.
+    ///
+    /// Steady-state cost: **one** `IOConnectCallStructMethod` per
+    /// call (the actual `readBytes`). The key's metadata round-trip
+    /// happens once per process lifetime via `keyInfoCache`.
     public func readDouble(_ key: SMCKey) throws -> Double {
-        let info = try self.info(key)
-        let bytes = try readBytes(key)
+        let (info, bytes) = try queue.sync { () -> (SMCKeyInfo, Data) in
+            let info = try cachedInfoLocked(key)
+            let bytes = try readBytesLocked(key, info: info)
+            return (info, bytes)
+        }
         let type = info.typeString
 
         if let fmt = Self.fixedPointFormats[type] {

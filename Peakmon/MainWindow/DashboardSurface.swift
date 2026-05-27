@@ -5,17 +5,12 @@
 //  Full-width dashboard rendered inside the unified main window
 //  when the top pill is on `MainWindowTab.dashboard`.
 //
-//  Layout: pure `LazyVGrid` of `DashboardXxxCard` panels — no
-//  hero strip, no category sections. Each card is independently
-//  collapsible/expandable (inline drill-down) so the user
-//  controls density per-domain rather than the surface forcing
-//  a uniform information shape.
-//
-//  v1.3 D2.1 ships the CPU card first to lock the visual /
-//  interaction template; D2.2 batches Memory/Disk/Network/GPU/
-//  Power. Hero rings were prototyped in an earlier D2.1 draft
-//  and deliberately dropped — they ate vertical real-estate
-//  without surfacing anything the cards themselves can't carry.
+//  Layout: a system identity banner on top, then six metric
+//  cards laid out as three 2-column rows (CPU + Memory, GPU +
+//  Power, Disk + Network) built on the shared
+//  `DashboardMetricCard` template, then the full-width
+//  `DashboardProcessesPanel` for the "which app is doing this"
+//  view that used to live inline inside the CPU + Memory cards.
 //
 //  The page title is intentionally NOT printed at the top — the
 //  top pill already reads "Dashboard". Duplicating it in 34pt
@@ -28,24 +23,41 @@ import SwiftUI
 struct DashboardSurface: View {
     @Environment(MetricsStore.self) private var store
 
-    /// Single `LazyVGrid` column descriptor. `.adaptive(minimum:)`
-    /// lets the dashboard reflow naturally between 880pt (1 col),
-    /// ~1280pt (2 cols), and ultra-wide displays (3 cols) without
-    /// fixed breakpoint logic. 420pt minimum chosen to keep the
-    /// CPU card's 36pt headline + 200pt trend chart comfortable.
-    private let columns = [
-        GridItem(.adaptive(minimum: 420, maximum: .infinity), spacing: 16, alignment: .top),
-    ]
-
+    /// Hand-laid 2-column rows backed by the shared
+    /// `DashboardMetricCard` template, which enforces a uniform
+    /// `dashboardCardMinHeight` so siblings on the same row reach
+    /// the same height and `HStack` doesn't leave whitespace
+    /// under shorter cards. Below the card cluster sits the
+    /// full-width `DashboardProcessesPanel`, the "which app" view
+    /// that used to be embedded inside CPU + Memory cards.
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 16) {
+                // Identity banner pinned above the metric grid.
+                // Keeps "which Mac am I looking at" answerable
+                // without leaving the dashboard.
+                DashboardSystemBanner()
+                    .frame(maxWidth: .infinity)
+                HStack(alignment: .top, spacing: 16) {
                     DashboardCPUCard()
-                    // D2.2: DashboardMemoryCard, DashboardDiskCard,
-                    // DashboardNetworkCard, DashboardGPUCard,
-                    // DashboardPowerCard land here.
+                        .frame(maxWidth: .infinity)
+                    DashboardMemoryCard()
+                        .frame(maxWidth: .infinity)
                 }
+                HStack(alignment: .top, spacing: 16) {
+                    DashboardGPUCard()
+                        .frame(maxWidth: .infinity)
+                    DashboardPowerCard()
+                        .frame(maxWidth: .infinity)
+                }
+                HStack(alignment: .top, spacing: 16) {
+                    DashboardDiskCard()
+                        .frame(maxWidth: .infinity)
+                    DashboardNetworkCard()
+                        .frame(maxWidth: .infinity)
+                }
+                DashboardProcessesPanel()
+                    .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 20)
@@ -58,4 +70,5 @@ struct DashboardSurface: View {
     DashboardSurface()
         .frame(width: 1000, height: 680)
         .environment(MetricsStore())
+        .environment(ProcessesStore())
 }

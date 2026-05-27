@@ -61,7 +61,11 @@ struct MainWindowTopBar: View {
             Capsule(style: .continuous)
                 .strokeBorder(.white.opacity(0.08), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+        // Note: a soft drop shadow used to sit here, but during
+        // scrolling SwiftUI rebuilt the pill's shadow source layer
+        // every frame (`apply_blur` → `vImageSepConvolve_ARGB8888`
+        // showed up in `sample`). The strokeBorder + regularMaterial
+        // already differentiate the pill from the surface below it.
         // Accessibility: expose the pill as a single tab bar so
         // VoiceOver users hear "Tab bar, 2 items" rather than two
         // unrelated buttons.
@@ -97,7 +101,12 @@ struct MainWindowTopBar: View {
                     Capsule(style: .continuous)
                         .fill(Color.accentColor)
                         .matchedGeometryEffect(id: "pill", in: pillNamespace)
-                        .shadow(color: .accentColor.opacity(0.35), radius: 4, y: 1)
+                    // Note: selected-tab accent glow removed for
+                    // the same reason as the outer pill shadow —
+                    // a Gaussian-blurred shadow source is rebuilt
+                    // by SwiftUI on every scroll commit. The
+                    // accent fill alone already carries strong
+                    // selection affordance.
                 }
             }
             .contentShape(Capsule())

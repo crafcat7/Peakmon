@@ -157,15 +157,17 @@ public struct MetricSparklineView: View, Equatable {
             }
         }
         .clipped()
-        // Render the Canvas into an offscreen Metal-backed layer.
-        // Without this, every tick of `MetricsStore` rebuilds the
-        // CGDrawingLayer's display list on the main thread inside
-        // `CA::Transaction::commit` — which `sample` shows as the
-        // single largest hot path on the dashboard. With it, the
-        // GPU rasterises the sparkline once per data change and
-        // SwiftUI cheaply composites the cached texture on every
-        // unrelated relayout.
-        .drawingGroup()
+        // Note: previously wrapped in `.drawingGroup()` to push the
+        // Canvas onto a Metal-backed offscreen layer. That helps
+        // when the dashboard is stationary (a tick only rebuilds
+        // one sparkline texture), but during scrolling the
+        // offscreen layer has to be re-composited into the window's
+        // backing store on every frame — `sample` showed
+        // `RB::DisplayList::Layer::make_cgimage` accounting for
+        // ~44 % of `render_items` time. Without `drawingGroup`,
+        // SwiftUI batches every sparkline's Path into a single
+        // CGDrawingLayer alongside its surrounding card, so
+        // scrolling re-uses one cached layer instead of N.
     }
 
     // MARK: - Drawing

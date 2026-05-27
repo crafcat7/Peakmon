@@ -7,7 +7,11 @@
 //
 //    Top row     — headline % + USI bar + chips on the left,
 //                  trend sparkline on the right.
-//    Per-core    — 1 Hz `PerCoreCPUReader` driven bar chart.
+//    Per-core    — 1 Hz published `PerCoreCPUReader` bar chart
+//                  (internal 2 Hz sampling, 4-sample rolling
+//                  window = 2 s smoothing), split into E-core
+//                  and P-core bands on Apple silicon (perf-level
+//                  detected via sysctl).
 //
 //  Footer carries load average (1/5/15 min) and CPU temperature.
 //
@@ -18,9 +22,10 @@
 //  CPU card much taller than the Memory card next to it, which
 //  re-introduces the same "ragged grid" symptom we just fixed.
 //
-//  Performance: PerCoreCPUReader ticks every second through a
-//  `TimelineView`; cost is one Mach call for `host_processor_info`
-//  plus a small diff loop.
+//  Performance: PerCoreCPUReader ticks every 500 ms internally
+//  to keep its rolling-average window fresh, but only publishes
+//  to the UI once per second. Per tick cost is one Mach call
+//  for `host_processor_info` plus a small diff loop.
 //
 
 import PeakmonCore
@@ -160,7 +165,7 @@ struct DashboardCPUCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: 70)
             } else {
-                PerCoreBarChart(values: perCoreUsage, tint: tint)
+                PerCoreBarChart(values: perCoreUsage, tint: tint, topology: perCoreReader.topology)
                     .frame(height: 70)
             }
         }
@@ -247,76 +252,180 @@ struct DashboardCPUCard: View {
     }
 }
 
-/// Drives the per-core reader at 1 Hz from a `TimelineView` so
-/// the sampler ticks live alongside the rest of the dashboard.
+/// Drives the per-core reader at 2 Hz internally and publishes
+/// the rolling-window average to the UI at 1 Hz. The 2 Hz inner
+/// cadence keeps each `host_processor_info` window short enough
+/// (~500 ms) that a single burst can't fill it end-to-end —
+/// which is what made the 1 Hz pure-single-window approach
+/// binarise to ~0 % or ~100 %. With `windowSize = 4` the
+/// published mean covers the last ~2 s of utilisation; the 1 Hz
+/// outer cadence is the pacing the user actually sees. Halving
+/// the inner cadence from 4 Hz to 2 Hz roughly halves the
+/// reader's CPU cost (one Mach call per tick) without changing
+/// what the eye sees, since the UI cadence and the animation
+/// duration stay the same.
+///
 /// Pulled out as a `ViewModifier` so the body composition above
 /// stays focused on layout rather than timing plumbing.
 private struct PerCoreSamplerModifier: ViewModifier {
     let reader: PerCoreCPUReader
     @Binding var usage: [Double]
+    /// Counts inner 500 ms ticks. Every second tick we publish
+    /// the rolling-window average to `usage`. Starting at 0 means
+    /// the first publish happens after the buffer holds 2 samples
+    /// — i.e. the user sees at least a 1-second mean rather
+    /// than a single 500 ms window's worst-case bias.
+    @State private var innerTickCount = 0
 
     func body(content: Content) -> some View {
         content
             .onAppear {
-                // First call primes the baseline; second produces
-                // the first real values so users don't stare at
-                // a "Sampling…" placeholder for a whole second.
+                // Prime the baseline. First `sample()` returns
+                // [] (no previous snapshot yet); subsequent calls
+                // start producing real deltas. Don't publish yet
+                // — the publishing schedule below fills the
+                // window before the first UI tick.
                 _ = reader.sample()
-                usage = reader.sample()
             }
             .background {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
+                TimelineView(.periodic(from: .now, by: 0.5)) { context in
                     Color.clear.onChange(of: context.date) { _, _ in
-                        usage = reader.sample()
+                        // Inner tick: always advance the rolling
+                        // window so the average stays fresh,
+                        // even on ticks where we don't publish.
+                        reader.sample()
+                        innerTickCount &+= 1
+                        if innerTickCount % 2 == 0 {
+                            usage = reader.averagedSample()
+                        }
                     }
                 }
             }
     }
 }
 
-/// Vertical bar chart for per-core utilisation. Drawn from
-/// `GeometryReader + HStack(Rectangle)` rather than SwiftCharts
-/// because the data is just N values in 0…1 and the chart-axis
-/// overhead of a full Chart is wasted here.
+/// Vertical bar chart for per-core utilisation, split into an
+/// E-core band (left) and a P-core band (right) on Apple silicon.
+/// On Intel Macs and on machines where sysctl doesn't expose a
+/// perf-level breakdown, `firstPCoreIndex` is 0 and the chart
+/// collapses to a single P-band — no special-case needed.
+///
+/// Drawn from `GeometryReader + HStack(Rectangle)` rather than
+/// SwiftCharts because the data is just N values in 0…1 and the
+/// chart-axis overhead of a full Chart is wasted here.
 private struct PerCoreBarChart: View {
     let values: [Double]
     let tint: Color
+    let topology: PerCoreCPUReader.Topology
 
     var body: some View {
-        GeometryReader { proxy in
-            let count = max(values.count, 1)
-            let spacing: CGFloat = 4
-            let barWidth = max(2, (proxy.size.width - spacing * CGFloat(count - 1)) / CGFloat(count))
-
-            HStack(alignment: .bottom, spacing: spacing) {
-                ForEach(Array(values.enumerated()), id: \.offset) { _, value in
-                    VStack(spacing: 2) {
-                        ZStack(alignment: .bottom) {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(.quaternary)
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(barTint(for: value).gradient)
-                                .frame(height: max(2, proxy.size.height * CGFloat(value)))
-                                // No animation: with 10–20 cores all
-                                // running a 0.3s smooth interpolator
-                                // every tick, the Core Animation
-                                // commit pass burns visible CPU on
-                                // intermediate frames the user never
-                                // really perceives anyway. A direct
-                                // step matches Activity Monitor's
-                                // per-core graph and is essentially
-                                // free.
-                        }
-                        .frame(width: barWidth)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                if topology.efficiencyCores > 0 {
+                    bandHeader("E", count: topology.efficiencyCores)
+                        .frame(width: bandWidth(for: topology.efficiencyCores), alignment: .leading)
+                }
+                bandHeader("P", count: topology.performanceCores)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            GeometryReader { proxy in
+                // Reserve a fixed inter-band gap; the rest splits
+                // by core count so each bar in either band stays
+                // visually consistent.
+                let bandGap: CGFloat = topology.efficiencyCores > 0 ? 12 : 0
+                let usableWidth = proxy.size.width - bandGap
+                let perCoreWidth = usableWidth / CGFloat(max(topology.totalCores, 1))
+                HStack(spacing: bandGap) {
+                    if topology.efficiencyCores > 0 {
+                        bars(
+                            range: 0..<topology.efficiencyCores,
+                            width: perCoreWidth * CGFloat(topology.efficiencyCores),
+                            isPerformance: false,
+                            height: proxy.size.height,
+                        )
                     }
+                    bars(
+                        range: topology.firstPCoreIndex..<topology.totalCores,
+                        width: perCoreWidth * CGFloat(topology.performanceCores),
+                        isPerformance: true,
+                        height: proxy.size.height,
+                    )
                 }
             }
         }
     }
 
-    private func barTint(for value: Double) -> Color {
-        if value < 0.7 { return tint }
-        if value < 0.9 { return .yellow }
-        return .red
+    /// Width-proportional placement helper — given a core count,
+    /// returns the implied band width so the header label sits
+    /// above its band. Uses a notional total of 1.0 normalised
+    /// against the header HStack's own GeometryReader-less layout
+    /// would over-complicate things, so we just hand a manual
+    /// flex weight via fixed widths; SwiftUI's HStack spacing
+    /// already aligns it visually with the band below since the
+    /// chart GeometryReader produces matching proportions.
+    private func bandWidth(for count: Int) -> CGFloat {
+        // 12pt per core is a reasonable header-strip estimate.
+        // The header is decorative; the GeometryReader below is
+        // authoritative for bar positioning.
+        CGFloat(count) * 12
+    }
+
+    @ViewBuilder
+    private func bandHeader(_ label: String, count: Int) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text("·")
+                .foregroundStyle(.tertiary)
+            Text("\(count)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    /// Renders one band's bars. `range` indexes into `values`;
+    /// `isPerformance` controls tint intensity so E-cores read as
+    /// quieter than P-cores even at the same utilisation.
+    @ViewBuilder
+    private func bars(range: Range<Int>, width: CGFloat, isPerformance: Bool, height: CGFloat) -> some View {
+        let spacing: CGFloat = 4
+        let count = range.count
+        let barWidth = max(2, (width - spacing * CGFloat(max(count - 1, 0))) / CGFloat(max(count, 1)))
+        HStack(alignment: .bottom, spacing: spacing) {
+            ForEach(Array(range), id: \.self) { index in
+                let value = index < values.count ? values[index] : 0
+                ZStack(alignment: .bottom) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(.quaternary)
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(barTint(for: value, isPerformance: isPerformance).gradient)
+                        .frame(height: max(2, height * CGFloat(value)))
+                        // 300 ms linear interpolation between
+                        // the 1 Hz published values. Leaves
+                        // ~700 ms of stillness between updates,
+                        // which reads as a clear beat rather
+                        // than a continuous shimmer. Linear
+                        // (not spring) avoids `CADisplayLink`
+                        // overshoot frames the user can't
+                        // distinguish from a clean step at this
+                        // duration.
+                        .animation(.linear(duration: 0.3), value: value)
+                }
+                .frame(width: barWidth)
+            }
+        }
+        .frame(width: width, alignment: .leading)
+    }
+
+    /// Bar colour for a single core. P-cores get the card's full
+    /// tint plus the yellow/red warning thresholds; E-cores get a
+    /// muted variant so the eye registers "background, low-power"
+    /// even when the bar happens to be tall. The threshold colours
+    /// stay shared so a pegged E-core still alarms.
+    private func barTint(for value: Double, isPerformance: Bool) -> Color {
+        if value >= 0.9 { return .red }
+        if value >= 0.7 { return .yellow }
+        return isPerformance ? tint : tint.opacity(0.55)
     }
 }

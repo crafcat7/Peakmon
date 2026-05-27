@@ -51,6 +51,71 @@ final class PerCoreCPUReader {
     /// produce deltas yet.
     private var previous: [CoreTicks]?
 
+    /// Rolling window of the last `windowSize` instantaneous
+    /// per-core utilisation arrays. `averagedSample()` collapses
+    /// it into one mean array so the UI gets a smoothed value
+    /// without binarising on a single burst-filled window.
+    /// Capacity is bounded so the reader's footprint is N cores
+    /// × `windowSize` doubles — trivial on any Mac.
+    private var ringBuffer: [[Double]] = []
+
+    /// Length of the rolling-average window. Four samples paired
+    /// with the caller's 2 Hz internal cadence and 1 Hz UI cadence
+    /// means the UI publishes the mean of the four most recent
+    /// 500 ms utilisation snapshots once per second — a 2 s
+    /// smoothing window in total.
+    private let windowSize = 4
+
+    /// Cached CPU topology — split point between E-cores (first
+    /// run of logical CPUs) and P-cores (remainder). Read once
+    /// from `sysctl` and reused for the lifetime of the reader.
+    let topology: Topology = .detect()
+
+    /// Apple silicon perf-level topology. `host_processor_info`
+    /// hands cores back in `sysctl` order: efficiency cores first,
+    /// then performance cores. `firstPCoreIndex` records where
+    /// E-cores end and P-cores begin so the bar chart can group
+    /// them visually.
+    struct Topology {
+        /// Number of efficiency cores. On Intel Macs and on M-series
+        /// machines without a distinct E-cluster this is 0 and every
+        /// core renders as a P-core.
+        let efficiencyCores: Int
+        /// Number of performance cores.
+        let performanceCores: Int
+
+        /// Index of the first P-core inside the per-core array.
+        /// Equal to `efficiencyCores`.
+        var firstPCoreIndex: Int { efficiencyCores }
+
+        /// Total logical core count (E + P).
+        var totalCores: Int { efficiencyCores + performanceCores }
+
+        /// Reads the perf-level breakdown from sysctl. On Apple
+        /// silicon `hw.perflevel0.logicalcpu` is the performance
+        /// cluster (highest perf = level 0, counterintuitively)
+        /// and `hw.perflevel1.logicalcpu` is the efficiency
+        /// cluster. On Intel both keys are absent and we return
+        /// 0 / `hw.logicalcpu`, which collapses the UI grouping
+        /// to a single P-band.
+        static func detect() -> Topology {
+            let p = sysctlInt("hw.perflevel0.logicalcpu") ?? 0
+            let e = sysctlInt("hw.perflevel1.logicalcpu") ?? 0
+            if p == 0 && e == 0 {
+                let total = sysctlInt("hw.logicalcpu") ?? 0
+                return Topology(efficiencyCores: 0, performanceCores: total)
+            }
+            return Topology(efficiencyCores: e, performanceCores: p)
+        }
+
+        private static func sysctlInt(_ name: String) -> Int? {
+            var value: Int = 0
+            var size = MemoryLayout<Int>.size
+            let kr = sysctlbyname(name, &value, &size, nil, 0)
+            return kr == 0 ? value : nil
+        }
+    }
+
     /// One core's cumulative user/system/idle/nice tick counts.
     private struct CoreTicks {
         var user: UInt32
@@ -68,15 +133,19 @@ final class PerCoreCPUReader {
         }
     }
 
-    /// Computes per-core utilisation since the previous sample.
-    /// Returns a value in 0...1 per logical CPU, or an empty
-    /// array if no baseline exists yet.
+    /// Computes per-core utilisation since the previous sample
+    /// and feeds it into the rolling-average ring buffer.
+    /// Returns the instantaneous (single-window) value. Most UI
+    /// callers want `averagedSample()` instead.
     ///
     /// Algorithm
     ///   1. Ask the host for the current tick array.
     ///   2. For each core, subtract previous user+sys+idle+nice;
     ///      divide busy delta (user+sys) by total delta.
-    ///   3. Stash the new snapshot for next time.
+    ///   3. Push the resulting array onto `ringBuffer`, trimming
+    ///      from the front so length never exceeds `windowSize`.
+    ///   4. Stash the new tick snapshot for next time.
+    @discardableResult
     func sample() -> [Double] {
         guard let current = readHostProcessorInfo() else {
             return previous == nil ? [] : Array(repeating: 0, count: previous?.count ?? 0)
@@ -87,7 +156,7 @@ final class PerCoreCPUReader {
             return [] // first call, or core count changed (hotplug)
         }
 
-        return zip(previous, current).map { prev, now in
+        let instant = zip(previous, current).map { prev, now -> Double in
             let totalDelta = now.total - prev.total
             guard totalDelta > 0 else { return 0 }
             let busyDelta = Double(now.user &- prev.user)
@@ -95,14 +164,48 @@ final class PerCoreCPUReader {
                 + Double(now.nice &- prev.nice)
             return max(0, min(1, busyDelta / totalDelta))
         }
+
+        ringBuffer.append(instant)
+        if ringBuffer.count > windowSize {
+            ringBuffer.removeFirst(ringBuffer.count - windowSize)
+        }
+        return instant
     }
 
-    /// Drops the cached baseline so the next `sample()` re-arms.
-    /// Called when the drill-down collapses, so a stale baseline
-    /// doesn't produce a misleading first frame next time it
-    /// expands.
+    /// Per-core mean of the rolling window. Drives the UI; the
+    /// window smooths over the binary "burst filled the whole
+    /// sample interval" effect that single-window 1 Hz sampling
+    /// suffers from. With `windowSize == 4` and a 500 ms internal
+    /// cadence, the published value is the mean of the last 2 s
+    /// of utilisation.
+    ///
+    /// Returns an empty array until the buffer holds at least one
+    /// sample.
+    func averagedSample() -> [Double] {
+        guard let first = ringBuffer.first else { return [] }
+        if ringBuffer.count == 1 { return first }
+        let count = first.count
+        var sums = Array(repeating: 0.0, count: count)
+        for snapshot in ringBuffer {
+            // Tolerate a hotplug-triggered length mismatch: if a
+            // snapshot got captured under the old core count we
+            // skip it rather than reading past its end.
+            guard snapshot.count == count else { continue }
+            for index in 0..<count {
+                sums[index] += snapshot[index]
+            }
+        }
+        let divisor = Double(ringBuffer.count)
+        return sums.map { $0 / divisor }
+    }
+
+    /// Drops the cached baseline and rolling window so the next
+    /// `sample()` re-arms. Called when the drill-down collapses,
+    /// so a stale baseline doesn't produce a misleading first
+    /// frame next time it expands.
     func reset() {
         previous = nil
+        ringBuffer.removeAll(keepingCapacity: true)
     }
 
     /// Thin wrapper around `host_processor_info`. Returns `nil`

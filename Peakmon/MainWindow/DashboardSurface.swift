@@ -22,6 +22,14 @@ import SwiftUI
 
 struct DashboardSurface: View {
     @Environment(MetricsStore.self) private var store
+    /// Window visibility gate. When the main window is not key,
+    /// minimised, or fully occluded by another app, swap the
+    /// expensive subtree for an empty placeholder so SwiftUI
+    /// stops re-evaluating six metric cards and a 50-row
+    /// process table on every `MetricsStore` tick. Becoming
+    /// visible again rebuilds from the current store snapshot,
+    /// which is fresh because the scheduler kept running.
+    @State private var visibility = MainWindowVisibility.shared
 
     /// Hand-laid 2-column rows backed by the shared
     /// `DashboardMetricCard` template, which enforces a uniform
@@ -31,8 +39,34 @@ struct DashboardSurface: View {
     /// full-width `DashboardProcessesPanel`, the "which app" view
     /// that used to be embedded inside CPU + Memory cards.
     var body: some View {
+        Group {
+            if visibility.isMainWindowActive {
+                activeContent
+            } else {
+                // Placeholder paints once and never re-evaluates
+                // its body on `MetricsStore` changes because it
+                // doesn't read the store. CPU drops to whatever
+                // the menu bar + popover need.
+                Color.clear
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var activeContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            // `LazyVStack` (versus plain `VStack`) keeps off-screen
+            // cards out of the view tree until they scroll close to
+            // the viewport. Trade-off: each card has to rebuild
+            // once when it re-enters, but every card's data lives
+            // in the shared `MetricsStore`, so the rebuild is a
+            // cheap copy. The win is a smaller SwiftUI
+            // `DisplayList` per frame — `render_contents` was
+            // dominating the main thread during scrolling because
+            // the previous eager `VStack` forced all six cards +
+            // banner + 50-row process table into every rasterise
+            // pass even when only two were visible.
+            LazyVStack(alignment: .leading, spacing: 16) {
                 // Identity banner pinned above the metric grid.
                 // Keeps "which Mac am I looking at" answerable
                 // without leaving the dashboard.

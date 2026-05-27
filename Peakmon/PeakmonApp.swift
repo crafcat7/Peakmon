@@ -86,6 +86,7 @@ struct PeakmonApp: App {
     private func bootstrap() {
         ActivationPolicyController.shared.install()
         ActivationPolicyController.shared.refresh()
+        MainWindowVisibility.shared.install()
 
         if !silentLaunch {
             Task { @MainActor in

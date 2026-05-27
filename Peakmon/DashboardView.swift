@@ -229,15 +229,21 @@ struct DashboardView: View {
     private var footer: some View {
         HStack(spacing: 8) {
             Button {
-                openWindow(id: "settings")
+                // v1.3 folded Settings into the unified main
+                // window scene. Opening it here lands on
+                // whatever `mainSelection` currently holds, which
+                // defaults to `.dashboard` per the design — so
+                // the popover's "open the full app" entry takes
+                // the user to the dashboard surface on first use.
+                openWindow(id: "main")
                 ActivationPolicyController.shared.activateRegular()
             } label: {
-                Label("Settings", systemImage: "gearshape")
+                Label("Open Window", systemImage: "macwindow")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
-            .help("Open Settings")
+            .help("Open Peakmon Window")
 
             Spacer()
 

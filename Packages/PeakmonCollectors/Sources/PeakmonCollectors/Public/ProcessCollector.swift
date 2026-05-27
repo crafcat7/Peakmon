@@ -33,14 +33,18 @@ import PeakmonCore
 public final class ProcessCollector {
     public let identifier = "process.libproc"
 
-    /// Maximum number of processes returned per snapshot. Matches the
-    /// number of rows the dashboard's Top Processes card needs, with
-    /// some headroom so the consumer can re-sort/filter if desired.
-    public let limit: Int
+    /// Maximum number of processes returned per snapshot, or `nil`
+    /// to return every process. The popover's Top Processes card
+    /// historically capped this at 10 to keep the body short, but
+    /// the main-window dashboard's full-width Processes panel wants
+    /// the entire table so the user can scroll/sort the long tail,
+    /// so the collector now defaults to "no cap" and lets consumers
+    /// opt-in to truncation via `prefix(_:)` on the result.
+    public let limit: Int?
 
     private let state = State()
 
-    public init(limit: Int = 10) {
+    public init(limit: Int? = nil) {
         self.limit = limit
     }
 
@@ -72,14 +76,18 @@ public final class ProcessCollector {
             let cpuPercent = (deltaNanos / elapsedNanos) * 100
             snapshots.append(ProcessSnapshot(
                 pid: pid,
+                ppid: info.ppid,
                 name: info.name,
                 cpuPercent: max(cpuPercent, 0),
                 memoryBytes: info.memoryBytes,
+                path: info.path,
             ))
         }
 
         snapshots.sort { $0.cpuPercent > $1.cpuPercent }
-        if snapshots.count > limit { snapshots.removeLast(snapshots.count - limit) }
+        if let limit, snapshots.count > limit {
+            snapshots.removeLast(snapshots.count - limit)
+        }
         return snapshots
     }
 
@@ -87,6 +95,8 @@ public final class ProcessCollector {
 
     private struct Info: Sendable {
         let name: String
+        let ppid: Int32
+        let path: String
         let cpuTimeRaw: UInt64       // user + system, in mach time units
         let memoryBytes: UInt64
     }
@@ -120,25 +130,48 @@ public final class ProcessCollector {
         return Array(buffer.prefix(count)).filter { $0 > 0 }
     }
 
-    /// Per-PID `proc_pidinfo(PROC_PIDTASKINFO)` lookup. Failures are
-    /// silently skipped — processes can exit between `listPIDs` and
-    /// this call, and short-lived helpers regularly disappear under
-    /// our feet.
+    /// Per-PID lookup using `PROC_PIDTASKALLINFO`, which folds the
+    /// task counters (`ptinfo`, formerly read via `PROC_PIDTASKINFO`)
+    /// together with the BSD process info (`pbsd`) — most notably
+    /// `pbi_ppid`, which the dashboard's app-grouping pass needs.
+    /// Bundling both halves into a single syscall keeps the per-tick
+    /// cost flat compared to the prior task-only call.
+    ///
+    /// `proc_pidpath` is then called separately because it has its
+    /// own (larger) buffer and isn't part of the all-info blob.
+    /// Failures are silently skipped — processes can exit between
+    /// `listPIDs` and this call, and short-lived helpers regularly
+    /// disappear under our feet.
     private static func readInfos(for pids: [Int32]) -> [Int32: Info] {
         var out: [Int32: Info] = [:]
         out.reserveCapacity(pids.count)
 
+        var pathBuffer = [CChar](repeating: 0, count: 4096)
+
         for pid in pids {
-            var info = proc_taskinfo()
-            let size = Int32(MemoryLayout<proc_taskinfo>.size)
-            let written = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, size)
+            var info = proc_taskallinfo()
+            let size = Int32(MemoryLayout<proc_taskallinfo>.size)
+            let written = proc_pidinfo(pid, PROC_PIDTASKALLINFO, 0, &info, size)
             guard written == size else { continue }
 
             let name = processName(pid: pid)
+
+            // `proc_pidpath` returns the byte count on success, 0 on
+            // failure (cross-user / kernel tasks). Empty path is a
+            // valid state that downstream code already handles.
+            let pathLen = pathBuffer.withUnsafeMutableBufferPointer { ptr in
+                proc_pidpath(pid, ptr.baseAddress, UInt32(ptr.count))
+            }
+            let path: String = pathLen > 0 ? String(cString: pathBuffer) : ""
+
             out[pid] = Info(
                 name: name,
-                cpuTimeRaw: info.pti_total_user &+ info.pti_total_system,
-                memoryBytes: info.pti_resident_size,
+                ppid: info.pbsd.pbi_ppid > 0
+                    ? Int32(bitPattern: info.pbsd.pbi_ppid)
+                    : 0,
+                path: path,
+                cpuTimeRaw: info.ptinfo.pti_total_user &+ info.ptinfo.pti_total_system,
+                memoryBytes: info.ptinfo.pti_resident_size,
             )
         }
         return out

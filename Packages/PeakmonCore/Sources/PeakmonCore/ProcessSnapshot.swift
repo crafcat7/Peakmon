@@ -24,21 +24,33 @@ import Foundation
 /// same number Activity Monitor displays under "Memory".
 public struct ProcessSnapshot: Sendable, Equatable, Identifiable {
     public let pid: Int32
+    public let ppid: Int32
     public let name: String
     public let cpuPercent: Double
     public let memoryBytes: UInt64
+    /// Absolute filesystem path to the executable as reported by
+    /// `proc_pidpath`. Empty for processes the caller cannot inspect
+    /// (cross-user without entitlements, kernel tasks). Carrying the
+    /// path on the snapshot lets the dashboard's app-grouping pass
+    /// resolve the owning `.app` bundle without a second syscall per
+    /// PID at render time.
+    public let path: String
 
     public var id: Int32 { pid }
 
     public init(
         pid: Int32,
+        ppid: Int32 = 0,
         name: String,
         cpuPercent: Double,
         memoryBytes: UInt64,
+        path: String = "",
     ) {
         self.pid = pid
+        self.ppid = ppid
         self.name = name
         self.cpuPercent = cpuPercent
         self.memoryBytes = memoryBytes
+        self.path = path
     }
 }

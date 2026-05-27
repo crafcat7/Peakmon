@@ -124,7 +124,7 @@ final class MetricsRuntime {
     /// `host_statistics64` call. 2 s matches Activity Monitor's
     /// default refresh and is plenty for trend spotting.
     private static let processInterval: Duration = .seconds(2)
-    private let processCollector = ProcessCollectorGate(collector: ProcessCollector(limit: 10))
+    private let processCollector = ProcessCollectorGate(collector: ProcessCollector())
 
     func start(
         store: MetricsStore,

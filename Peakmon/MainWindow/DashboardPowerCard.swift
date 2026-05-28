@@ -50,9 +50,6 @@ struct DashboardPowerCard: View {
         store.latest(for: .batteryCycleCount).map { Int($0.value) }
     }
     private var batteryHealth: Double? { store.latest(for: .batteryHealth)?.value }
-    private var batteryTimeRemaining: Double? {
-        store.latest(for: .batteryTimeRemaining)?.value
-    }
     /// 0 = battery, 1 = AC. Stored as a numeric metric to fit the
     /// metrics-store value model.
     private var isOnBattery: Bool? {
@@ -210,22 +207,32 @@ struct DashboardPowerCard: View {
             Text("Battery")
                 .font(.subheadline.weight(.semibold))
 
-            // Two-by-two stat grid — the four facts that
-            // collectively answer "how is the battery doing":
-            //   - level (right now)
+            // Two-by-two stat grid — the three lifetime / state
+            // facts that don't appear elsewhere on the card:
             //   - source (right now)
             //   - health (lifetime)
-            //   - cycles + time remaining (forward-looking)
+            //   - cycles (lifetime)
+            //
+            // Battery `Level` is intentionally omitted here — it's
+            // already shown in the footer's "Battery" stat (with
+            // an icon and tint) so duplicating it inside the
+            // section just costs horizontal space.
+            //
+            // We also intentionally omit IOKit's `TimeRemaining` /
+            // `TimeToFullCharge`. The field is unreliable across
+            // device classes — desktops surface no value, freshly
+            // unplugged or thermally-throttled batteries report
+            // `0xFFFF` for minutes at a time, and the same
+            // "Remaining" label means two completely different
+            // things depending on `IsCharging`. Users who need
+            // that estimate already have it in the menu-bar
+            // battery icon and System Settings.
             HStack(spacing: 24) {
-                statBlock(title: "Level", value: batteryLevel.map { String(format: "%.0f%%", $0) } ?? "—",
-                          tint: batteryLevelTint)
                 statBlock(title: "Source", value: sourceLabel,
                           tint: isOnBattery == true ? .yellow : .green)
                 statBlock(title: "Health", value: batteryHealth.map { String(format: "%.0f%%", $0) } ?? "—",
                           tint: healthTint)
                 statBlock(title: "Cycles", value: batteryCycleCount.map { String($0) } ?? "—",
-                          tint: .secondary)
-                statBlock(title: "Remaining", value: timeRemainingLabel,
                           tint: .secondary)
             }
         }
@@ -262,18 +269,6 @@ struct DashboardPowerCard: View {
         case false?: "AC"
         case nil: "—"
         }
-    }
-
-    /// `batteryTimeRemaining` is in minutes per the collector
-    /// contract. A reported zero or negative value means "still
-    /// calibrating" — we surface that as a friendly placeholder
-    /// rather than printing 0:00 which reads as alarming.
-    private var timeRemainingLabel: String {
-        guard let minutes = batteryTimeRemaining, minutes > 0 else { return "Calibrating" }
-        let h = Int(minutes) / 60
-        let m = Int(minutes) % 60
-        if h > 0 { return String(format: "%dh %02dm", h, m) }
-        return String(format: "%dm", m)
     }
 
     // MARK: - Footer

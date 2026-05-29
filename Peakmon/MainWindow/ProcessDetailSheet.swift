@@ -246,9 +246,6 @@ struct ProcessDetailSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 sectionHeader("Processes in this app", systemImage: "square.stack.3d.up", tint: .purple)
-                Text("Click a row to inspect")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
             }
 
             VStack(spacing: 0) {

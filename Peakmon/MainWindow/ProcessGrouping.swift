@@ -63,9 +63,15 @@ struct ProcessGroup: Identifiable, Equatable {
 
 enum ProcessGrouping {
     /// Folds the input list into one group per resolved application
-    /// key. `sortedBy` controls the order of the returned groups —
-    /// the table header toggles this.
-    static func group(_ snapshots: [ProcessSnapshot], sortedBy: GroupSortKey) -> [ProcessGroup] {
+    /// key. `sortedBy` controls which metric orders the returned
+    /// groups; `ascending` flips the direction. The table header
+    /// toggles both — clicking a new column selects it (descending
+    /// by default), clicking the active column flips direction.
+    static func group(
+        _ snapshots: [ProcessSnapshot],
+        sortedBy: GroupSortKey,
+        ascending: Bool = false,
+    ) -> [ProcessGroup] {
         var buckets: [String: [ProcessSnapshot]] = [:]
         buckets.reserveCapacity(snapshots.count / 4 + 8)
 
@@ -94,9 +100,9 @@ enum ProcessGrouping {
 
         switch sortedBy {
         case .cpu:
-            groups.sort { $0.totalCPU > $1.totalCPU }
+            groups.sort { ascending ? $0.totalCPU < $1.totalCPU : $0.totalCPU > $1.totalCPU }
         case .memory:
-            groups.sort { $0.totalMemory > $1.totalMemory }
+            groups.sort { ascending ? $0.totalMemory < $1.totalMemory : $0.totalMemory > $1.totalMemory }
         }
         return groups
     }

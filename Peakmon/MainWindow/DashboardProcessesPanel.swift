@@ -28,9 +28,20 @@ struct DashboardProcessesPanel: View {
 
     @State private var sortKey: ProcessGrouping.GroupSortKey = .cpu
 
+    /// Sort direction for the active column. Defaults to descending
+    /// (heaviest first) since "what's eating my machine" is the
+    /// common question; clicking the active column header flips it.
+    @State private var sortAscending = false
+
     /// Double-clicked group, drives the detail sheet. Nil = no
     /// sheet presented; non-nil = sheet open over `group`.
     @State private var inspecting: ProcessGroup?
+
+    /// Currently selected row id. A first single-click selects and
+    /// highlights a row; a second single-click on the already-
+    /// selected row opens its detail sheet. Double-click still
+    /// opens directly without the intermediate select step.
+    @State private var selectedID: ProcessGroup.ID?
 
     /// Fixed scroller height keeps the panel's footprint constant
     /// so the dashboard total height doesn't twitch as the app
@@ -45,7 +56,7 @@ struct DashboardProcessesPanel: View {
         // `maxCPU`). One pass per tick is correct *and* keeps
         // the data fresh — `cpuPercent` updates every store
         // tick, so we can't cache across ticks anyway.
-        let groups = ProcessGrouping.group(processesStore.latestProcesses, sortedBy: sortKey)
+        let groups = ProcessGrouping.group(processesStore.latestProcesses, sortedBy: sortKey, ascending: sortAscending)
         let maxCPU = max(groups.map(\.totalCPU).max() ?? 100, 1)
 
         return VStack(alignment: .leading, spacing: 12) {
@@ -76,7 +87,7 @@ struct DashboardProcessesPanel: View {
             Text("Processes")
                 .font(.headline)
             Spacer()
-            Text("\(groupCount) apps · \(processCount) processes · double-click for details · sorted by \(sortKey == .cpu ? "CPU%" : "Memory")")
+            Text("\(groupCount) apps · \(processCount) processes · sorted by \(sortKey == .cpu ? "CPU%" : "Memory")")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
@@ -97,7 +108,7 @@ struct DashboardProcessesPanel: View {
                     LazyVStack(spacing: 0) {
                         ForEach(Array(groups.enumerated()), id: \.element.id) { idx, g in
                             row(g, maxCPU: maxCPU)
-                                .background(idx.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.03))
+                                .background(rowBackground(id: g.id, index: idx))
                         }
                     }
                 }
@@ -127,11 +138,18 @@ struct DashboardProcessesPanel: View {
         -> some View
     {
         Button {
-            sortKey = key
+            if sortKey == key {
+                // Re-clicking the active column flips direction.
+                sortAscending.toggle()
+            } else {
+                // Switching columns selects it fresh, descending.
+                sortKey = key
+                sortAscending = false
+            }
         } label: {
             HStack(spacing: 4) {
                 if sortKey == key {
-                    Image(systemName: "arrow.down")
+                    Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.primary)
                 }
@@ -146,6 +164,26 @@ struct DashboardProcessesPanel: View {
     }
 
     private func row(_ g: ProcessGroup, maxCPU: Double) -> some View {
+        // Wrapped in a Button rather than `.onTapGesture` because a
+        // bare tap gesture inside a ScrollView competes with the
+        // scroll drag recognizer, so every click waited out a
+        // recognition window before firing and felt laggy. A
+        // Button's click is dispatched immediately. `.plain` style
+        // keeps the row visuals untouched (no default button
+        // chrome / highlight).
+        Button {
+            if selectedID == g.id {
+                inspecting = g
+            } else {
+                selectedID = g.id
+            }
+        } label: {
+            rowContent(g, maxCPU: maxCPU)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func rowContent(_ g: ProcessGroup, maxCPU: Double) -> some View {
         HStack(spacing: 12) {
             HStack(spacing: 10) {
                 appIcon(for: g)
@@ -165,7 +203,7 @@ struct DashboardProcessesPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             // Representative PID = the heaviest child. The full set
-            // is one double-click away in the sheet, so showing the
+            // is one click away in the detail sheet, so showing the
             // "leader" PID here is enough to anchor the row.
             Text("\(g.children[0].pid)\(g.children.count > 1 ? " +\(g.children.count - 1)" : "")")
                 .font(.callout.monospacedDigit())
@@ -184,9 +222,15 @@ struct DashboardProcessesPanel: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 4)
         .contentShape(.rect)
-        .onTapGesture(count: 2) {
-            inspecting = g
+    }
+
+    /// Row background: tint-tinted highlight for the selected row,
+    /// otherwise the subtle zebra stripe on odd rows.
+    private func rowBackground(id: ProcessGroup.ID, index: Int) -> Color {
+        if selectedID == id {
+            return Color.accentColor.opacity(0.18)
         }
+        return index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.03)
     }
 
     /// Real bundle icon for .app groups; SF Symbol fallback for

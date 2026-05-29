@@ -3,36 +3,20 @@
 //  Peakmon
 //
 //  Mach-level per-core CPU usage helper. The MetricsStore tracks
-//  aggregate CPU only (`.cpuTotal/.cpuUser/.cpuSystem`); this
-//  helper fills in per-core utilisation for the DashboardCPUCard
-//  drill-down without expanding the core MetricKind enum or the
-//  1Hz scheduler payload.
+//  aggregate CPU only; this fills in per-core utilisation for the
+//  CPU card without expanding the MetricKind enum or the scheduler
+//  payload.
 //
-//  How it works
-//  ────────────
-//  `host_processor_info(_, PROCESSOR_CPU_LOAD_INFO, …)` returns a
-//  contiguous integer array — `[user, system, idle, nice]` per
-//  logical CPU — counting *ticks* since boot. To turn ticks into
-//  a percentage you sample twice, diff each core's user+system
-//  vs total, and divide. That's the same algorithm Activity
-//  Monitor and `top` use.
+//  `host_processor_info(_, PROCESSOR_CPU_LOAD_INFO, …)` returns
+//  `[user, system, idle, nice]` ticks-since-boot per logical CPU.
+//  Sampling twice, diffing busy (user+sys) vs total, and dividing
+//  gives a percentage — the same approach as `top` / Activity
+//  Monitor. The previous tick is cached so each `sample()` returns
+//  instantaneous deltas; the first call returns [] (no baseline).
 //
-//  Lifetime / state
-//  ────────────────
-//  The reader keeps the previous tick snapshot inside the actor
-//  so each subsequent `sample()` returns instantaneous deltas
-//  rather than since-boot averages. First call returns an empty
-//  array (no baseline yet) — the caller renders a faint
-//  "warming up" placeholder bar.
-//
-//  Not in MetricsStore because
-//    • The data is only consumed by the expanded CPU card
-//      drill-down. Pushing 8/12/16 extra series through the
-//      ring-buffer history machinery for a feature that lives
-//      inside a collapsible panel would be wasteful.
-//    • The reader runs at the drill-down's own cadence (1 Hz via
-//      TimelineView) — when the panel is collapsed no work
-//      happens at all.
+//  Kept out of MetricsStore because the data is only used by the
+//  CPU card and runs at that card's own 1 Hz cadence — no work
+//  happens while it's off-screen.
 //
 
 import Darwin
@@ -40,64 +24,48 @@ import Foundation
 import MachO
 import Darwin.Mach
 
-/// Per-core utilisation reader. Instances are `@MainActor` because
-/// the only consumer (`DashboardCPUCard`) lives on the main actor
-/// and the underlying mach calls are cheap; bouncing across
-/// actors would buy nothing.
+/// Per-core utilisation reader. `@MainActor` because its only
+/// consumer (`DashboardCPUCard`) is, and the mach calls are cheap.
 @MainActor
 final class PerCoreCPUReader {
-    /// Cached per-core tick counts from the previous `sample()`.
-    /// `nil` until the first reading — that first call cannot
-    /// produce deltas yet.
+    /// Per-core tick counts from the previous `sample()`; `nil`
+    /// until the first reading.
     private var previous: [CoreTicks]?
 
-    /// Rolling window of the last `windowSize` instantaneous
-    /// per-core utilisation arrays. `averagedSample()` collapses
-    /// it into one mean array so the UI gets a smoothed value
-    /// without binarising on a single burst-filled window.
-    /// Capacity is bounded so the reader's footprint is N cores
-    /// × `windowSize` doubles — trivial on any Mac.
+    /// Rolling window of the last `windowSize` instantaneous per-core
+    /// arrays; `averagedSample()` means them so a single burst-filled
+    /// window doesn't binarise the UI.
     private var ringBuffer: [[Double]] = []
 
-    /// Length of the rolling-average window. Four samples paired
-    /// with the caller's 2 Hz internal cadence and 1 Hz UI cadence
-    /// means the UI publishes the mean of the four most recent
-    /// 500 ms utilisation snapshots once per second — a 2 s
-    /// smoothing window in total.
+    /// Rolling-average window length. Four samples × the caller's
+    /// 500 ms internal cadence ≈ a 2 s smoothing window published at
+    /// 1 Hz.
     private let windowSize = 4
 
-    /// Cached CPU topology — split point between E-cores (first
-    /// run of logical CPUs) and P-cores (remainder). Read once
-    /// from `sysctl` and reused for the lifetime of the reader.
+    /// CPU topology (E-core / P-core split), read once from sysctl.
     let topology: Topology = .detect()
 
     /// Apple silicon perf-level topology. `host_processor_info`
-    /// hands cores back in `sysctl` order: efficiency cores first,
-    /// then performance cores. `firstPCoreIndex` records where
-    /// E-cores end and P-cores begin so the bar chart can group
-    /// them visually.
+    /// returns cores in sysctl order (E-cores then P-cores);
+    /// `firstPCoreIndex` marks the boundary for the bar chart.
     struct Topology {
-        /// Number of efficiency cores. On Intel Macs and on M-series
-        /// machines without a distinct E-cluster this is 0 and every
-        /// core renders as a P-core.
+        /// Efficiency cores; 0 on Intel / no-E-cluster machines (all
+        /// cores then render as P-cores).
         let efficiencyCores: Int
         /// Number of performance cores.
         let performanceCores: Int
 
-        /// Index of the first P-core inside the per-core array.
-        /// Equal to `efficiencyCores`.
+        /// Index of the first P-core (== `efficiencyCores`).
         var firstPCoreIndex: Int { efficiencyCores }
 
         /// Total logical core count (E + P).
         var totalCores: Int { efficiencyCores + performanceCores }
 
-        /// Reads the perf-level breakdown from sysctl. On Apple
-        /// silicon `hw.perflevel0.logicalcpu` is the performance
-        /// cluster (highest perf = level 0, counterintuitively)
-        /// and `hw.perflevel1.logicalcpu` is the efficiency
-        /// cluster. On Intel both keys are absent and we return
-        /// 0 / `hw.logicalcpu`, which collapses the UI grouping
-        /// to a single P-band.
+        /// Perf-level breakdown from sysctl. On Apple silicon
+        /// `hw.perflevel0` is the performance cluster (level 0 =
+        /// highest perf) and `hw.perflevel1` the efficiency cluster.
+        /// On Intel both are absent → 0 / `hw.logicalcpu`, collapsing
+        /// to one P-band.
         static func detect() -> Topology {
             let p = sysctlInt("hw.perflevel0.logicalcpu") ?? 0
             let e = sysctlInt("hw.perflevel1.logicalcpu") ?? 0
@@ -123,28 +91,17 @@ final class PerCoreCPUReader {
         var idle: UInt32
         var nice: UInt32
 
-        /// Sum of all four channels — denominator for the
-        /// utilisation ratio. Promoted to Double so the
-        /// subtraction in `delta(from:)` does not underflow when
-        /// the kernel resets a counter (rare but possible after
-        /// CPU hotplug events on Asahi-style kernels).
+        /// Sum of all four channels — the utilisation denominator.
+        /// Double so the subtraction in the delta can't underflow if
+        /// the kernel resets a counter (rare, e.g. CPU hotplug).
         var total: Double {
             Double(user) + Double(system) + Double(idle) + Double(nice)
         }
     }
 
-    /// Computes per-core utilisation since the previous sample
-    /// and feeds it into the rolling-average ring buffer.
-    /// Returns the instantaneous (single-window) value. Most UI
-    /// callers want `averagedSample()` instead.
-    ///
-    /// Algorithm
-    ///   1. Ask the host for the current tick array.
-    ///   2. For each core, subtract previous user+sys+idle+nice;
-    ///      divide busy delta (user+sys) by total delta.
-    ///   3. Push the resulting array onto `ringBuffer`, trimming
-    ///      from the front so length never exceeds `windowSize`.
-    ///   4. Stash the new tick snapshot for next time.
+    /// Computes per-core utilisation since the previous sample,
+    /// pushes it into the ring buffer, and returns the instantaneous
+    /// value. Most UI callers want `averagedSample()`.
     @discardableResult
     func sample() -> [Double] {
         guard let current = readHostProcessorInfo() else {
@@ -172,24 +129,17 @@ final class PerCoreCPUReader {
         return instant
     }
 
-    /// Per-core mean of the rolling window. Drives the UI; the
-    /// window smooths over the binary "burst filled the whole
-    /// sample interval" effect that single-window 1 Hz sampling
-    /// suffers from. With `windowSize == 4` and a 500 ms internal
-    /// cadence, the published value is the mean of the last 2 s
-    /// of utilisation.
-    ///
-    /// Returns an empty array until the buffer holds at least one
-    /// sample.
+    /// Per-core mean of the rolling window — smooths over the binary
+    /// "burst filled the whole interval" effect of single-window 1 Hz
+    /// sampling. Empty until the buffer holds a sample.
     func averagedSample() -> [Double] {
         guard let first = ringBuffer.first else { return [] }
         if ringBuffer.count == 1 { return first }
         let count = first.count
         var sums = Array(repeating: 0.0, count: count)
         for snapshot in ringBuffer {
-            // Tolerate a hotplug-triggered length mismatch: if a
-            // snapshot got captured under the old core count we
-            // skip it rather than reading past its end.
+            // Skip a hotplug-length mismatch rather than read past
+            // a snapshot captured under the old core count.
             guard snapshot.count == count else { continue }
             for index in 0..<count {
                 sums[index] += snapshot[index]
@@ -199,18 +149,16 @@ final class PerCoreCPUReader {
         return sums.map { $0 / divisor }
     }
 
-    /// Drops the cached baseline and rolling window so the next
-    /// `sample()` re-arms. Called when the drill-down collapses,
-    /// so a stale baseline doesn't produce a misleading first
-    /// frame next time it expands.
+    /// Drops the baseline and window so the next `sample()` re-arms.
+    /// Called on drill-down collapse so a stale baseline doesn't
+    /// produce a misleading first frame on re-expand.
     func reset() {
         previous = nil
         ringBuffer.removeAll(keepingCapacity: true)
     }
 
-    /// Thin wrapper around `host_processor_info`. Returns `nil`
-    /// when the syscall fails (extremely rare; documented only
-    /// for boot-time races).
+    /// Thin wrapper around `host_processor_info`; `nil` on failure
+    /// (extremely rare, boot-time races only).
     private func readHostProcessorInfo() -> [CoreTicks]? {
         var processorCount = natural_t(0)
         var infoArray: processor_info_array_t?

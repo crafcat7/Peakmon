@@ -2,30 +2,18 @@
 //  DashboardSystemBanner.swift
 //  Peakmon
 //
-//  Identity strip that sits at the very top of the dashboard
-//  surface, above the metric card grid. Acts as the
-//  "About this Mac" anchor for the user so they can
-//  remember at a glance *which* machine the live numbers
-//  underneath belong to (matters on multi-monitor / remote-
-//  desktop / multi-tenant setups).
+//  Identity strip at the top of the dashboard — an "About this Mac"
+//  anchor so the user knows which machine the live numbers belong
+//  to (matters on multi-monitor / remote / multi-tenant setups).
 //
-//  Visual structure:
+//  Layout: a Mac icon + model name, then a chip row (chip / RAM /
+//  disk / macOS / uptime / serial).
 //
-//    ┌──────────────────────────────────────────────────────┐
-//    │  [Mac icon]  Model name · model id                  │
-//    │              Chip · RAM · Disk · macOS · Uptime · SN│
-//    └──────────────────────────────────────────────────────┘
-//
-//  Identity fields are static for the life of the process,
-//  fetched once via `DeviceInfoReader`. Uptime ticks on its
-//  own one-minute Timer because it's the only value that
-//  changes over time; sub-minute precision isn't useful on a
-//  banner field that mostly reads "37 days".
-//
-//  Serial number is masked by default ("C02···K9XYZ") with a
-//  click toggle to reveal — Activity Monitor shows it in the
-//  clear but enough users mirror their screen on calls that
-//  defaulting to masked is the kinder choice.
+//  Identity fields are static for the process lifetime, fetched
+//  once via `DeviceInfoReader`. Uptime ticks on its own one-minute
+//  schedule (the only value that changes). Serial number is masked
+//  by default with a click to reveal — kinder than Activity
+//  Monitor's clear display for users who screen-share.
 //
 
 import AppKit
@@ -70,10 +58,8 @@ struct DashboardSystemBanner: View {
                 .strokeBorder(Color.gray.opacity(0.18), lineWidth: 0.5),
         )
         .task {
-            // Initial uptime + one-minute heartbeat. We use
-            // `Task.sleep` rather than a Timer to avoid the
-            // Combine/Timer publisher overhead and to make
-            // cancellation automatic when the view goes away.
+            // Initial uptime + one-minute heartbeat via `Task.sleep`
+            // (no Timer publisher overhead; auto-cancels on teardown).
             uptime = formatUptime(since: info.bootDate)
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
@@ -107,10 +93,8 @@ struct DashboardSystemBanner: View {
     // MARK: - Chips
 
     private var chipsRow: some View {
-        // `FlexibleStack` would be ideal but stock SwiftUI lacks
-        // one, so we use an HStack and clip with `.layoutPriority`
-        // ordering. The banner is wide enough on every dashboard
-        // window size we ship that wrapping isn't expected.
+        // Plain HStack — the banner is wide enough at every shipped
+        // window size that wrapping isn't expected.
         HStack(spacing: 6) {
             chip(icon: "cpu",            tint: .blue,    value: info.chip)
             chip(icon: "memorychip",     tint: .purple,  value: formatRAM(info.memoryBytes))
@@ -166,10 +150,8 @@ struct DashboardSystemBanner: View {
         .help(serialRevealed ? "Hide serial number" : "Reveal serial number")
     }
 
-    /// Renders the SN either fully or masked, keeping the
-    /// last four characters visible so the user has enough
-    /// to identify the machine without exposing the unique
-    /// prefix that pairs with their Apple ID purchases.
+    /// SN shown full or masked to the last four characters — enough
+    /// to identify the machine without exposing the full serial.
     private var serialDisplay: String {
         guard !info.serialNumber.isEmpty else { return "—" }
         if serialRevealed { return info.serialNumber }
@@ -180,10 +162,9 @@ struct DashboardSystemBanner: View {
 
     // MARK: - Helpers
 
-    /// Human uptime ("7d 4h", "23m", "just now"). We avoid
-    /// `DateComponentsFormatter`'s `.short` style because it
-    /// produces "1 d, 4 h, 12 m" which is too wide for a chip;
-    /// the custom formatter keeps the largest two units only.
+    /// Uptime as "7d 4h" / "23m" / "just now". Custom-formatted
+    /// (not `DateComponentsFormatter`) to keep the largest two units
+    /// only, since "1 d, 4 h, 12 m" is too wide for a chip.
     private func formatUptime(since date: Date) -> String {
         let secs = max(0, Int(Date.now.timeIntervalSince(date)))
         if secs < 60 { return "just now" }
@@ -197,37 +178,23 @@ struct DashboardSystemBanner: View {
         return "\(days)d \(leftoverHours)h"
     }
 
-    /// RAM uses **binary** units (1 GB = 2³⁰ bytes) to match
-    /// what Apple's "About This Mac" panel prints and what the
-    /// user actually purchased (a "64 GB" SKU is 64 × 1024³
-    /// bytes, not 64 × 10⁹). Reporting it as 68.7 GB by using
-    /// SI here would be technically correct and practically
-    /// confusing.
+    /// RAM in **binary** units (1 GB = 2³⁰) to match "About This
+    /// Mac" and the purchased SKU (a "64 GB" part is 64 × 1024³,
+    /// not 68.7 GB in SI).
     private func formatRAM(_ bytes: UInt64) -> String {
         let gib = Double(bytes) / 1_073_741_824
         if gib >= 1024 { return String(format: "%.1f TB", gib / 1024) }
         return String(format: "%.0f GB", gib.rounded())
     }
 
-    /// Storage uses **decimal** units (1 GB = 10⁹ bytes) and
-    /// is **snapped to the nearest SKU step** so a 1 TB SSD
-    /// reads "1 TB" instead of "994 GB". `FileManager`'s raw
-    /// number is the user-visible volume size — already net
-    /// of the EFI/recovery/preboot partitions — so on a 1 TB
-    /// drive it lands at ~994 GB, which is correct but not
-    /// what a buyer recognises.
-    ///
-    /// We round up to the nearest entry in the canonical Mac
-    /// storage ladder (128 / 256 / 512 / 1024 / 2048 / 4096 /
-    /// 8192 GB). The tolerance window is 10% upward — wider
-    /// than necessary because the gap between raw and SKU
-    /// grows with capacity (≈6% on 1 TB, ≈3% on 2 TB), and we
-    /// would rather snap than miss.
+    /// Storage in **decimal** units (1 GB = 10⁹) snapped up to the
+    /// nearest Mac SKU step, so a 1 TB SSD reads "1 TB" not the raw
+    /// ~994 GB volume size. Snaps to the first ladder rung within
+    /// +10% of raw (the raw-to-SKU gap grows with capacity), else
+    /// the smallest rung ≥ raw.
     private func formatDisk(_ bytes: UInt64) -> String {
         let rawGB = Double(bytes) / 1_000_000_000
         let ladder: [Double] = [128, 256, 512, 1024, 2048, 4096, 8192, 16384]
-        // First ladder entry that's within +10% of raw, or
-        // the smallest entry ≥ raw — whichever comes first.
         let snapped = ladder.first { rung in
             rung >= rawGB && rung <= rawGB * 1.10
         } ?? ladder.first { $0 >= rawGB } ?? rawGB
@@ -238,16 +205,10 @@ struct DashboardSystemBanner: View {
         return String(format: "%.0f GB", snapped)
     }
 
-    /// Resolve a representative app icon for the device.
-    /// Strategy: look up the Apple-bundled "About This Mac" /
-    /// system "Mac" icon via `NSImage(named:)` — these symbol
-    /// names are public and have shipped for years. If none
-    /// of them exist on this OS, we leave the SF Symbol
-    /// fallback in place.
+    /// Resolve a representative Mac icon. `NSComputer` is a public,
+    /// long-shipped system icon name; if it's missing we keep the SF
+    /// Symbol fallback.
     private func loadDeviceIcon(modelName _: String) async -> NSImage? {
-        // `NSImage.Name.computer` is one of the few public,
-        // documented system icon names that resolves to the
-        // generic Mac silhouette across macOS versions.
         if let img = NSImage(named: NSImage.Name("NSComputer")) {
             return img
         }

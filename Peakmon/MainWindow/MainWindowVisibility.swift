@@ -2,48 +2,36 @@
 //  MainWindowVisibility.swift
 //  Peakmon
 //
-//  Tracks whether the unified `Window("main")` scene is currently
-//  doing useful work for the user (i.e. visible, on-screen, not
-//  minimised, and either key or at least not occluded). The
-//  Dashboard surface reads this and stops rebuilding its
-//  SwiftUI subtree when the window is hidden, which is the
-//  single largest reduction in CPU on long-running sessions:
+//  Tracks whether the unified `Window("main")` scene is doing
+//  useful work (visible, on-screen, not minimised, key or at least
+//  not occluded). `DashboardSurface` reads this and stops rebuilding
+//  its SwiftUI subtree when the window is hidden — the single
+//  largest CPU win on long sessions.
 //
-//    • The menu-bar entry and popover keep ticking off the same
-//      `MetricsStore` because they only paint a handful of glyphs.
-//    • The Dashboard, in contrast, paints ~8 sparklines, a 50-row
-//      process table, and several gradients per `MetricsStore`
-//      change. With the main window hidden behind another app
-//      that work is invisible yet still ran every second, costing
-//      ~17% CPU on an M-class core.
-//
-//  When `isMainWindowActive` is false, `DashboardSurface` swaps
-//  in a tiny `Color.clear` placeholder. SwiftUI tears down the
-//  expensive subtree, the `MetricsStore` updates trigger no
-//  body re-evaluation, and `CA::Transaction::commit` goes idle.
-//  Becoming key/visible rebuilds the subtree from the current
-//  `MetricsStore` state, which is up-to-date because the
-//  scheduler kept running in the background.
+//  The menu-bar entry and popover keep ticking (they paint a few
+//  glyphs), but the Dashboard's ~8 sparklines + process table +
+//  gradients would otherwise re-render every second behind another
+//  app, costing ~17% of an M-class core. When inactive, the surface
+//  swaps in a `Color.clear` placeholder so store updates trigger no
+//  body re-eval; becoming visible rebuilds from the current (still
+//  fresh) store state.
 //
 
 import AppKit
 import SwiftUI
 
-/// Observable wrapper around the AppKit notifications that
-/// indicate whether the main window is currently doing useful
-/// painting. Lives as a single `shared` instance because there
-/// is exactly one `Window("main")` in the app and SwiftUI's
-/// scene API does not expose a per-window visibility binding.
+/// Observable wrapper around the AppKit notifications that signal
+/// whether the main window is painting. A single `shared` instance
+/// since there's exactly one `Window("main")` and SwiftUI exposes no
+/// per-window visibility binding.
 @MainActor
 @Observable
 final class MainWindowVisibility {
     static let shared = MainWindowVisibility()
 
-    /// True when at least one titled, on-screen, non-minimised
-    /// window owned by this app is currently key OR visible on
-    /// the active space. Defaults to `true` so the dashboard
-    /// renders correctly on first launch before any window
-    /// notification has fired.
+    /// True when at least one titled, on-screen, non-minimised app
+    /// window is key or visible. Defaults to `true` so the dashboard
+    /// renders on first launch before any notification fires.
     private(set) var isMainWindowActive: Bool = true
 
     private var observers: [NSObjectProtocol] = []
@@ -56,11 +44,8 @@ final class MainWindowVisibility {
         let center = NotificationCenter.default
         let queue = OperationQueue.main
 
-        // Notifications we care about. We don't filter by
-        // window object because there's only one user-facing
-        // titled window, and the menu-bar popover/status host
-        // are filtered out inside `recompute()` the same way
-        // `ActivationPolicyController` does.
+        // No window-object filter: there's only one titled window,
+        // and the status/popover hosts are filtered in `recompute()`.
         let names: [Notification.Name] = [
             NSWindow.didBecomeKeyNotification,
             NSWindow.didResignKeyNotification,
@@ -78,9 +63,8 @@ final class MainWindowVisibility {
                 queue: queue,
             ) { _ in
                 Task { @MainActor in
-                    // Tiny delay so `NSApp.windows` reflects
-                    // the post-notification state (e.g. after
-                    // `willClose`).
+                    // Small delay so `NSApp.windows` reflects the
+                    // post-notification state (e.g. after `willClose`).
                     try? await Task.sleep(for: .milliseconds(30))
                     Self.shared.recompute()
                 }

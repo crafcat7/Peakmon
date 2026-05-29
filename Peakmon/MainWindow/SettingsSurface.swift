@@ -2,24 +2,15 @@
 //  SettingsSurface.swift
 //  Peakmon
 //
-//  Detail surface rendered when the top pill is on
-//  `MainWindowTab.settings`. Hosts a smaller sub-pill segmented
-//  control along the top of the surface that switches between the
-//  three `SettingsCategory` pages (General / Display / About).
+//  Detail surface for `MainWindowTab.settings`. Hosts a small sub-pill
+//  along the top that switches the `SettingsCategory` pages, reusing
+//  the existing Page views from `SettingsView.swift` verbatim (each
+//  keeps its own `SettingsPage` chrome); this file owns only the picker.
 //
-//  Design rationale:
-//    • The user picked "keep three pages, embed sub-tab inside the
-//      Settings tab" over "merge into one scrolling page" — so the
-//      three Page views (`GeneralPage`/`DisplayPage`/`AboutPage`)
-//      from `SettingsView.swift` are reused verbatim. Each retains
-//      its own `SettingsPage` chrome and `SettingsSection` layout;
-//      this file only owns the picker.
-//    • The sub-pill is intentionally smaller and lower-contrast
-//      than the main `MainWindowTopBar` pill. The hierarchy reads
-//      as "you are in Settings → pick a sub-section" rather than
-//      two equally-prominent navigation chips.
-//    • Sub-pill animation uses the same spring as the top bar
-//      (`response: 0.35, dampingFraction: 0.85`) for consistency.
+//  The sub-pill is deliberately smaller and lower-contrast than the
+//  main `MainWindowTopBar` pill so the hierarchy reads as "in Settings
+//  → pick a sub-section". It uses the same spring (response 0.35,
+//  damping 0.85) as the top bar for consistency.
 //
 
 import SwiftUI
@@ -38,10 +29,9 @@ struct SettingsSurface: View {
             Divider()
                 .opacity(0.5)
 
-            // Each Page already wraps itself in a ScrollView via
-            // `SettingsPage`/`SettingsPageChrome`, so the surface
-            // can hand the full remaining height to the page
-            // without adding another scroll container.
+            // Each Page wraps itself in a ScrollView via
+            // `SettingsPage`, so hand it the full remaining height
+            // without another scroll container.
             pageContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -97,10 +87,9 @@ struct SettingsSurface: View {
 
     @ViewBuilder
     private var pageContent: some View {
-        // Switching on the enum produces a different concrete view
-        // type per case, so wrapping in a Group + `.transition`
-        // gives the swap a quick cross-fade rather than the harsh
-        // pop SwiftUI defaults to when the view identity changes.
+        // Each case is a distinct concrete view type, so Group +
+        // `.transition` cross-fades the swap instead of the harsh pop
+        // SwiftUI defaults to on identity change.
         Group {
             switch selection {
             case .general: GeneralPage()

@@ -2,39 +2,23 @@
 //  MainWindowView.swift
 //  Peakmon
 //
-//  Root view of the unified `Window("main")` scene. v1.3 D1 v2 ships
-//  a top-pill navigation model instead of the briefly-tried sidebar:
+//  Root view of the unified `Window("main")` scene: a top-pill nav
+//  (`MainWindowTopBar`) floating over a detail surface that is either
+//  `DashboardSurface` or `SettingsSurface`.
 //
-//    ┌─ window ───────────────────────────────────────────────┐
-//    │                                                        │
-//    │           ╭─[ Dashboard | Settings ]─╮  ← TopBar pill   │
-//    │                                                        │
-//    │   ┌─ detail surface ─────────────────────────────────┐ │
-//    │   │ DashboardSurface  or  SettingsSurface            │ │
-//    │   └──────────────────────────────────────────────────┘ │
-//    └────────────────────────────────────────────────────────┘
+//  The scene's title bar is hidden (`.hiddenTitleBar` in `PeakmonApp`),
+//  so the pill is the only top chrome; the window stays draggable from
+//  the empty area since hidden title bars keep their hit-test region.
 //
-//  The scene's title bar is hidden (`windowStyle(.hiddenTitleBar)`
-//  applied at the scene level in `PeakmonApp`), so the pill is the
-//  only chrome at the top of the window. The window is still
-//  draggable from the empty area around the pill because hidden
-//  title bars preserve their hit-test region.
+//  Keeps `selection: MainWindowSelection` (not just `MainWindowTab`)
+//  because `PeakmonApp` owns that `@State`, the v1.4 plan may add
+//  deeplinks like `openWindow(value: .settings(.display))`, and the
+//  Settings sub-pill needs the `SettingsCategory` from the enum.
 //
-//  `selection: MainWindowSelection` is kept around (rather than
-//  replaced with `MainWindowTab`) because:
-//    1. `PeakmonApp` already owns a `@State` of that type and the
-//       v1.4 plan may add deeplinks like
-//       `openWindow(id: "main", value: .settings(.display))`.
-//    2. The Settings sub-pill needs a `SettingsCategory` anyway,
-//       and reading it from `MainWindowSelection.settings(_)`
-//       avoids an additional `@State`.
-//
-//  Mapping rules between the top-pill `MainWindowTab` and the
-//  enum `MainWindowSelection`:
-//    • Top pill → Dashboard      ⇒ selection = .dashboard
-//    • Top pill → Settings       ⇒ selection = .settings(remembered)
-//      where `remembered` is the last sub-category the user picked,
-//      defaulting to `.general` on first entry.
+//  Pill ↔ selection mapping:
+//    • Dashboard ⇒ .dashboard
+//    • Settings  ⇒ .settings(remembered), remembered = last sub-
+//      category picked, defaulting to `.general`.
 //
 
 import PeakmonCore
@@ -44,17 +28,15 @@ import SwiftUI
 struct MainWindowView: View {
     @Binding var selection: MainWindowSelection
 
-    /// Last `SettingsCategory` the user touched. Surviving across
-    /// Dashboard ↔ Settings flips so toggling back to Settings
-    /// returns to the same sub-page rather than always
-    /// snapping to `.general`.
+    /// Last `SettingsCategory` touched. Survives Dashboard ↔ Settings
+    /// flips so returning to Settings restores the same sub-page
+    /// instead of snapping to `.general`.
     @State private var lastSettingsCategory: SettingsCategory = .general
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Detail surface fills the entire window. The top pill
-            // floats over it with vertical padding, matching the
-            // reference design.
+            // Detail surface fills the window; the pill floats over
+            // it with top padding.
             detailSurface
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(NSColor.windowBackgroundColor))
@@ -72,10 +54,9 @@ struct MainWindowView: View {
         )
     }
 
-    /// Bridges `MainWindowTab` (top pill) ↔ `MainWindowSelection`
-    /// (scene-level state). Reading derives the tab from the enum
-    /// case; writing applies the "remembered settings sub-page"
-    /// rule documented above.
+    /// Bridges `MainWindowTab` (pill) ↔ `MainWindowSelection` (scene
+    /// state). Read derives the tab; write applies the remembered-
+    /// sub-page rule from the header.
     private var topTabBinding: Binding<MainWindowTab> {
         Binding(
             get: {
@@ -97,10 +78,9 @@ struct MainWindowView: View {
         )
     }
 
-    /// Binding handed to `SettingsSurface` so its sub-pill can
-    /// mutate the active settings category. Side-effect: also
-    /// updates `lastSettingsCategory` so a subsequent
-    /// Dashboard→Settings round-trip remembers the choice.
+    /// Binding for `SettingsSurface`'s sub-pill. Also updates
+    /// `lastSettingsCategory` so a later Dashboard→Settings round-trip
+    /// remembers the choice.
     private var settingsCategoryBinding: Binding<SettingsCategory> {
         Binding(
             get: {
@@ -118,9 +98,8 @@ struct MainWindowView: View {
 
     @ViewBuilder
     private var detailSurface: some View {
-        // Pad the surface down by the pill's height + breathing
-        // room so its own content doesn't slide under the pill.
-        // 12 (top inset) + ~32 (pill height) + 16 (gap) = 60.
+        // Pad down past the pill so the surface content doesn't slide
+        // under it: 12 (inset) + ~32 (pill) + 16 (gap) = 60.
         Group {
             switch selection {
             case .dashboard:
@@ -135,9 +114,8 @@ struct MainWindowView: View {
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: tabOf(selection))
     }
 
-    /// Helper that animates only on top-level tab changes, not on
-    /// every sub-pill flip inside Settings (which manages its own
-    /// transition).
+    /// Animates only on top-level tab changes, not on sub-pill flips
+    /// inside Settings (which manages its own transition).
     private func tabOf(_ selection: MainWindowSelection) -> MainWindowTab {
         switch selection {
         case .dashboard: .dashboard

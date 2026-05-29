@@ -2,36 +2,20 @@
 //  MainWindowTopBar.swift
 //  Peakmon
 //
-//  Floating pill segmented control that lives at the top of the
-//  unified main window scene and switches between
-//  `MainWindowTab.dashboard` and `MainWindowTab.settings`.
+//  Floating pill segmented control at the top of the unified main
+//  window; switches `MainWindowTab.dashboard` / `.settings`.
 //
-//  Visual model (reference: the third-party monitor.app screenshot
-//  the user pinned during the 2026-05-26 D1 redesign):
+//  Visual model:
+//  - Outer: continuous `Capsule` filled `.regularMaterial` with a
+//    1pt border, reading as a floating chip over the detail surface.
+//  - Indicator: an accent-filled `Capsule`, matched-geometry'd across
+//    tabs so selection slides rather than fades. Accent follows the
+//    user's system tint (v1.3 rule: don't lock a brand palette).
+//  - Labels show both icon and text — the pill is the primary nav
+//    affordance and must be self-explanatory.
 //
-//    ┌──────────────────────────────────────────────────────────┐
-//    │   ╭───────── Dashboard ──╮  ──── Settings  ────╮         │
-//    │   ╰──────────────────────╯                     ╯         │
-//    └──────────────────────────────────────────────────────────┘
-//
-//  - Outer container: thick rounded capsule (`Capsule(style:
-//    .continuous)`) filled with a thin `.regularMaterial` so it
-//    reads as a floating chip atop whichever detail surface is
-//    underneath. Light 1pt border for definition.
-//  - Inner indicator: another `Capsule` matched-geometry-id'd
-//    across the two tabs so switching slides the highlight rather
-//    than fading it. Filled with `.accentColor` so the user's
-//    system accent flows through (one of the v1.3 design rules:
-//    don't lock a brand palette, follow the user).
-//  - Labels: `Label(title, systemImage:)` with `.iconOnly` is
-//    deliberately NOT used — both icon and text show, because the
-//    pill is the primary navigation affordance and needs to be
-//    self-explanatory at first glance.
-//
-//  Why a separate file: keeping the chrome in its own view makes
-//  the future v1.4 work (e.g. injecting a "Live" indicator chip
-//  on the right side of the toolbar, or a window-size disclosure
-//  button) a localised edit instead of touching `MainWindowView`.
+//  Separate file so future toolbar additions (e.g. a "Live" chip)
+//  stay localised rather than touching `MainWindowView`.
 //
 
 import SwiftUI
@@ -39,11 +23,9 @@ import SwiftUI
 struct MainWindowTopBar: View {
     @Binding var selection: MainWindowTab
 
-    /// Matched-geometry namespace used to slide the accent capsule
-    /// between tabs. Declared on this view (not the parent) because
-    /// the parent doesn't otherwise need to know about the pill's
-    /// internal animation; if a future iteration needs to coordinate
-    /// the pill with toolbar trailing content, this can be lifted.
+    /// Matched-geometry namespace that slides the accent capsule
+    /// between tabs. Declared here since the parent doesn't need the
+    /// pill's internal animation.
     @Namespace private var pillNamespace
 
     var body: some View {
@@ -61,14 +43,12 @@ struct MainWindowTopBar: View {
             Capsule(style: .continuous)
                 .strokeBorder(.white.opacity(0.08), lineWidth: 1)
         )
-        // Note: a soft drop shadow used to sit here, but during
-        // scrolling SwiftUI rebuilt the pill's shadow source layer
-        // every frame (`apply_blur` → `vImageSepConvolve_ARGB8888`
-        // showed up in `sample`). The strokeBorder + regularMaterial
-        // already differentiate the pill from the surface below it.
-        // Accessibility: expose the pill as a single tab bar so
-        // VoiceOver users hear "Tab bar, 2 items" rather than two
-        // unrelated buttons.
+        // A drop shadow used to sit here, but SwiftUI rebuilt its
+        // blur source layer every scroll frame (`apply_blur` →
+        // `vImageSepConvolve_ARGB8888` in `sample`). The border +
+        // material already separate the pill from the surface.
+        // Accessibility: expose as one tab bar ("Tab bar, 2 items")
+        // rather than two unrelated buttons.
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Main navigation")
     }
@@ -78,11 +58,8 @@ struct MainWindowTopBar: View {
         let isSelected = selection == tab
 
         Button {
-            // `.spring(response: 0.35, dampingFraction: 0.85)` was
-            // chosen empirically — a faster spring (0.25) felt
-            // jittery, the SwiftUI default (~0.55) felt sluggish
-            // for a chrome-level interaction that the user expects
-            // to be near-instant.
+            // Spring tuned empirically: faster (0.25) felt jittery,
+            // the SwiftUI default (~0.55) felt sluggish for chrome.
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                 selection = tab
             }
@@ -101,12 +78,10 @@ struct MainWindowTopBar: View {
                     Capsule(style: .continuous)
                         .fill(Color.accentColor)
                         .matchedGeometryEffect(id: "pill", in: pillNamespace)
-                    // Note: selected-tab accent glow removed for
-                    // the same reason as the outer pill shadow —
-                    // a Gaussian-blurred shadow source is rebuilt
-                    // by SwiftUI on every scroll commit. The
-                    // accent fill alone already carries strong
-                    // selection affordance.
+                    // Selected-tab accent glow removed for the same
+                    // reason as the pill shadow — a blurred source
+                    // layer rebuilt every scroll commit. The accent
+                    // fill alone carries the selection affordance.
                 }
             }
             .contentShape(Capsule())

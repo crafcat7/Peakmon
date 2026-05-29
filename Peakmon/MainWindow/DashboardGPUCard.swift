@@ -4,24 +4,17 @@
 //
 //  GPU panel for the unified dashboard.
 //
-//    Collapsed — utilisation headline (the number users look at
-//                first when asking "is the GPU busy"), trend
-//                sparkline tinted on the gpu accent.
-//    Expanded  — overlay sparkline of three series at once:
-//                utilisation (%, primary axis 0–100), GPU
-//                thermal (°C), GPU power (W). Each series gets
-//                its own current-value chip beside the chart so
-//                the chart legend doubles as a live readout.
-//    Footer    — utilisation + GPU temp + GPU power triplet,
-//                each labelled.
+//    Collapsed — utilisation headline + trend sparkline.
+//    Expanded  — three side-by-side mini-charts: utilisation (%),
+//                GPU thermal (°C), GPU power (W), each with a live
+//                value chip.
+//    Footer    — utilisation + temp + power triplet.
 //
-//  Why no per-engine breakdown (3D / Media / Compute): macOS
-//  exposes per-engine utilisation via private IOReport channels
-//  that require either Screen Recording entitlement (Mac Apps)
-//  or root + tcc bypass. Both are out of scope for an ad-hoc
-//  signed first-launch experience. The triple-series overlay
-//  gives the user enough signal — utilisation answers "busy?",
-//  thermal answers "hot?", power answers "drawing watts?".
+//  No per-engine breakdown (3D / Media / Compute): macOS exposes
+//  it only via private IOReport channels needing Screen Recording
+//  entitlement or root + tcc bypass — both out of scope for an
+//  ad-hoc signed app. The triple-series view answers the practical
+//  questions (busy? hot? drawing watts?).
 //
 
 import PeakmonCore
@@ -130,31 +123,20 @@ struct DashboardGPUCard: View {
 
     // MARK: - Expanded
 
-    /// Tri-series overlay. Utilisation is on the canonical 0–100
-    /// axis; thermal and power live on `nil` autoscale axes that
-    /// the multi-series sparkline normalises into the same plot
-    /// rectangle. The reader is the same metrics-store history,
-    /// so no extra collection cost.
     private var expandedDetail: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Telemetry")
                 .font(.subheadline.weight(.semibold))
 
-            // Three side-by-side mini-charts rather than a single
-            // overlaid chart: the y-axes are incompatible (%, °C,
-            // W) and overlaying them on shared axes would lie
-            // about magnitude. Three small charts in a row gives
-            // each metric its own scale while still letting the
-            // user eyeball correlation across the same time axis.
+            // Three separate mini-charts, not one overlay: the axes
+            // are incompatible (%, °C, W) and sharing them would lie
+            // about magnitude. Side-by-side keeps each scale honest
+            // while sharing the time axis for eyeball correlation.
             //
-            // The chart row takes `maxHeight: .infinity` so it
-            // grows to absorb the slack the shared card container
-            // would otherwise dump as dead space between the
-            // charts and the footer (the card is pinned to
-            // `dashboardCardMinHeight` and any surplus lands in
-            // the trailing Spacer). Letting the charts eat that
-            // surplus keeps the Telemetry block visually anchored
-            // to the footer instead of floating above a gap.
+            // `maxHeight: .infinity` lets the row absorb the slack
+            // the shared card container (pinned to
+            // `dashboardCardMinHeight`) would otherwise leave as
+            // dead space between the charts and the footer.
             HStack(spacing: 12) {
                 miniSeries(
                     title: "Utilisation",

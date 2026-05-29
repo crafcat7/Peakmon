@@ -2,47 +2,25 @@
 //  DashboardMetricCard.swift
 //  Peakmon
 //
-//  Shared 3-slot chrome for every dashboard metric card. The
-//  layout vocabulary is intentionally rigid so each card in the
-//  grid looks like a sibling rather than a snowflake:
+//  Shared 3-slot chrome for every dashboard metric card: header,
+//  headline, detail (flexes), footer. The rigid layout makes each
+//  card in the grid look like a sibling, gives identical chrome
+//  (padding / hairline / corner radius), and reduces a new card to
+//  filling three closures.
 //
-//    ┌──────────────────────────────────────────┐
-//    │  ◉ Title                                 │  ← header (32pt)
-//    ├──────────────────────────────────────────┤
-//    │  headline slot                           │  ← ~110pt
-//    │  (32pt number + chips + sparkline)       │
-//    ├──────────────────────────────────────────┤
-//    │  detail slot                             │  ← flexes
-//    │  (per-card content, may be empty)        │
-//    ├──────────────────────────────────────────┤
-//    │  footer slot                             │  ← ~36pt
-//    └──────────────────────────────────────────┘
-//
-//  Every card on the dashboard renders through this container so
-//  that:
-//    • Header, padding, hairline, corner radius are identical.
-//    • A row's cards reach the same height — set by the tallest
-//      sibling — instead of producing ragged whitespace under
-//      shorter siblings (the bug that motivated this refactor).
-//    • Adding a new card means filling three closures rather than
-//      reinventing chrome.
-//
-//  Height alignment trick: every card declares
-//  `frame(minHeight: cardMinHeight, maxHeight: .infinity)` so
-//  HStack/Grid rows stretch them to the tallest neighbour, with
-//  internal `Spacer()`s pushing the footer to the bottom.
-//
-//  Headline / detail / footer are all `@ViewBuilder` and any can
-//  be `EmptyView()` for cards that don't have a slot (e.g. some
-//  cards omit `detail`).
+//  Height alignment: every card declares `frame(minHeight:
+//  cardMinHeight, maxHeight: .infinity)` so a row's cards all reach
+//  the tallest sibling's height (instead of ragged whitespace
+//  under shorter ones), with internal `Spacer()`s pinning the
+//  footer to the bottom. Each slot is a `@ViewBuilder` and may be
+//  `EmptyView()`.
 //
 
 import SwiftUI
 
-/// Shared minimum height for every dashboard card. Picked to
-/// fit the heaviest current card (CPU with per-core bars) plus
-/// a little breathing room; thinner cards Spacer themselves up
-/// to the same height so a row of two cards looks symmetrical.
+/// Shared minimum height for every dashboard card. Sized to the
+/// heaviest card (CPU with per-core bars); thinner cards Spacer up
+/// to match so a row of two looks symmetrical.
 let dashboardCardMinHeight: CGFloat = 360
 
 struct DashboardMetricCard<Headline: View, Detail: View, Footer: View>: View {
@@ -76,9 +54,9 @@ struct DashboardMetricCard<Headline: View, Detail: View, Footer: View>: View {
 
             headline()
 
-            // `detail` slot grows to fill the card. The empty-view
-            // case still occupies a Spacer so the footer sticks to
-            // the bottom regardless of slot content.
+            // `detail` grows to fill the card; the empty case still
+            // takes a Spacer so the footer stays pinned to the
+            // bottom regardless of slot content.
             detail()
 
             Spacer(minLength: 0)
@@ -111,10 +89,9 @@ struct DashboardMetricCard<Headline: View, Detail: View, Footer: View>: View {
         }
     }
 
-    /// Footer renders a divider above only when the footer slot
-    /// actually has content; an `EmptyView` collapses the strip
-    /// entirely so cards without footer payload don't carry a
-    /// dangling hairline.
+    /// Renders a divider + footer only when the footer slot has
+    /// content; an `EmptyView` collapses the strip so footerless
+    /// cards don't carry a dangling hairline.
     @ViewBuilder
     private var footerBlock: some View {
         if Footer.self != EmptyView.self {

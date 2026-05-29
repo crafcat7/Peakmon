@@ -199,9 +199,6 @@ struct DashboardView: View {
             Text("All cards hidden")
                 .font(.callout.weight(.medium))
                 .foregroundStyle(.secondary)
-            Text("Enable cards in Settings › Display.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)

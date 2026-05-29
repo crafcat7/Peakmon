@@ -146,6 +146,15 @@ struct DashboardGPUCard: View {
             // about magnitude. Three small charts in a row gives
             // each metric its own scale while still letting the
             // user eyeball correlation across the same time axis.
+            //
+            // The chart row takes `maxHeight: .infinity` so it
+            // grows to absorb the slack the shared card container
+            // would otherwise dump as dead space between the
+            // charts and the footer (the card is pinned to
+            // `dashboardCardMinHeight` and any surplus lands in
+            // the trailing Spacer). Letting the charts eat that
+            // surplus keeps the Telemetry block visually anchored
+            // to the footer instead of floating above a gap.
             HStack(spacing: 12) {
                 miniSeries(
                     title: "Utilisation",
@@ -172,15 +181,9 @@ struct DashboardGPUCard: View {
                     yMax: nil,
                 )
             }
-
-            HStack(spacing: 6) {
-                Image(systemName: "info.circle")
-                    .font(.caption2)
-                Text("Per-engine breakdown (3D / Media / Compute) requires Screen Recording entitlement — not available on ad-hoc builds.")
-                    .font(.caption2)
-            }
-            .foregroundStyle(.tertiary)
+            .frame(maxHeight: .infinity)
         }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func miniSeries(title: String, value: String, color: Color, samples: [MetricSample], yMin: Double?, yMax: Double?) -> some View {
@@ -204,7 +207,7 @@ struct DashboardGPUCard: View {
                     yMax: yMax,
                 ),
             )
-            .frame(height: 56)
+            .frame(minHeight: 80, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity)
     }

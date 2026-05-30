@@ -190,16 +190,16 @@ struct DashboardMemoryCard: View {
                 .font(.subheadline.weight(.semibold))
 
             VStack(spacing: 6) {
-                breakdownRow(label: "Wired", value: wired, color: .indigo, hint: "Cannot be paged out")
-                breakdownRow(label: "Compressed", value: compressed, color: .purple, hint: "Squeezed by the VM")
-                breakdownRow(label: "Swap on disk", value: swap, color: .orange, hint: swap > 0 ? "Paged to disk" : "None")
+                breakdownRow(label: "Wired", value: wired, color: .indigo)
+                breakdownRow(label: "Compressed", value: compressed, color: .purple)
+                breakdownRow(label: "Swap on disk", value: swap, color: .orange)
                 let other = max(0, used - wired - compressed - swap)
-                breakdownRow(label: "App + cache", value: other, color: tint, hint: "Active app pages and file cache")
+                breakdownRow(label: "App + cache", value: other, color: tint)
             }
         }
     }
 
-    private func breakdownRow(label: String, value: Double, color: Color, hint: String) -> some View {
+    private func breakdownRow(label: String, value: Double, color: Color) -> some View {
         HStack(spacing: 10) {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(label)
@@ -207,12 +207,7 @@ struct DashboardMemoryCard: View {
                 .frame(width: 110, alignment: .leading)
             Text(formatBytesShort(value))
                 .font(.caption.monospacedDigit())
-                .frame(width: 80, alignment: .trailing)
-            Text(hint)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 

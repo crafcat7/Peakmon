@@ -2,27 +2,20 @@
 //  ProcessDetailSheet.swift
 //  Peakmon
 //
-//  Modal sheet triggered by double-clicking a row in the
-//  dashboard's Processes panel. The panel groups processes
-//  by `.app` bundle, so this sheet operates on a
-//  `ProcessGroup` rather than a single snapshot.
+//  Modal sheet opened from a row in the dashboard's Processes
+//  panel. The panel groups by `.app` bundle, so this sheet operates
+//  on a `ProcessGroup`, not a single snapshot.
 //
-//  Layout (top -> bottom):
+//    • Hero header — bundle icon, name, aggregate chips.
+//    • Child-process table — every PID in the group, CPU-ranked;
+//      clicking a row focuses it (heaviest is focused on open).
+//    • Detail strip — path / args / Mach threads of the focused
+//      PID, reloaded asynchronously when focus changes.
 //
-//    • Hero header — bundle icon, display name, aggregated
-//      chips (CPU / Memory / Process count / Started).
-//    • Child-process table — every PID in the group, ranked
-//      by CPU%. Clicking a row picks the "focused" PID; the
-//      heaviest child is focused on open.
-//    • Detail strip — path / arguments / Mach threads of the
-//      currently focused PID. Re-loaded asynchronously when
-//      the focus changes.
-//
-//  Data flow: `ProcessDetailReader.read(pid:)` is called via
-//  a detached `Task` whenever the focused PID changes; the
-//  reader is `nonisolated` so it never bounces the main
-//  actor. Cross-user PIDs return empty path/args, which the
-//  view renders as explicit "unavailable" placeholders.
+//  `ProcessDetailReader.read(pid:)` runs in a detached `Task` on
+//  focus change. The reader is `nonisolated` so it never bounces
+//  the main actor; cross-user PIDs return empty path/args, which
+//  render as explicit "unavailable" placeholders.
 //
 
 import AppKit
@@ -33,18 +26,15 @@ struct ProcessDetailSheet: View {
     let group: ProcessGroup
     let onDismiss: () -> Void
 
-    /// Which child of `group` the lower strip is currently
-    /// describing. Initialised to the heaviest child (already at
-    /// index 0 thanks to `ProcessGrouping` sorting). A change here
-    /// triggers a fresh `ProcessDetailReader.read(pid:)`.
+    /// Which child the lower strip describes. Starts at the
+    /// heaviest (index 0 from `ProcessGrouping` sorting); changing
+    /// it triggers a fresh `ProcessDetailReader.read(pid:)`.
     @State private var focusedPID: Int32
 
-    /// Detail blob for `focusedPID`. Nil while a load is in
-    /// flight; populated when the detached task returns.
+    /// Detail blob for `focusedPID`, nil while a load is in flight.
     @State private var detail: ProcessDetail?
 
-    /// Cached bundle icon. Resolved once on appear so the table's
-    /// per-row icons stay snappy even on large groups.
+    /// Bundle icon, resolved once on appear.
     @State private var appIcon: NSImage?
 
     init(group: ProcessGroup, onDismiss: @escaping () -> Void) {
@@ -53,9 +43,8 @@ struct ProcessDetailSheet: View {
         _focusedPID = State(initialValue: group.children[0].pid)
     }
 
-    /// The currently-focused child snapshot. Recomputed from the
-    /// group each render so a future "live" mode (refreshing the
-    /// group while the sheet is open) can drop straight in.
+    /// The focused child, recomputed each render so a future "live"
+    /// mode (refreshing the group while open) drops straight in.
     private var focusedChild: ProcessSnapshot {
         group.children.first(where: { $0.pid == focusedPID }) ?? group.children[0]
     }
@@ -64,9 +53,8 @@ struct ProcessDetailSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             heroHeader
             Divider().opacity(0.5)
-            // Two-pane content: child list on top, focused-PID
-            // detail strip on the bottom. A scrollview wraps both
-            // so the sheet never grows past its fixed height.
+            // Child list on top, focused-PID detail strip below;
+            // one scrollview so the sheet keeps its fixed height.
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     childrenSection
@@ -82,22 +70,19 @@ struct ProcessDetailSheet: View {
         .frame(width: 820, height: 680)
         .background(.background)
         .task(id: focusedPID) {
-            // Whenever the focused child changes, kick off a fresh
-            // detail load on a background priority. Old detail is
-            // wiped to avoid flashing stale data for the previous PID.
+            // Reload detail on focus change at background priority;
+            // wipe old detail to avoid flashing the previous PID's.
             detail = nil
             let pid = focusedPID
             let built = await Task.detached(priority: .userInitiated) {
                 ProcessDetailReader.read(pid: pid)
             }.value
-            // Guard against a rapid double-click changing focus
-            // again while we were loading.
+            // Discard if focus changed again while loading.
             if pid == focusedPID {
                 detail = built
             }
         }
         .task {
-            // One-shot icon load on appear.
             if !group.bundlePath.isEmpty {
                 appIcon = NSWorkspace.shared.icon(forFile: group.bundlePath)
             } else if !focusedChild.path.isEmpty {
@@ -238,17 +223,12 @@ struct ProcessDetailSheet: View {
 
     // MARK: - Children table
 
-    /// Lists every PID in the group. Each row is clickable; the
-    /// clicked row becomes the new focus for the path/args/threads
-    /// strip below. The visually-distinct focused row provides the
-    /// "you are inspecting this PID" feedback.
+    /// Every PID in the group; clicking a row focuses it for the
+    /// path/args/threads strip below, with a tinted focused row.
     private var childrenSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 sectionHeader("Processes in this app", systemImage: "square.stack.3d.up", tint: .purple)
-                Text("Click a row to inspect")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
             }
 
             VStack(spacing: 0) {
@@ -284,42 +264,46 @@ struct ProcessDetailSheet: View {
 
     private func childRow(_ child: ProcessSnapshot, zebra: Bool) -> some View {
         let isFocused = child.pid == focusedPID
-        return HStack(spacing: 10) {
-            Text(String(child.pid))
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(isFocused ? .primary : .secondary)
-                .frame(width: 70, alignment: .leading)
-            Text(child.ppid > 0 ? String(child.ppid) : "—")
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.tertiary)
-                .frame(width: 70, alignment: .leading)
-            Text(child.name)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .foregroundStyle(isFocused ? Color.primary : Color.primary.opacity(0.8))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(String(format: "%.1f%%", child.cpuPercent))
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(cpuTint(child.cpuPercent))
-                .frame(width: 80, alignment: .trailing)
-            Text(formatBytes(child.memoryBytes))
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 90, alignment: .trailing)
-        }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 14)
-        .background(
-            // Focused row uses a tinted underlay so it reads as
-            // "this is what the detail strip is describing".
-            isFocused
-                ? AnyShapeStyle(Color.accentColor.opacity(0.18))
-                : AnyShapeStyle(zebra ? Color.primary.opacity(0.025) : Color.clear),
-        )
-        .contentShape(.rect)
-        .onTapGesture {
+        // Button (not onTapGesture) so the tap never competes with the
+        // enclosing ScrollView's drag — see DashboardProcessesPanel.
+        return Button {
             focusedPID = child.pid
+        } label: {
+            HStack(spacing: 10) {
+                Text(String(child.pid))
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(isFocused ? .primary : .secondary)
+                    .frame(width: 70, alignment: .leading)
+                Text(child.ppid > 0 ? String(child.ppid) : "—")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 70, alignment: .leading)
+                Text(child.name)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(isFocused ? Color.primary : Color.primary.opacity(0.8))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(String(format: "%.1f%%", child.cpuPercent))
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(cpuTint(child.cpuPercent))
+                    .frame(width: 80, alignment: .trailing)
+                Text(formatBytes(child.memoryBytes))
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 90, alignment: .trailing)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 14)
+            .background(
+                // Tinted underlay marks the row the detail strip is
+                // describing.
+                isFocused
+                    ? AnyShapeStyle(Color.accentColor.opacity(0.18))
+                    : AnyShapeStyle(zebra ? Color.primary.opacity(0.025) : Color.clear),
+            )
+            .contentShape(.rect)
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Path

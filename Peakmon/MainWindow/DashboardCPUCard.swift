@@ -2,30 +2,21 @@
 //  DashboardCPUCard.swift
 //  Peakmon
 //
-//  Dashboard CPU panel — default-full information, no second-
-//  level disclosure. The single body lays out:
+//  Dashboard CPU panel — default-full information, no second-level
+//  disclosure. Layout:
 //
-//    Top row     — headline % + USI bar + chips on the left,
-//                  trend sparkline on the right.
-//    Per-core    — 1 Hz published `PerCoreCPUReader` bar chart
-//                  (internal 2 Hz sampling, 4-sample rolling
-//                  window = 2 s smoothing), split into E-core
-//                  and P-core bands on Apple silicon (perf-level
-//                  detected via sysctl).
+//    Top row  — headline % + USI bar + chips (left), trend
+//               sparkline (right).
+//    Per-core — `PerCoreCPUReader` bar chart (2 Hz internal
+//               sampling, 4-sample rolling window ≈ 2 s smoothing,
+//               published at 1 Hz), split into E-core / P-core
+//               bands on Apple silicon (perf-level via sysctl).
+//    Footer   — load average (1/5/15 min) + CPU temperature.
 //
-//  Footer carries load average (1/5/15 min) and CPU temperature.
-//
-//  Why no embedded process table: Top processes graduated to a
-//  dedicated full-width panel at the bottom of the dashboard
-//  (see `DashboardProcessesPanel`). Duplicating the table inside
-//  the CPU card would waste vertical real-estate and force the
-//  CPU card much taller than the Memory card next to it, which
-//  re-introduces the same "ragged grid" symptom we just fixed.
-//
-//  Performance: PerCoreCPUReader ticks every 500 ms internally
-//  to keep its rolling-average window fresh, but only publishes
-//  to the UI once per second. Per tick cost is one Mach call
-//  for `host_processor_info` plus a small diff loop.
+//  Top processes live in a dedicated full-width panel
+//  (`DashboardProcessesPanel`), not here: an embedded table would
+//  force the CPU card much taller than the Memory card beside it
+//  and re-introduce the ragged-grid problem.
 //
 
 import PeakmonCore
@@ -63,9 +54,8 @@ struct DashboardCPUCard: View {
             detail: { perCoreSection },
             footer: { bottomRow },
         )
-        // Per-core sampler driven by a `TimelineView`. Wrapping
-        // the card keeps every card's data plumbing in one place;
-        // SwiftUI re-evaluates only the values that change.
+        // Per-core sampler driven by a `TimelineView`, pulled into
+        // a modifier to keep the body focused on layout.
         .modifier(PerCoreSamplerModifier(reader: perCoreReader, usage: $perCoreUsage))
     }
 
@@ -252,47 +242,36 @@ struct DashboardCPUCard: View {
     }
 }
 
-/// Drives the per-core reader at 2 Hz internally and publishes
-/// the rolling-window average to the UI at 1 Hz. The 2 Hz inner
-/// cadence keeps each `host_processor_info` window short enough
-/// (~500 ms) that a single burst can't fill it end-to-end —
-/// which is what made the 1 Hz pure-single-window approach
-/// binarise to ~0 % or ~100 %. With `windowSize = 4` the
-/// published mean covers the last ~2 s of utilisation; the 1 Hz
-/// outer cadence is the pacing the user actually sees. Halving
-/// the inner cadence from 4 Hz to 2 Hz roughly halves the
-/// reader's CPU cost (one Mach call per tick) without changing
-/// what the eye sees, since the UI cadence and the animation
-/// duration stay the same.
-///
-/// Pulled out as a `ViewModifier` so the body composition above
-/// stays focused on layout rather than timing plumbing.
+/// Drives the per-core reader at 2 Hz internally and publishes the
+/// rolling-window average to the UI at 1 Hz. The short ~500 ms
+/// inner window stops a single burst from filling it end-to-end —
+/// what made the naive 1 Hz single-window reader binarise to ~0 %
+/// or ~100 %. `windowSize = 4` means the published mean covers the
+/// last ~2 s; the 1 Hz outer cadence is what the user sees. 2 Hz
+/// (vs 4 Hz) halves the reader's Mach-call cost with no visible
+/// difference. Pulled into a `ViewModifier` to keep the body on
+/// layout, not timing.
 private struct PerCoreSamplerModifier: ViewModifier {
     let reader: PerCoreCPUReader
     @Binding var usage: [Double]
-    /// Counts inner 500 ms ticks. Every second tick we publish
-    /// the rolling-window average to `usage`. Starting at 0 means
-    /// the first publish happens after the buffer holds 2 samples
-    /// — i.e. the user sees at least a 1-second mean rather
-    /// than a single 500 ms window's worst-case bias.
+    /// Counts inner 500 ms ticks; publishes every second tick. The
+    /// first publish lands after 2 samples, so the user sees at
+    /// least a 1 s mean rather than one 500 ms window's worst case.
     @State private var innerTickCount = 0
 
     func body(content: Content) -> some View {
         content
             .onAppear {
-                // Prime the baseline. First `sample()` returns
-                // [] (no previous snapshot yet); subsequent calls
-                // start producing real deltas. Don't publish yet
-                // — the publishing schedule below fills the
+                // Prime the baseline: first `sample()` returns []
+                // (no prior snapshot); the schedule below fills the
                 // window before the first UI tick.
                 _ = reader.sample()
             }
             .background {
                 TimelineView(.periodic(from: .now, by: 0.5)) { context in
                     Color.clear.onChange(of: context.date) { _, _ in
-                        // Inner tick: always advance the rolling
-                        // window so the average stays fresh,
-                        // even on ticks where we don't publish.
+                        // Always advance the window (keeps the mean
+                        // fresh), publish only on even ticks.
                         reader.sample()
                         innerTickCount &+= 1
                         if innerTickCount % 2 == 0 {
@@ -306,13 +285,11 @@ private struct PerCoreSamplerModifier: ViewModifier {
 
 /// Vertical bar chart for per-core utilisation, split into an
 /// E-core band (left) and a P-core band (right) on Apple silicon.
-/// On Intel Macs and on machines where sysctl doesn't expose a
-/// perf-level breakdown, `firstPCoreIndex` is 0 and the chart
-/// collapses to a single P-band — no special-case needed.
-///
-/// Drawn from `GeometryReader + HStack(Rectangle)` rather than
-/// SwiftCharts because the data is just N values in 0…1 and the
-/// chart-axis overhead of a full Chart is wasted here.
+/// On Intel / machines without a perf-level breakdown,
+/// `firstPCoreIndex` is 0 and the chart collapses to a single
+/// P-band. Hand-drawn (GeometryReader + Rectangles) rather than
+/// SwiftCharts — the data is just N values in 0…1 and a full Chart
+/// is wasted axis overhead.
 private struct PerCoreBarChart: View {
     let values: [Double]
     let tint: Color
@@ -355,18 +332,11 @@ private struct PerCoreBarChart: View {
         }
     }
 
-    /// Width-proportional placement helper — given a core count,
-    /// returns the implied band width so the header label sits
-    /// above its band. Uses a notional total of 1.0 normalised
-    /// against the header HStack's own GeometryReader-less layout
-    /// would over-complicate things, so we just hand a manual
-    /// flex weight via fixed widths; SwiftUI's HStack spacing
-    /// already aligns it visually with the band below since the
-    /// chart GeometryReader produces matching proportions.
+    /// Header-strip width for a band. Decorative only — the chart
+    /// GeometryReader below is authoritative for bar positioning,
+    /// so a flat 12pt-per-core estimate is enough to sit the label
+    /// above its band.
     private func bandWidth(for count: Int) -> CGFloat {
-        // 12pt per core is a reasonable header-strip estimate.
-        // The header is decorative; the GeometryReader below is
-        // authoritative for bar positioning.
         CGFloat(count) * 12
     }
 
@@ -401,15 +371,11 @@ private struct PerCoreBarChart: View {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(barTint(for: value, isPerformance: isPerformance).gradient)
                         .frame(height: max(2, height * CGFloat(value)))
-                        // 300 ms linear interpolation between
-                        // the 1 Hz published values. Leaves
-                        // ~700 ms of stillness between updates,
-                        // which reads as a clear beat rather
-                        // than a continuous shimmer. Linear
-                        // (not spring) avoids `CADisplayLink`
-                        // overshoot frames the user can't
-                        // distinguish from a clean step at this
-                        // duration.
+                        // 300 ms linear tween between the 1 Hz
+                        // published values, leaving ~700 ms of
+                        // stillness that reads as a beat. Linear,
+                        // not spring, to avoid overshoot frames
+                        // indistinguishable from a clean step here.
                         .animation(.linear(duration: 0.3), value: value)
                 }
                 .frame(width: barWidth)

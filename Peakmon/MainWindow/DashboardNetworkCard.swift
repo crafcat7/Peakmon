@@ -4,13 +4,11 @@
 //
 //  Network panel using the shared `DashboardMetricCard` chrome.
 //
-//  Why no per-interface / per-process drill-down: documented in
-//  an earlier draft — `getifaddrs` gives per-interface byte
-//  counters which don't translate cleanly into "what's using my
-//  bandwidth", and per-process answers require entitlements out
-//  of reach for ad-hoc signing. The card therefore surfaces the
-//  aggregate in/out rate, chips, dual sparkline, and a totals
-//  detail block.
+//  No per-interface / per-process drill-down: `getifaddrs` gives
+//  per-interface byte counters that don't map cleanly to "what's
+//  using my bandwidth", and per-process answers need entitlements
+//  out of reach for ad-hoc signing. So the card shows the aggregate
+//  in/out rate, chips, dual sparkline, and a totals detail block.
 //
 
 import PeakmonCore
@@ -86,11 +84,9 @@ struct DashboardNetworkCard: View {
 
     // MARK: - Detail
 
-    /// Throughput recap block fills the detail slot. Reuses the
-    /// same numbers from the headline but expressed as discrete
-    /// rate rows with current value + relative arrow, so the
-    /// card occupies roughly the same vertical space as its
-    /// row-mate (Disk).
+    /// Throughput recap fills the detail slot: the headline numbers
+    /// as discrete rate rows with arrows, so the card matches its
+    /// row-mate (Disk) in height.
     private var throughputDetail: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Live throughput")

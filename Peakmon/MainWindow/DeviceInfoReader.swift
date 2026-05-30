@@ -19,11 +19,11 @@
 //    • `ProcessInfo.operatingSystemVersion` + marketing-name table
 //    • `kern.boottime`                -> system boot Date (used for uptime)
 //
-//  Everything except `bootDate` is constant for the life of
-//  the process, so we read once at init and cache. `bootDate`
-//  is also constant per boot but the *uptime derived from it*
-//  changes every second, which is why the view recomputes
-//  uptime on its own timer rather than caching it here.
+//  Everything except `bootDate` is constant for the process
+//  lifetime, so we read once at init and cache. `bootDate` is
+//  constant per boot too, but the *uptime derived from it* ticks
+//  every second — hence the view recomputes uptime on its own
+//  timer rather than caching it here.
 //
 
 import Darwin
@@ -32,50 +32,41 @@ import IOKit
 
 struct DeviceInfo: Sendable {
     /// Marketing name from IORegistry — e.g. "MacBook Pro".
-    /// Falls back to the raw model id if the registry entry
-    /// is missing on a particular machine.
+    /// Falls back to the raw model id if the registry entry is absent.
     let modelName: String
 
-    /// `hw.model` raw string (e.g. "Mac15,9"). Always shown as
-    /// the secondary identifier so a user with two identical
-    /// chassis can still tell them apart.
+    /// `hw.model` raw string (e.g. "Mac15,9"). Always shown as the
+    /// secondary identifier so identical chassis stay distinguishable.
     let modelIdentifier: String
 
-    /// Marketed chip name with core count, e.g.
-    /// "Apple M3 Pro (12-core CPU)". Built from
-    /// `machdep.cpu.brand_string` + perflevel counts so we
-    /// don't depend on a hand-curated SoC table.
+    /// Marketed chip name with core count, e.g. "Apple M3 Pro
+    /// (12-core CPU)". Built from `machdep.cpu.brand_string` +
+    /// perflevel counts, avoiding a hand-curated SoC table.
     let chip: String
 
     /// Total installed RAM in bytes.
     let memoryBytes: UInt64
 
-    /// Total bytes of the startup volume (`/`). Used over the
-    /// "free" number because the banner is about identity,
-    /// not capacity-planning — the Disk card already shows
-    /// free space.
+    /// Total bytes of the startup volume (`/`). Capacity, not free
+    /// space — the banner is about identity; the Disk card shows free.
     let diskBytes: UInt64
 
-    /// e.g. "macOS Sequoia 15.4". Marketing name is best-effort;
-    /// when unknown we fall back to "macOS X.Y".
+    /// e.g. "macOS Sequoia 15.4". Marketing name is best-effort,
+    /// falling back to "macOS X.Y" when unknown.
     let osVersion: String
 
-    /// System boot time. The banner subtracts `now` from this
-    /// every minute to render uptime.
+    /// System boot time; the banner subtracts `now` to render uptime.
     let bootDate: Date
 
-    /// Hardware serial number. May be empty if the IORegistry
-    /// is locked down (rare). The view applies its own mask
-    /// before displaying.
+    /// Hardware serial number, possibly empty if the IORegistry is
+    /// locked down (rare). The view applies its own mask.
     let serialNumber: String
 }
 
 enum DeviceInfoReader {
-    /// Gather the full set in one call. Cheap enough (a few
-    /// sysctls + one IORegistry lookup) to run synchronously
-    /// on the main actor at view init, but we still expose it
-    /// as `nonisolated` so callers may also push it onto a
-    /// background task if they prefer.
+    /// Gather the full set in one call. Cheap enough (a few sysctls
+    /// + one IORegistry lookup) to run synchronously at view init,
+    /// but `nonisolated` so callers may push it to a background task.
     nonisolated static func read() -> DeviceInfo {
         let modelId = sysctlString("hw.model") ?? "Mac"
         let chipBrand = sysctlString("machdep.cpu.brand_string") ?? "Apple silicon"
@@ -97,9 +88,8 @@ enum DeviceInfoReader {
         let modelName = productName ?? friendlyName(forModelId: modelId)
 
         let disk: UInt64 = {
-            // `attributesOfFileSystem(forPath:)` returns the same
-            // raw block-device size that `df` reports — the
-            // sticker-capacity number the user expects to see.
+            // Returns the same raw block-device size `df` reports —
+            // the sticker-capacity number the user expects.
             let attrs = try? FileManager.default.attributesOfFileSystem(forPath: "/")
             return (attrs?[.systemSize] as? NSNumber)?.uint64Value ?? 0
         }()
@@ -118,8 +108,8 @@ enum DeviceInfoReader {
 
     // MARK: - sysctl helpers
 
-    /// String-valued sysctl. Sized via a two-call probe so we
-    /// don't have to hard-code a max length per key.
+    /// String-valued sysctl, sized via a two-call probe so no max
+    /// length is hard-coded per key.
     private static func sysctlString(_ name: String) -> String? {
         var size = 0
         guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
@@ -156,10 +146,9 @@ enum DeviceInfoReader {
 
     // MARK: - IORegistry
 
-    /// Pulls `product-name` and `IOPlatformSerialNumber` out
-    /// of the `IOPlatformExpertDevice` root entry in one open.
-    /// Returns (`nil`, "") if the registry lookup fails for
-    /// any reason — both call sites tolerate missing values.
+    /// Pulls `product-name` and `IOPlatformSerialNumber` from the
+    /// `IOPlatformExpertDevice` root entry in one open. Returns
+    /// (`nil`, "") on any failure — both call sites tolerate it.
     private static func ioPlatformExpertInfo() -> (productName: String?, serial: String) {
         let service = IOServiceGetMatchingService(
             kIOMainPortDefault,
@@ -196,10 +185,9 @@ enum DeviceInfoReader {
 
     // MARK: - Friendly fallbacks
 
-    /// Coarse hand fallback when IORegistry doesn't expose a
-    /// product-name (older Macs, rare). We only need to bucket
-    /// to one of the four current product lines; the exact
-    /// generation comes from the chip line below it.
+    /// Coarse fallback when IORegistry lacks a product-name (older
+    /// Macs, rare). Only needs to bucket to a product line; the
+    /// generation comes from the chip line.
     private static func friendlyName(forModelId id: String) -> String {
         if id.hasPrefix("MacBookPro") { return "MacBook Pro" }
         if id.hasPrefix("MacBookAir") { return "MacBook Air" }
@@ -210,10 +198,8 @@ enum DeviceInfoReader {
         return "Mac"
     }
 
-    /// macOS marketing name + version, e.g.
-    /// "macOS Sequoia 15.4 (24E5083)". We keep the build
-    /// number off the banner because it makes the chip too
-    /// long; users who care can read it in About This Mac.
+    /// macOS marketing name + version, e.g. "macOS Sequoia 15.4".
+    /// Build number is omitted to keep the banner short.
     private static func osMarketingName() -> String {
         let v = ProcessInfo.processInfo.operatingSystemVersion
         let marketing: String

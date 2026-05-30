@@ -4,13 +4,11 @@
 //
 //  Disk panel using the shared `DashboardMetricCard` chrome.
 //
-//  Why no per-volume / per-process drill-down: documented at
-//  length in an earlier version of this file — `IOBlockStorage-
-//  Driver` aggregates at the device, not the filesystem, level,
-//  and per-process I/O requires entitlements that ad-hoc signing
-//  cannot grant. So the card surfaces the aggregate R/W rate, a
-//  root-volume capacity bar, and per-rate chips — every fact the
-//  metrics tier exposes, presented honestly.
+//  No per-volume / per-process drill-down: `IOBlockStorageDriver`
+//  aggregates at the device, not the filesystem, level, and
+//  per-process I/O needs entitlements ad-hoc signing can't grant.
+//  So the card shows the aggregate R/W rate, a root-volume capacity
+//  bar, and per-rate chips — every fact the metrics tier exposes.
 //
 
 import PeakmonCore
@@ -88,11 +86,9 @@ struct DashboardDiskCard: View {
 
     // MARK: - Detail (capacity)
 
-    /// Capacity block fills the detail slot so the card reaches
-    /// the same height as the CPU / Memory cards next to it.
-    /// Reads the boot volume from the same metrics already
-    /// surfaced as `.diskUsed` / `.diskTotal` — the one volume
-    /// the user almost always means when they say "disk".
+    /// Capacity block fills the detail slot so the card matches the
+    /// CPU / Memory cards' height. Reads the boot volume via
+    /// `.diskUsed` / `.diskTotal` — the volume users mean by "disk".
     private var capacityDetail: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {

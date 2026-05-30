@@ -2,35 +2,25 @@
 //  ProcessDetailReader.swift
 //  Peakmon
 //
-//  On-demand reader that builds a `ProcessDetail` for a single
-//  PID using only public, entitlement-free Darwin APIs:
+//  On-demand reader that builds a `ProcessDetail` for one PID using
+//  only public, entitlement-free Darwin APIs:
 //
-//    • `proc_pidpath`            — absolute executable path.
-//    • `proc_pidinfo` /
-//      `PROC_PIDTBSDINFO`        — ppid + start time + status.
-//    • `proc_pidinfo` /
-//      `PROC_PIDLISTTHREADS`     — thread IDs owned by the pid.
-//    • `proc_pidinfo` /
-//      `PROC_PIDTHREADINFO`      — per-thread cpu_user_time,
-//                                  cpu_system_time, run_state,
-//                                  thread name, priority.
-//    • `KERN_PROCARGS2` sysctl   — argv[] / environment for
-//                                  same-user processes.
+//    • `proc_pidpath`                       — executable path.
+//    • `proc_pidinfo` / `PROC_PIDTBSDINFO`  — ppid + start time.
+//    • `proc_pidinfo` / `PROC_PIDLISTTHREADS`
+//      + `PROC_PIDTHREADINFO`               — per-thread cpu time,
+//                                             run state, name, prio.
+//    • `KERN_PROCARGS2` sysctl              — argv for same-user pids.
 //
-//  None of these require `task_for_pid` (which needs the
-//  `com.apple.security.cs.debugger` entitlement and typically
-//  fails for ad-hoc-signed binaries against other processes),
-//  and none trigger a TCC prompt. Cross-user processes (root
-//  daemons) may return KERN_FAILURE on procargs / proc_pidpath
-//  — in those cases the corresponding fields are left empty
-//  rather than treated as an error, so the sheet still renders
-//  with whatever subset of info we could collect.
+//  None need `task_for_pid` (which needs the cs.debugger entitlement
+//  and usually fails for ad-hoc binaries against other processes)
+//  and none trigger TCC. Cross-user processes may deny procargs /
+//  proc_pidpath; those fields are left empty rather than treated as
+//  errors, so the sheet renders with whatever subset we collected.
 //
-//  Calling convention is one-shot, synchronous, off the main
-//  thread is recommended for high-thread-count processes (a
-//  WindowServer or a Chrome helper can have 60+ threads), but
-//  in practice the whole call completes in <5ms so the sheet
-//  body invokes it inline.
+//  One-shot and synchronous; the sheet calls it off the main thread
+//  (high-thread-count procs like WindowServer / Chrome helpers),
+//  though it completes in <5 ms in practice.
 //
 
 import Darwin
@@ -74,15 +64,12 @@ struct ProcessDetail: Identifiable, Hashable {
 }
 
 enum ProcessDetailReader {
-    /// Synchronously collect everything we can about `pid`.
-    /// Always returns a value — missing fields stay empty —
-    /// because the caller has nothing actionable to do with an
-    /// error other than display "n/a", which is exactly what
-    /// the empty fields render as in the sheet.
+    /// Synchronously collect everything readable about `pid`.
+    /// Always returns a value (missing fields stay empty) since the
+    /// caller only renders "n/a" on failure anyway.
     ///
-    /// Marked `nonisolated` so the sheet can call it from a
-    /// detached background task without bouncing back to the
-    /// main actor; nothing here touches shared mutable state.
+    /// `nonisolated` so the sheet can call it from a detached task;
+    /// nothing here touches shared mutable state.
     nonisolated static func read(pid: Int32) -> ProcessDetail {
         ProcessDetail(
             id: pid,
@@ -101,11 +88,9 @@ enum ProcessDetailReader {
     /// owned by another user or has exited between snapshot and
     /// sheet open.
     private static func readPath(pid: Int32) -> String {
-        // `PROC_PIDPATHINFO_MAXSIZE` (= `MAXPATHLEN * 4`, 4096) is
-        // not exposed to Swift through the libproc bridge, so we
-        // hard-code the same value rather than reaching for the
-        // C constant. Apple's headers have not changed this value
-        // in over a decade.
+        // `PROC_PIDPATHINFO_MAXSIZE` (MAXPATHLEN * 4 = 4096) isn't
+        // bridged to Swift, so hard-code it — Apple hasn't changed
+        // the value in over a decade.
         var buf = [CChar](repeating: 0, count: 4096)
         let n = proc_pidpath(pid, &buf, UInt32(buf.count))
         guard n > 0 else { return "" }
@@ -114,11 +99,8 @@ enum ProcessDetailReader {
 
     // MARK: - proc_pidinfo PROC_PIDTBSDINFO (ppid + start)
 
-    /// Reads `proc_bsdinfo` for ppid + start time. `pbi_start_tvsec`
-    /// is seconds since UNIX epoch; `pbi_start_tvusec` is the
-    /// microsecond remainder. We surface the parent pid even
-    /// when path/args are denied, so the sheet still shows
-    /// useful lineage info for cross-user processes.
+    /// Reads `proc_bsdinfo` for ppid. Surfaced even when path/args
+    /// are denied so the sheet shows lineage for cross-user procs.
     private static func readPPID(pid: Int32) -> Int32 {
         var info = proc_bsdinfo()
         let size = MemoryLayout<proc_bsdinfo>.size
@@ -175,15 +157,11 @@ enum ProcessDetailReader {
         let argc = buf.withMemoryRebound(to: Int32.self, capacity: 1) { $0.pointee }
         guard argc > 0 else { return [] }
 
-        // Skip past argc + exec_path (the exec path is a
-        // null-terminated string immediately following argc;
-        // some kernels pad it with additional NULs for
-        // alignment, so we advance until we see a non-NUL byte
-        // which marks the start of argv[0]).
+        // Skip argc + exec_path: the exec path is a null-terminated
+        // string after argc, sometimes followed by NUL alignment
+        // padding, so advance past both to reach argv[0].
         var cursor = MemoryLayout<Int32>.size
-        // Walk past the exec_path string.
         while cursor < bufSize, buf[cursor] != 0 { cursor += 1 }
-        // Walk past trailing NUL padding.
         while cursor < bufSize, buf[cursor] == 0 { cursor += 1 }
 
         var args: [String] = []
@@ -193,10 +171,8 @@ enum ProcessDetailReader {
             guard cursor < bufSize else { break }
             let start = cursor
             while cursor < bufSize, buf[cursor] != 0 { cursor += 1 }
-            // `String(cString:)` requires a NUL terminator, which
-            // we know exists at `cursor` because the loop above
-            // either reached it or hit `bufSize` (in which case
-            // we won't enter this branch on the next iteration).
+            // NUL terminator guaranteed at `cursor` (the loop hit it
+            // or `bufSize`, and we skip the latter case).
             if cursor < bufSize {
                 let s = String(cString: buf.advanced(by: start))
                 args.append(s)
@@ -211,15 +187,11 @@ enum ProcessDetailReader {
 
     // MARK: - proc_pidinfo PROC_PIDLISTTHREADS + PROC_PIDTHREADINFO
 
-    /// Returns up to ~512 threads' info. We allocate the list
-    /// buffer twice the kernel's first reported size — that's
-    /// the conventional pattern for `proc_pidinfo` list APIs,
-    /// where the size returned by the first call can underestimate
-    /// the upper bound if threads spawn between calls.
-    ///
-    /// CPU times come from `proc_threadinfo.pth_user_time` /
-    /// `pth_system_time`, which are nanoseconds. We convert to
-    /// milliseconds for display.
+    /// Returns the pid's threads. The ID-list buffer is allocated
+    /// at twice the kernel's first reported size — the usual pattern
+    /// for `proc_pidinfo` list APIs, where threads may spawn between
+    /// calls. CPU times (`pth_user_time` / `pth_system_time`) are
+    /// nanoseconds, converted to ms for display.
     private static func readThreads(pid: Int32) -> [ThreadInfo] {
         // 1. Size the thread ID list.
         let firstSize = proc_pidinfo(pid, PROC_PIDLISTTHREADS, 0, nil, 0)
@@ -247,10 +219,9 @@ enum ProcessDetailReader {
             let got = proc_pidinfo(pid, PROC_PIDTHREADINFO, tid, &ti, Int32(sz))
             guard got == Int32(sz) else { continue }
 
-            // `pth_name` is a fixed-size CChar tuple; bridging
-            // through `withUnsafeBytes` lets us treat it as a
-            // null-terminated C string without spelling out the
-            // tuple shape (it's 64 bytes / `MAXTHREADNAMESIZE`).
+            // `pth_name` is a fixed CChar tuple (64 bytes /
+            // MAXTHREADNAMESIZE); rebind through a pointer to read
+            // it as a C string without spelling out the tuple.
             let name: String = withUnsafePointer(to: ti.pth_name) {
                 $0.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: ti.pth_name)) {
                     String(cString: $0)
@@ -267,9 +238,8 @@ enum ProcessDetailReader {
             ))
         }
 
-        // Hottest threads first — same convention as the
-        // process panel, gives the eye an immediate sense of
-        // where the work is going inside the app.
+        // Hottest threads first — same convention as the process
+        // panel.
         return out.sorted { $0.cpuTotalMs > $1.cpuTotalMs }
     }
 }

@@ -74,7 +74,7 @@ struct GeneralPage: View {
 
     var body: some View {
         SettingsPage(.general) {
-            SettingsSection("Sampling", footer: "Lower intervals refresh data faster but use more CPU.") {
+            SettingsSection("Sampling") {
                 HStack {
                     Text("Refresh every")
                     Spacer()
@@ -94,9 +94,11 @@ struct GeneralPage: View {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Launch Peakmon at login")
-                            Text(loginFootnote)
-                                .font(.caption)
-                                .foregroundStyle(loginController.requiresApproval ? .orange : .secondary)
+                            if let loginFootnote {
+                                Text(loginFootnote)
+                                    .font(.caption)
+                                    .foregroundStyle(loginController.requiresApproval ? .orange : .secondary)
+                            }
                         }
                         Spacer()
                         if loginController.requiresApproval {
@@ -126,9 +128,6 @@ struct GeneralPage: View {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Silent launch")
-                            Text("Skip opening the main window when Peakmon starts.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Toggle("", isOn: $silentLaunch)
@@ -211,14 +210,16 @@ struct GeneralPage: View {
         .onAppear { loginController.refresh() }
     }
 
-    /// Human-readable hint underneath the toggle. Surfaces the
+    /// Hint underneath the toggle. Only surfaces the
     /// `requiresApproval` case from `SMAppService` so users know
-    /// they need to act in System Settings → Login Items.
-    private var loginFootnote: String {
+    /// they need to act in System Settings → Login Items; the
+    /// normal "what this toggle does" footnote is omitted since
+    /// the toggle label is self-explanatory.
+    private var loginFootnote: String? {
         if loginController.requiresApproval {
             "Approval required in System Settings → Login Items."
         } else {
-            "Start automatically after you sign in."
+            nil
         }
     }
 }
@@ -250,7 +251,6 @@ struct DisplayPage: View {
             // fundamentally a *display* concern, not a runtime one.
             SettingsSection(
                 "Menu Bar",
-                footer: "Drag to reorder visible items. Tap to add or remove.",
             ) {
                 VStack(alignment: .leading, spacing: 20) {
                     MenuBarLivePreview(segments: selectedSegments, store: store)
@@ -258,7 +258,7 @@ struct DisplayPage: View {
                     MenuBarSegmentList(
                         title: "Visible",
                         items: selectedSegments,
-                        emptyHint: "No items selected — pick from below.",
+                        emptyHint: nil,
                         reorderable: true,
                         onToggle: toggle,
                         onMove: moveBefore,
@@ -280,7 +280,6 @@ struct DisplayPage: View {
             // rationale.
             SettingsSection(
                 "Card Layout",
-                footer: "Drag a tile onto another tile to insert it there. Hidden cards stay visible here so you can pre-arrange them.",
             ) {
                 DisplayCardPreview(
                     order: cardSettings.orderBinding(),

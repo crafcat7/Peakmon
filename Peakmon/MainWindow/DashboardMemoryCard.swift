@@ -2,28 +2,21 @@
 //  DashboardMemoryCard.swift
 //  Peakmon
 //
-//  Memory panel for the unified dashboard. Mirrors the structure
-//  of `DashboardCPUCard`:
+//  Memory panel for the unified dashboard, mirroring
+//  `DashboardCPUCard`:
 //
-//    Collapsed — large used-bytes headline, pressure ratio bar
-//                + accessory percent, wired / compressed / swap
-//                chips, trend sparkline driven by pressure
-//                history.
-//    Expanded  — top-N processes by RSS (the same data the popover
-//                ProcessesCard uses, re-sorted by `memoryBytes`),
-//                plus a bytes-breakdown row that always sums to
-//                the system total so the user can sanity-check
-//                where their RAM actually went.
-//    Footer    — kernel pressure label (Normal / Warning / Urgent
-//                / Critical) — the most decision-actionable single
-//                fact about memory pressure on macOS.
+//    Headline — used-bytes number, pressure ratio bar + percent,
+//               wired / compressed / swap chips, pressure-history
+//               sparkline.
+//    Detail   — bytes breakdown (wired + compressed + swap + other)
+//               that always sums to the headline `used`.
+//    Footer   — kernel pressure label (Normal / Warning / Urgent /
+//               Critical) + swap.
 //
-//  Why pressure rather than utilisation for the percent: macOS
-//  reports near-100% RAM "used" in steady-state because the
-//  unified memory architecture aggressively caches; pressure is
-//  the number that actually tells the user whether to be
-//  worried, and it's the same metric Activity Monitor's bar in
-//  the bottom strip uses.
+//  Percent tracks pressure, not utilisation: unified memory caches
+//  aggressively so "used" sits near 100 % in steady state, whereas
+//  pressure is what tells the user to worry — the same metric
+//  Activity Monitor's bottom-strip bar uses.
 //
 
 import PeakmonCore
@@ -108,12 +101,10 @@ struct DashboardMemoryCard: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Composition bar. Wired sits on the left because the
-            // kernel cannot reclaim it, then compressed, then swap.
-            // The remainder slot represents "everything else in
-            // 'used'" so the bar visually accounts for the full
-            // headline number rather than leaving an unexplained
-            // gap.
+            // Composition bar: wired first (kernel can't reclaim
+            // it), then compressed, then swap, then a remainder slot
+            // for the rest of "used" so the bar accounts for the
+            // full headline number.
             compositionBar
                 .frame(height: 6)
                 .padding(.top, 4)
@@ -128,10 +119,9 @@ struct DashboardMemoryCard: View {
         }
     }
 
-    /// Stacked bar across the three named regions. Widths are
-    /// expressed as fractions of `used` rather than total RAM —
-    /// the user already saw the absolute number above, this bar
-    /// answers "what is the composition of the used bytes".
+    /// Stacked bar across the three named regions, as fractions of
+    /// `used` (the absolute total is already in the headline) — it
+    /// answers "what is the used memory made of".
     private var compositionBar: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
@@ -163,10 +153,9 @@ struct DashboardMemoryCard: View {
     }
 
     private var trendChart: some View {
-        // Pressure history rather than memoryUsed: a flat 95%
-        // utilisation line says nothing, whereas a pressure trend
-        // tells the user whether their workload is approaching
-        // swap territory.
+        // Pressure history, not memoryUsed: a flat ~95 % used line
+        // says nothing, while a pressure trend shows whether the
+        // workload is approaching swap.
         MetricSparklineView(
             samples: store.history(for: .memoryPressure),
             style: SparklineStyle(
@@ -179,10 +168,9 @@ struct DashboardMemoryCard: View {
         )
     }
 
-    /// Sparkline colour follows the pressure band so an escalating
-    /// trace switches green → yellow → red in lockstep with the
-    /// accessory percent. Stays on the user's memory tint during
-    /// normal pressure so quiet cards look quiet.
+    /// Sparkline colour follows the pressure band (green → yellow →
+    /// red) in lockstep with the accessory percent; stays on the
+    /// memory tint at normal pressure so quiet cards look quiet.
     private var pressureTrendColor: Color {
         switch pressureLevel {
         case 2: .yellow
@@ -193,26 +181,25 @@ struct DashboardMemoryCard: View {
 
     // MARK: - Detail
 
-    /// Always-true breakdown row: wired + compressed + swap +
-    /// "other" sums to the headline `used` value. Sized larger
-    /// than the chip row above so the drill-down adds genuine
-    /// information rather than re-printing the same numbers.
+    /// Breakdown row: wired + compressed + swap + "other" sums to
+    /// the headline `used`. Larger than the chip row so the detail
+    /// adds information rather than re-printing the same numbers.
     private var byteBreakdown: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Composition")
                 .font(.subheadline.weight(.semibold))
 
             VStack(spacing: 6) {
-                breakdownRow(label: "Wired", value: wired, color: .indigo, hint: "Cannot be paged out")
-                breakdownRow(label: "Compressed", value: compressed, color: .purple, hint: "Squeezed by the VM")
-                breakdownRow(label: "Swap on disk", value: swap, color: .orange, hint: swap > 0 ? "Paged to disk" : "None")
+                breakdownRow(label: "Wired", value: wired, color: .indigo)
+                breakdownRow(label: "Compressed", value: compressed, color: .purple)
+                breakdownRow(label: "Swap on disk", value: swap, color: .orange)
                 let other = max(0, used - wired - compressed - swap)
-                breakdownRow(label: "App + cache", value: other, color: tint, hint: "Active app pages and file cache")
+                breakdownRow(label: "App + cache", value: other, color: tint)
             }
         }
     }
 
-    private func breakdownRow(label: String, value: Double, color: Color, hint: String) -> some View {
+    private func breakdownRow(label: String, value: Double, color: Color) -> some View {
         HStack(spacing: 10) {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(label)
@@ -220,12 +207,7 @@ struct DashboardMemoryCard: View {
                 .frame(width: 110, alignment: .leading)
             Text(formatBytesShort(value))
                 .font(.caption.monospacedDigit())
-                .frame(width: 80, alignment: .trailing)
-            Text(hint)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
@@ -270,10 +252,8 @@ struct DashboardMemoryCard: View {
 
     // MARK: - Formatters
 
-    /// Headline format prefers a single-decimal GB number when
-    /// the value is large enough to read as a unit; below 1 GB
-    /// the dashboard falls back to MB integers. Matches Activity
-    /// Monitor's display logic.
+    /// Single-decimal GB above 1 GB, MB integers below. Matches
+    /// Activity Monitor's display logic.
     private func formatBytesHeadline(_ bytes: Double) -> String {
         let gb = bytes / 1_073_741_824
         if gb >= 1 { return String(format: "%.1f GB", gb) }

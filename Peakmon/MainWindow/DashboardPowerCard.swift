@@ -2,20 +2,15 @@
 //  DashboardPowerCard.swift
 //  Peakmon
 //
-//  Power + battery panel for the unified dashboard. Battery is
-//  intentionally folded into Power rather than getting its own
-//  card — on a desktop Mac there's no battery, and on a laptop
-//  the user almost always wants to see "what's drawing watts"
-//  and "how long do I have" in the same glance.
+//  Power + battery panel for the unified dashboard. Battery folds
+//  into Power rather than getting its own card: desktops have none,
+//  and on a laptop the user wants watts and battery in one glance.
 //
-//    Collapsed — total package watts headline + CPU/GPU/DRAM/
-//                Display breakdown chips + dual sparkline (CPU
-//                blue, GPU indigo).
-//    Expanded  — stacked package decomposition (CPU + GPU + DRAM
-//                + Display = system watts) with each rail as a
-//                horizontal bar and absolute watts label.
-//                Battery sub-block when present: level, cycle
-//                count, health %, time remaining, source.
+//    Collapsed — total package watts + CPU/GPU/DRAM/Display chips +
+//                dual sparkline (CPU / GPU).
+//    Expanded  — per-rail decomposition (CPU + GPU + DRAM + Display)
+//                as horizontal bars; battery sub-block when present
+//                (source, health, cycles).
 //    Footer    — total system watts + battery status chip.
 //
 
@@ -33,26 +28,21 @@ struct DashboardPowerCard: View {
     private var powerGPU: Double { store.value(for: .powerGPU) }
     private var powerDRAM: Double { store.value(for: .powerDRAM) }
     private var powerDisplay: Double { store.value(for: .powerDisplay) }
-    /// Prefer the kernel-reported system watts when available
-    /// (it includes losses); fall back to package watts (CPU
-    /// die-level) otherwise. Same fallback the popover PowerCard
-    /// uses, so the two views agree on the headline number.
+    /// Prefer kernel-reported system watts (includes losses); fall
+    /// back to package watts. Same fallback as the popover PowerCard
+    /// so the two views agree on the headline.
     private var totalWatts: Double {
         let system = store.latest(for: .powerSystem)?.value ?? 0
         return system > 0 ? system : store.value(for: .powerPackage)
     }
 
-    // Battery data is optional — Mac desktops surface no battery
-    // at all and IOPMU returns nil. We treat any missing field as
-    // "no battery" and collapse the entire battery sub-block.
+    // Battery is optional — desktops surface none and IOPMU returns
+    // nil. Any missing field collapses the whole battery sub-block.
     private var batteryLevel: Double? { store.latest(for: .batteryLevel)?.value }
     private var batteryCycleCount: Int? {
         store.latest(for: .batteryCycleCount).map { Int($0.value) }
     }
     private var batteryHealth: Double? { store.latest(for: .batteryHealth)?.value }
-    private var batteryTimeRemaining: Double? {
-        store.latest(for: .batteryTimeRemaining)?.value
-    }
     /// 0 = battery, 1 = AC. Stored as a numeric metric to fit the
     /// metrics-store value model.
     private var isOnBattery: Bool? {
@@ -110,9 +100,9 @@ struct DashboardPowerCard: View {
         }
     }
 
-    /// CPU + GPU + DRAM + Display = (roughly) package watts.
-    /// Slots that read zero contribute nothing to the bar so a
-    /// desktop with no Display rail doesn't show an empty wedge.
+    /// CPU + GPU + DRAM + Display ≈ package watts. Zero rails
+    /// contribute nothing so a desktop's missing Display rail shows
+    /// no empty wedge.
     private var decompositionBar: some View {
         GeometryReader { proxy in
             let total = max(0.001, powerCPU + powerGPU + powerDRAM + powerDisplay)
@@ -138,10 +128,9 @@ struct DashboardPowerCard: View {
     }
 
     private var trendChart: some View {
-        // CPU + GPU power overlay — the two rails the user can
-        // actually do something about. DRAM and Display tend to
-        // be small constants, so they live in the chip row, not
-        // the spark.
+        // CPU + GPU only — the rails the user can act on. DRAM and
+        // Display are small near-constants, so they stay in the chip
+        // row, not the spark.
         MetricSparklineView(series: [
             SparklineSeries(
                 id: "power.cpu",
@@ -182,9 +171,9 @@ struct DashboardPowerCard: View {
     }
 
     private func railRow(label: String, watts: Double, color: Color) -> some View {
-        // Bar scales against the largest rail rather than total
-        // system watts so a 0.4 W DRAM line is still visible
-        // next to a 25 W CPU spike.
+        // Bar scales against the largest rail, not total system
+        // watts, so a 0.4 W DRAM line stays visible next to a 25 W
+        // CPU spike.
         let maxRail = max(0.5, [powerCPU, powerGPU, powerDRAM, powerDisplay].max() ?? 0.5)
         return HStack(spacing: 10) {
             Text(label)
@@ -210,22 +199,23 @@ struct DashboardPowerCard: View {
             Text("Battery")
                 .font(.subheadline.weight(.semibold))
 
-            // Two-by-two stat grid — the four facts that
-            // collectively answer "how is the battery doing":
-            //   - level (right now)
-            //   - source (right now)
-            //   - health (lifetime)
-            //   - cycles + time remaining (forward-looking)
+            // Source / Health / Cycles — the state and lifetime
+            // facts not shown elsewhere on the card. `Level` is
+            // omitted (already in the footer's Battery stat).
+            //
+            // IOKit's `TimeRemaining` / `TimeToFullCharge` are also
+            // omitted: the field is unreliable across device classes
+            // (desktops report nothing; freshly unplugged or
+            // throttled batteries report `0xFFFF` for minutes) and
+            // "Remaining" means different things depending on
+            // `IsCharging`. Users who want the estimate have it in
+            // the menu-bar icon and System Settings.
             HStack(spacing: 24) {
-                statBlock(title: "Level", value: batteryLevel.map { String(format: "%.0f%%", $0) } ?? "—",
-                          tint: batteryLevelTint)
                 statBlock(title: "Source", value: sourceLabel,
                           tint: isOnBattery == true ? .yellow : .green)
                 statBlock(title: "Health", value: batteryHealth.map { String(format: "%.0f%%", $0) } ?? "—",
                           tint: healthTint)
                 statBlock(title: "Cycles", value: batteryCycleCount.map { String($0) } ?? "—",
-                          tint: .secondary)
-                statBlock(title: "Remaining", value: timeRemainingLabel,
                           tint: .secondary)
             }
         }
@@ -262,18 +252,6 @@ struct DashboardPowerCard: View {
         case false?: "AC"
         case nil: "—"
         }
-    }
-
-    /// `batteryTimeRemaining` is in minutes per the collector
-    /// contract. A reported zero or negative value means "still
-    /// calibrating" — we surface that as a friendly placeholder
-    /// rather than printing 0:00 which reads as alarming.
-    private var timeRemainingLabel: String {
-        guard let minutes = batteryTimeRemaining, minutes > 0 else { return "Calibrating" }
-        let h = Int(minutes) / 60
-        let m = Int(minutes) % 60
-        if h > 0 { return String(format: "%dh %02dm", h, m) }
-        return String(format: "%dm", m)
     }
 
     // MARK: - Footer

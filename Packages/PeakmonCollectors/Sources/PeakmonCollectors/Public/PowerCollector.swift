@@ -97,6 +97,9 @@ public final class PowerCollector: MetricCollector {
             return [
                 MetricSample(kind: .powerCPU, unit: .watts, value: watts(agg.cpuMJ), timestamp: now),
                 MetricSample(kind: .powerGPU, unit: .watts, value: watts(agg.gpuMJ), timestamp: now),
+                MetricSample(kind: .powerGPUCore, unit: .watts, value: watts(agg.gpuCoreMJ), timestamp: now),
+                MetricSample(kind: .powerGPUCommandStreamer, unit: .watts, value: watts(agg.gpuCommandStreamerMJ), timestamp: now),
+                MetricSample(kind: .powerGPUSRAM, unit: .watts, value: watts(agg.gpuSRAMMJ), timestamp: now),
                 MetricSample(kind: .powerDRAM, unit: .watts, value: watts(agg.dramMJ), timestamp: now),
                 MetricSample(
                     kind: .powerDisplay,
@@ -117,6 +120,9 @@ public final class PowerCollector: MetricCollector {
         private struct Aggregation {
             var cpuMJ: Int64 = 0
             var gpuMJ: Int64 = 0
+            var gpuCoreMJ: Int64 = 0
+            var gpuCommandStreamerMJ: Int64 = 0
+            var gpuSRAMMJ: Int64 = 0
             var dramMJ: Int64 = 0
             var displayMJ: Int64 = 0
         }
@@ -147,11 +153,14 @@ public final class PowerCollector: MetricCollector {
                         && !(name.hasPrefix("PACC") && name.hasSuffix("_CPU"))
                     {
                         cpuLeafMJ += reading.value
-                    } else if base == "GPU"
-                        || base == "GPU CS"
-                        || base == "GPU SRAM"
-                        || base == "GPU CS SRAM"
-                    {
+                    } else if base == "GPU" {
+                        agg.gpuCoreMJ += reading.value
+                        agg.gpuMJ += reading.value
+                    } else if base == "GPU CS" {
+                        agg.gpuCommandStreamerMJ += reading.value
+                        agg.gpuMJ += reading.value
+                    } else if base == "GPU SRAM" || base == "GPU CS SRAM" {
+                        agg.gpuSRAMMJ += reading.value
                         agg.gpuMJ += reading.value
                     } else if base == "DCS" || base == "DRAM" || base == "AMCC" {
                         agg.dramMJ += reading.value

@@ -47,7 +47,7 @@ struct DashboardNetworkCard: View {
     private var summary: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(formatRateHeadline(max(netIn, netOut)))
+                Text(DashboardFormatting.rateHeadline(max(netIn, netOut)))
                     .font(.system(size: 32, weight: .semibold, design: .rounded).monospacedDigit())
                     .contentTransition(.numericText(value: max(netIn, netOut)))
                     .animation(.smooth, value: max(netIn, netOut))
@@ -61,8 +61,8 @@ struct DashboardNetworkCard: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 14) {
-                metricChip(label: "in", value: netIn, color: .green, arrow: "arrow.down")
-                metricChip(label: "out", value: netOut, color: .blue, arrow: "arrow.up")
+                MetricChipView(label: "in", value: DashboardFormatting.rateShort(netIn), color: .green, arrow: "arrow.down")
+                MetricChipView(label: "out", value: DashboardFormatting.rateShort(netOut), color: .pink, arrow: "arrow.up")
             }
         }
     }
@@ -77,7 +77,7 @@ struct DashboardNetworkCard: View {
             SparklineSeries(
                 id: "net.out",
                 samples: store.history(for: .netOutRate),
-                color: .blue,
+                color: .pink,
             ),
         ])
     }
@@ -94,7 +94,7 @@ struct DashboardNetworkCard: View {
 
             VStack(spacing: 6) {
                 throughputRow(label: "Inbound", value: netIn, color: .green, arrow: "arrow.down")
-                throughputRow(label: "Outbound", value: netOut, color: .blue, arrow: "arrow.up")
+                throughputRow(label: "Outbound", value: netOut, color: .pink, arrow: "arrow.up")
             }
         }
     }
@@ -108,23 +108,10 @@ struct DashboardNetworkCard: View {
             Text(label)
                 .font(.caption.weight(.medium))
                 .frame(width: 80, alignment: .leading)
-            Text(formatRateShort(value))
+            Text(DashboardFormatting.rateShort(value))
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(value > 1024 ? .primary : .secondary)
             Spacer()
-        }
-    }
-
-    private func metricChip(label: String, value: Double, color: Color, arrow: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: arrow)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(color)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(formatRateShort(value))
-                .font(.caption.monospacedDigit().weight(.medium))
         }
     }
 
@@ -133,7 +120,7 @@ struct DashboardNetworkCard: View {
     private var rateFooter: some View {
         HStack(spacing: 24) {
             footerSlot(title: "In", value: netIn, arrow: "arrow.down", color: .green)
-            footerSlot(title: "Out", value: netOut, arrow: "arrow.up", color: .blue)
+            footerSlot(title: "Out", value: netOut, arrow: "arrow.up", color: .pink)
             Spacer()
         }
     }
@@ -147,26 +134,10 @@ struct DashboardNetworkCard: View {
                 Image(systemName: arrow)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(color)
-                Text(formatRateShort(value))
+                Text(DashboardFormatting.rateShort(value))
                     .font(.callout.monospacedDigit().weight(.medium))
             }
         }
     }
 
-    // MARK: - Formatters
-
-    private func formatRateHeadline(_ bps: Double) -> String {
-        let mbps = bps / 1_048_576
-        if mbps >= 100 { return String(format: "%.0f MB/s", mbps) }
-        if mbps >= 1 { return String(format: "%.1f MB/s", mbps) }
-        let kbps = bps / 1024
-        return String(format: "%.0f KB/s", kbps)
-    }
-
-    private func formatRateShort(_ bps: Double) -> String {
-        let mbps = bps / 1_048_576
-        if mbps >= 1 { return String(format: "%.1f MB/s", mbps) }
-        let kbps = bps / 1024
-        return String(format: "%.0f KB/s", kbps)
-    }
 }

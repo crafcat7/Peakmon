@@ -10,7 +10,6 @@
 //  pure shell.
 //
 
-import PeakmonCollectors
 import PeakmonCore
 import PeakmonUI
 import SwiftUI
@@ -61,7 +60,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
-            ForEach(Array(DashboardLayout.rows(from: visibleCards).enumerated()), id: \.offset) { _, row in
+            ForEach(DashboardLayout.rows(from: visibleCards), id: \.rowID) { row in
                 rowView(row)
             }
 
@@ -85,7 +84,6 @@ struct DashboardView: View {
             cards.append(.init(
                 slot: slot,
                 width: cardSettings.width(slot),
-                view: AnyView(cardView(for: slot)),
             ))
         }
         return cards
@@ -132,32 +130,27 @@ struct DashboardView: View {
         case let .single(card):
             if card.width == .half {
                 HStack(spacing: 12) {
-                    card.view
+                    cardView(for: card.slot)
                         .environment(\.cardDensity, .half)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Color.clear.frame(maxWidth: .infinity)
                 }
             } else {
-                card.view
+                cardView(for: card.slot)
                     .environment(\.cardDensity, .full)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         case let .pair(lhs, rhs):
-            // Use a `Grid` for paired half-width cards so they
-            // render at the same height and the same width. The
-            // Grid row aligns every cell to a shared height (the
-            // height of the tallest cell), which an ordinary
-            // HStack(alignment: .top) does not do.
             Grid(horizontalSpacing: 12, verticalSpacing: 0) {
                 GridRow {
-                    lhs.view
+                    cardView(for: lhs.slot)
                         .environment(\.cardDensity, .half)
                         .frame(
                             maxWidth: .infinity,
                             maxHeight: .infinity,
                             alignment: .topLeading,
                         )
-                    rhs.view
+                    cardView(for: rhs.slot)
                         .environment(\.cardDensity, .half)
                         .frame(
                             maxWidth: .infinity,
@@ -166,10 +159,6 @@ struct DashboardView: View {
                         )
                 }
             }
-            // Clamp the Grid's own height to the natural height of
-            // its tallest cell so the equal-height behaviour does
-            // not leak upward and inflate the popover's overall
-            // height.
             .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -180,15 +169,11 @@ struct DashboardView: View {
         let vis = CardTintSlot.allCases
             .map { "\(cardSettings.visibility($0))" }
             .joined()
-        let wid = CardTintSlot.allCases
-            .map(\.rawValue)
-            .map { _ in "" }
-            .joined()
         let widths = CardTintSlot.allCases
             .map { cardSettings.width($0).rawValue }
             .joined()
         let order = cardSettings.order().map(\.rawValue).joined(separator: ",")
-        return vis + "|" + wid + widths + "|" + order
+        return vis + "|" + widths + "|" + order
     }
 
     private var emptyState: some View {
@@ -216,7 +201,7 @@ struct DashboardView: View {
             Text("Peakmon")
                 .font(.headline)
             Spacer()
-            let warming = store.history(for: .cpuTotal).isEmpty
+            let warming = !store.hasHistory(for: .cpuTotal)
             Text(warming ? "Warming up…" : "Live")
                 .font(.caption)
                 .foregroundStyle(warming ? Color.secondary : Color.green)

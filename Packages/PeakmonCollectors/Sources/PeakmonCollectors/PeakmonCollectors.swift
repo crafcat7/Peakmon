@@ -10,10 +10,3 @@
 //  v0.1 will introduce CPUCollector / MemoryCollector / BatteryCollector
 //  under Public/.
 //
-
-import Foundation
-import PeakmonCore
-
-public enum PeakmonCollectors {
-    public static let versionMarker = "v0.0-scaffold"
-}

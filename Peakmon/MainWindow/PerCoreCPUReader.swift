@@ -21,7 +21,6 @@
 
 import Darwin
 import Foundation
-import MachO
 import Darwin.Mach
 
 /// Per-core utilisation reader. `@MainActor` because its only

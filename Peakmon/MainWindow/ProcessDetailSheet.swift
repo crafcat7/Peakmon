@@ -164,10 +164,10 @@ struct ProcessDetailSheet: View {
             metricChip(icon: "cpu",
                        label: "CPU",
                        value: String(format: "%.1f%%", group.totalCPU),
-                       tint: cpuTint(group.totalCPU))
+                       tint: DashboardFormatting.cpuTint(group.totalCPU))
             metricChip(icon: "memorychip",
                        label: "Memory",
-                       value: formatBytes(group.totalMemory),
+                       value: DashboardFormatting.bytesShort(Double(group.totalMemory)),
                        tint: .blue)
             metricChip(icon: "square.stack.3d.up",
                        label: "Processes",
@@ -285,9 +285,9 @@ struct ProcessDetailSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(String(format: "%.1f%%", child.cpuPercent))
                     .font(.callout.monospacedDigit())
-                    .foregroundStyle(cpuTint(child.cpuPercent))
+                    .foregroundStyle(DashboardFormatting.cpuTint(child.cpuPercent))
                     .frame(width: 80, alignment: .trailing)
-                Text(formatBytes(child.memoryBytes))
+                Text(DashboardFormatting.bytesShort(Double(child.memoryBytes)))
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .frame(width: 90, alignment: .trailing)
@@ -489,19 +489,6 @@ struct ProcessDetailSheet: View {
         case 4: return .red
         default: return .secondary
         }
-    }
-
-    private func cpuTint(_ cpu: Double) -> Color {
-        if cpu < 10 { return .secondary }
-        if cpu < 50 { return .primary }
-        if cpu < 150 { return .orange }
-        return .red
-    }
-
-    private func formatBytes(_ bytes: UInt64) -> String {
-        let mb = Double(bytes) / 1_048_576
-        if mb >= 1024 { return String(format: "%.1f GB", mb / 1024) }
-        return String(format: "%.0f MB", mb)
     }
 
     private func formatStart(_ d: Date) -> String {

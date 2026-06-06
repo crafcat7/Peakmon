@@ -40,7 +40,7 @@ struct ProcessRow: View {
 
     private var metricText: String {
         if showMemory {
-            return Self.formatBytes(snapshot.memoryBytes)
+            return DashboardFormatting.bytesShort(Double(snapshot.memoryBytes))
         }
         // Activity Monitor convention: % of one core, can exceed 100.
         if snapshot.cpuPercent >= 100 {
@@ -51,13 +51,8 @@ struct ProcessRow: View {
 
     private var detailedTooltip: String {
         let cpu = String(format: "%.1f%% CPU", snapshot.cpuPercent)
-        let ram = Self.formatBytes(snapshot.memoryBytes) + " RAM"
+        let ram = DashboardFormatting.bytesShort(Double(snapshot.memoryBytes)) + " RAM"
         return "\(cpu) · \(ram)"
     }
 
-    private static func formatBytes(_ value: UInt64) -> String {
-        let mib = Double(value) / 1024 / 1024
-        if mib < 1024 { return String(format: "%.0f MB", mib) }
-        return String(format: "%.1f GB", mib / 1024)
-    }
 }

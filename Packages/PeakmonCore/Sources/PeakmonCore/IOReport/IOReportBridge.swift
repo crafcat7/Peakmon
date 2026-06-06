@@ -181,13 +181,6 @@ extension IOReportBridge {
             return readings(in: delta)
         }
 
-        /// Read absolute counter values out of the underlying dict.
-        /// Mostly useful for one-shot enumeration / diagnostics; power
-        /// reporting needs deltas.
-        public var readings: [Reading] {
-            readings(in: dictionary)
-        }
-
         private func readings(in dict: CFDictionary) -> [Reading] {
             let key = "IOReportChannels" as CFString
             let ptr = CFDictionaryGetValue(

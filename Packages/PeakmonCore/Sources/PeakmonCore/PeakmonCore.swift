@@ -14,11 +14,3 @@
 //
 //  See Docs/ARCHITECTURE.md and memories/repo/code-conventions.md.
 //
-
-import Foundation
-
-/// Marker namespace; concrete metric models, protocols, scheduler and store
-/// live in sibling files of this module.
-public enum PeakmonCore {
-    public static let versionMarker = "v0.1"
-}

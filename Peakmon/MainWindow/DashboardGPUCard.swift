@@ -5,10 +5,10 @@
 //  GPU panel for the unified dashboard.
 //
 //    Collapsed — utilisation headline + trend sparkline.
-//    Expanded  — three side-by-side mini-charts: utilisation (%),
-//                GPU thermal (°C), GPU power (W), each with a live
-//                value chip.
-//    Footer    — utilisation + temp + power triplet.
+//    Expanded  — thermal history sparkline with live temperature,
+//                plus power-rail decomposition (Core / CS / SRAM)
+//                as horizontal bars when available.
+//    Footer    — total power + GPU temperature.
 //
 //  No per-engine breakdown (3D / Media / Compute): macOS exposes
 //  it only via private IOReport channels needing Screen Recording
@@ -36,6 +36,13 @@ struct DashboardGPUCard: View {
         let value = store.latest(for: .powerGPU)?.value ?? 0
         return value > 0 ? value : nil
     }
+    private var gpuMemInUse: Double? {
+        let value = store.latest(for: .gpuMemoryInUse)?.value ?? 0
+        return value > 0 ? value : nil
+    }
+    private var gpuCorePower: Double { store.value(for: .powerGPUCore) }
+    private var gpuCSPower: Double { store.value(for: .powerGPUCommandStreamer) }
+    private var gpuSRAMPower: Double { store.value(for: .powerGPUSRAM) }
 
     var body: some View {
         DashboardMetricCard(
@@ -75,36 +82,20 @@ struct DashboardGPUCard: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            GeometryReader { proxy in
-                Capsule().fill(tint.opacity(0.18))
-                    .overlay(alignment: .leading) {
-                        Capsule()
-                            .fill(tint)
-                            .frame(width: proxy.size.width * min(1, util / 100))
-                    }
-            }
-            .frame(height: 6)
-            .padding(.top, 4)
+            ProportionalBarView(fraction: min(1, util / 100), color: tint)
+                .padding(.top, 4)
 
             HStack(spacing: 14) {
                 if let gpuTemp {
-                    metricChip(label: "temp", value: String(format: "%.0f°C", gpuTemp), color: .orange)
+                    MetricChipView(label: "temp", value: String(format: "%.0f°C", gpuTemp), color: .orange)
                 }
                 if let gpuPower {
-                    metricChip(label: "power", value: String(format: "%.1f W", gpuPower), color: .yellow)
+                    MetricChipView(label: "power", value: String(format: "%.1f W", gpuPower), color: .yellow)
+                }
+                if let gpuMemInUse {
+                    MetricChipView(label: "mem", value: DashboardFormatting.bytesShort(gpuMemInUse), color: .cyan)
                 }
             }
-        }
-    }
-
-    private func metricChip(label: String, value: String, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.caption.monospacedDigit().weight(.medium))
         }
     }
 
@@ -124,95 +115,95 @@ struct DashboardGPUCard: View {
     // MARK: - Expanded
 
     private var expandedDetail: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Telemetry")
-                .font(.subheadline.weight(.semibold))
-
-            // Three separate mini-charts, not one overlay: the axes
-            // are incompatible (%, °C, W) and sharing them would lie
-            // about magnitude. Side-by-side keeps each scale honest
-            // while sharing the time axis for eyeball correlation.
-            //
-            // `maxHeight: .infinity` lets the row absorb the slack
-            // the shared card container (pinned to
-            // `dashboardCardMinHeight`) would otherwise leave as
-            // dead space between the charts and the footer.
-            HStack(spacing: 12) {
-                miniSeries(
-                    title: "Utilisation",
-                    value: String(format: "%.0f%%", util),
-                    color: tint,
-                    samples: store.history(for: .gpuUtilization),
-                    yMin: 0,
-                    yMax: 100,
-                )
-                miniSeries(
-                    title: "Thermal",
-                    value: gpuTemp.map { String(format: "%.0f°C", $0) } ?? "—",
-                    color: .orange,
-                    samples: store.history(for: .thermalGPU),
-                    yMin: 0,
-                    yMax: nil,
-                )
-                miniSeries(
-                    title: "Power",
-                    value: gpuPower.map { String(format: "%.1f W", $0) } ?? "—",
-                    color: .yellow,
-                    samples: store.history(for: .powerGPU),
-                    yMin: 0,
-                    yMax: nil,
-                )
+        VStack(alignment: .leading, spacing: 16) {
+            thermalSection
+            if hasGPUSubRails {
+                gpuSubRails
             }
-            .frame(maxHeight: .infinity)
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private func miniSeries(title: String, value: String, color: Color, samples: [MetricSample], yMin: Double?, yMax: Double?) -> some View {
+    /// GPU temperature history sparkline. Always visible — the
+    /// thermal trend is the single most actionable GPU metric
+    /// after utilisation: sustained high temps lead to
+    /// thermal throttling, and the slope tells the user whether
+    /// the cooling solution is keeping up.
+    private var thermalSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(title)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                Text("Thermal")
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(value)
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(color)
+                if let gpuTemp {
+                    HStack(spacing: 4) {
+                        Image(systemName: "thermometer.medium")
+                            .font(.caption)
+                            .foregroundStyle(DashboardFormatting.temperatureColor(gpuTemp))
+                        Text("\(Int(gpuTemp.rounded()))°C")
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(DashboardFormatting.temperatureColor(gpuTemp))
+                    }
+                }
             }
             MetricSparklineView(
-                samples: samples,
+                samples: store.history(for: .thermalGPU),
                 style: SparklineStyle(
-                    color: color,
-                    fillOpacity: 0.2,
-                    lineWidth: 1.4,
-                    yMin: yMin,
-                    yMax: yMax,
+                    color: .orange,
+                    fillOpacity: 0.18,
+                    lineWidth: 1.5,
+                    yMin: 0,
+                    yMax: nil,
                 ),
             )
-            .frame(minHeight: 80, maxHeight: .infinity)
+            .frame(height: 80)
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    /// GPU sub-rail power decomposition: Core / CS / SRAM as
+    /// horizontal bars. Only shown when the IOReport channels
+    /// report non-zero values (some SoCs do not expose them).
+    private var hasGPUSubRails: Bool {
+        gpuCorePower > 0 || gpuCSPower > 0 || gpuSRAMPower > 0
+    }
+
+    private var gpuSubRails: some View {
+        let maxSub = max(0.01, [gpuCorePower, gpuCSPower, gpuSRAMPower].max() ?? 0.01)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Power rails")
+                .font(.subheadline.weight(.semibold))
+
+            LabeledBarRow(label: "Core", value: DashboardFormatting.wattsRail(gpuCorePower), fraction: gpuCorePower / maxSub, color: .yellow, labelWidth: 50, valueWidth: 60)
+            LabeledBarRow(label: "CS", value: DashboardFormatting.wattsRail(gpuCSPower), fraction: gpuCSPower / maxSub, color: .yellow.opacity(0.7), labelWidth: 50, valueWidth: 60)
+            LabeledBarRow(label: "SRAM", value: DashboardFormatting.wattsRail(gpuSRAMPower), fraction: gpuSRAMPower / maxSub, color: .yellow.opacity(0.5), labelWidth: 50, valueWidth: 60)
+        }
     }
 
     // MARK: - Footer
 
     private var tripletFooter: some View {
-        HStack(spacing: 24) {
-            footerSlot(title: "Utilisation", value: String(format: "%.0f%%", util), color: tint)
-            footerSlot(title: "Temp", value: gpuTemp.map { String(format: "%.0f°C", $0) } ?? "—", color: .orange)
-            footerSlot(title: "Power", value: gpuPower.map { String(format: "%.1f W", $0) } ?? "—", color: .yellow)
-            Spacer()
-        }
-    }
+        HStack(alignment: .top, spacing: 24) {
+            if let gpuPower {
+                FooterStatView(title: "Power", value: String(format: "%.1f W", gpuPower), color: .yellow)
+            }
 
-    private func footerSlot(title: String, value: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.callout.monospacedDigit().weight(.medium))
-                .foregroundStyle(color)
+            Spacer()
+
+            if let gpuTemp {
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text("GPU temperature")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "thermometer.medium")
+                            .font(.caption)
+                            .foregroundStyle(DashboardFormatting.temperatureColor(gpuTemp))
+                        Text("\(Int(gpuTemp.rounded()))°C")
+                            .font(.callout.monospacedDigit().weight(.medium))
+                            .foregroundStyle(DashboardFormatting.temperatureColor(gpuTemp))
+                    }
+                }
+            }
         }
     }
 }

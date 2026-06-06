@@ -29,17 +29,24 @@ enum DashboardLayout {
     enum Row {
         case single(VisibleCard)
         case pair(VisibleCard, VisibleCard)
+
+        /// Stable identity derived from the contained slot(s).
+        /// Used as `ForEach` ID so SwiftUI correctly animates
+        /// reordering instead of reusing views by array offset.
+        var rowID: String {
+            switch self {
+            case let .single(card): card.slot.rawValue
+            case let .pair(a, b): a.slot.rawValue + "+" + b.slot.rawValue
+            }
+        }
     }
 
-    /// Pairing of a slot identifier with the user's chosen width and
-    /// the view that should render for that slot. The view is type-
-    /// erased to `AnyView` so callers can return wildly different
-    /// concrete card types from the same builder without the
-    /// `@ViewBuilder` machinery imposing a fixed shape.
+    /// Pairing of a slot identifier with the user's chosen width.
+    /// The view is dispatched by slot in `DashboardView.rowView`
+    /// so SwiftUI preserves structural identity across re-evaluations.
     struct VisibleCard: Identifiable {
         let slot: CardTintSlot
         let width: CardWidth
-        let view: AnyView
 
         var id: String { slot.rawValue }
     }

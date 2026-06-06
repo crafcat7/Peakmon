@@ -62,32 +62,35 @@ struct CPUCard: View {
     /// CPU sparkline payload. Falls back to the total trace when
     /// the user disables every overlay so the chart never blanks.
     private var sparklineSeries: [SparklineSeries] {
+        let totalHistory = store.history(for: .cpuTotal)
+        let userHistory = store.history(for: .cpuUser)
+        let systemHistory = store.history(for: .cpuSystem)
         var lines: [SparklineSeries] = []
         if cpuTotalEnabled {
             lines.append(SparklineSeries(
                 id: ChartSeries.cpuTotal.rawValue,
-                samples: store.history(for: .cpuTotal),
+                samples: totalHistory,
                 color: ChartSeries.cpuTotal.storedTint,
             ))
         }
         if cpuUserEnabled {
             lines.append(SparklineSeries(
                 id: ChartSeries.cpuUser.rawValue,
-                samples: store.history(for: .cpuUser),
+                samples: userHistory,
                 color: ChartSeries.cpuUser.storedTint,
             ))
         }
         if cpuSystemEnabled {
             lines.append(SparklineSeries(
                 id: ChartSeries.cpuSystem.rawValue,
-                samples: store.history(for: .cpuSystem),
+                samples: systemHistory,
                 color: ChartSeries.cpuSystem.storedTint,
             ))
         }
         if lines.isEmpty {
             lines.append(SparklineSeries(
                 id: "cpu.total",
-                samples: store.history(for: .cpuTotal),
+                samples: totalHistory,
                 color: tint,
             ))
         }

@@ -93,9 +93,9 @@ struct DashboardPowerCard: View {
                 .padding(.top, 4)
 
             HStack(spacing: 12) {
-                wattChip(label: "CPU", watts: powerCPU, color: .blue)
-                wattChip(label: "GPU", watts: powerGPU, color: .indigo)
-                wattChip(label: "DRAM", watts: powerDRAM, color: .pink)
+                MetricChipView(label: "CPU", value: DashboardFormatting.wattsChip(powerCPU), color: .blue)
+                MetricChipView(label: "GPU", value: DashboardFormatting.wattsChip(powerGPU), color: .indigo)
+                MetricChipView(label: "DRAM", value: DashboardFormatting.wattsChip(powerDRAM), color: .pink)
             }
         }
     }
@@ -113,17 +113,6 @@ struct DashboardPowerCard: View {
                 Rectangle().fill(Color.teal).frame(width: proxy.size.width * powerDisplay / total)
             }
             .clipShape(.capsule)
-        }
-    }
-
-    private func wattChip(label: String, watts: Double, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(String(format: "%.1f W", watts))
-                .font(.caption.monospacedDigit().weight(.medium))
         }
     }
 
@@ -157,40 +146,17 @@ struct DashboardPowerCard: View {
     }
 
     private var railBreakdown: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let maxRail = max(0.5, [powerCPU, powerGPU, powerDRAM, powerDisplay].max() ?? 0.5)
+        return VStack(alignment: .leading, spacing: 8) {
             Text("Rails")
                 .font(.subheadline.weight(.semibold))
 
             VStack(spacing: 6) {
-                railRow(label: "CPU", watts: powerCPU, color: .blue)
-                railRow(label: "GPU", watts: powerGPU, color: .indigo)
-                railRow(label: "DRAM", watts: powerDRAM, color: .pink)
-                railRow(label: "Display", watts: powerDisplay, color: .teal)
+                LabeledBarRow(label: "CPU", value: DashboardFormatting.wattsRail(powerCPU), fraction: powerCPU / maxRail, color: .blue)
+                LabeledBarRow(label: "GPU", value: DashboardFormatting.wattsRail(powerGPU), fraction: powerGPU / maxRail, color: .indigo)
+                LabeledBarRow(label: "DRAM", value: DashboardFormatting.wattsRail(powerDRAM), fraction: powerDRAM / maxRail, color: .pink)
+                LabeledBarRow(label: "Display", value: DashboardFormatting.wattsRail(powerDisplay), fraction: powerDisplay / maxRail, color: .teal)
             }
-        }
-    }
-
-    private func railRow(label: String, watts: Double, color: Color) -> some View {
-        // Bar scales against the largest rail, not total system
-        // watts, so a 0.4 W DRAM line stays visible next to a 25 W
-        // CPU spike.
-        let maxRail = max(0.5, [powerCPU, powerGPU, powerDRAM, powerDisplay].max() ?? 0.5)
-        return HStack(spacing: 10) {
-            Text(label)
-                .font(.caption.weight(.medium))
-                .frame(width: 70, alignment: .leading)
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(color.opacity(0.18))
-                    Capsule()
-                        .fill(color)
-                        .frame(width: proxy.size.width * (watts / maxRail))
-                }
-            }
-            .frame(height: 6)
-            Text(String(format: "%.2f W", watts))
-                .font(.caption.monospacedDigit())
-                .frame(width: 72, alignment: .trailing)
         }
     }
 
@@ -262,7 +228,7 @@ struct DashboardPowerCard: View {
                 Text("Total")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(String(format: "%.1f W", totalWatts))
+                Text(DashboardFormatting.wattsChip(totalWatts))
                     .font(.callout.monospacedDigit().weight(.medium))
                     .foregroundStyle(tint)
             }

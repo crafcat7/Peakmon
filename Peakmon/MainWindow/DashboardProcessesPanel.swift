@@ -193,7 +193,7 @@ struct DashboardProcessesPanel: View {
             cpuCell(g.totalCPU, maxCPU: maxCPU)
                 .frame(width: 220, alignment: .trailing)
 
-            Text(formatBytes(g.totalMemory))
+            Text(DashboardFormatting.bytesShort(Double(g.totalMemory)))
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 100, alignment: .trailing)
@@ -241,7 +241,7 @@ struct DashboardProcessesPanel: View {
                         .fill(.quaternary)
                         .frame(height: 6)
                     Capsule()
-                        .fill(barTint(cpu).gradient)
+                        .fill(DashboardFormatting.cpuTint(cpu).gradient)
                         .frame(width: proxy.size.width * ratio, height: 6)
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
@@ -250,23 +250,11 @@ struct DashboardProcessesPanel: View {
 
             Text(String(format: "%.1f%%", cpu))
                 .font(.callout.monospacedDigit())
-                .foregroundStyle(barTint(cpu))
+                .foregroundStyle(DashboardFormatting.cpuTint(cpu))
                 .frame(width: 66, alignment: .trailing)
         }
     }
 
-    private func barTint(_ cpu: Double) -> Color {
-        if cpu < 10 { return .secondary }
-        if cpu < 50 { return .primary }
-        if cpu < 150 { return .orange }
-        return .red
-    }
-
-    private func formatBytes(_ bytes: UInt64) -> String {
-        let mb = Double(bytes) / 1_048_576
-        if mb >= 1024 { return String(format: "%.1f GB", mb / 1024) }
-        return String(format: "%.0f MB", mb)
-    }
 }
 
 #Preview {

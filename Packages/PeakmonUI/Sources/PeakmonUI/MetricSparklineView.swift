@@ -80,6 +80,25 @@ public struct SparklineSeries: Identifiable, Sendable, Equatable {
         self.color = color
         self.fillOpacity = fillOpacity
     }
+
+    /// Custom `Equatable` that compares samples by their semantic
+    /// content (kind, value, timestamp, unit) rather than by `id`.
+    /// Every `MetricSample` carries a freshly-generated UUID, so
+    /// synthesised `Equatable` would always report two structurally
+    /// identical series as unequal — defeating SwiftUI's
+    /// short-circuit optimisation on the sparkline Canvas.
+    public static func == (lhs: SparklineSeries, rhs: SparklineSeries) -> Bool {
+        lhs.id == rhs.id
+            && lhs.color == rhs.color
+            && lhs.fillOpacity == rhs.fillOpacity
+            && lhs.samples.count == rhs.samples.count
+            && zip(lhs.samples, rhs.samples).allSatisfy { a, b in
+                a.kind == b.kind
+                    && a.unit == b.unit
+                    && a.value == b.value
+                    && a.timestamp == b.timestamp
+            }
+    }
 }
 
 /// Renders one or more rolling-window line charts in a single
@@ -92,7 +111,7 @@ public struct SparklineSeries: Identifiable, Sendable, Equatable {
 /// in practice that happens often because each tick only
 /// appends one sample per kind, and most cards subscribe to
 /// only one or two kinds.
-public struct MetricSparklineView: View, Equatable {
+public struct MetricSparklineView: View {
     private let series: [SparklineSeries]
     private let lineWidth: CGFloat
     private let yMin: Double?
@@ -136,8 +155,13 @@ public struct MetricSparklineView: View, Equatable {
         // diff individual `LineMark` / `AreaMark` views; here we
         // emit two `Path`s per series straight into the display
         // list and pay zero diff cost.
+        //
+        // `resolvedDomains()` is hoisted out of the Canvas draw
+        // closure so it runs once per body evaluation rather than
+        // on every CGContext pass (which can repeat during layer
+        // compositing).
+        let (xDomain, yDomain) = resolvedDomains()
         Canvas(rendersAsynchronously: false) { context, size in
-            let (xDomain, yDomain) = resolvedDomains()
             // Treat zero-width / zero-height frames as nothing
             // to draw. Saves a divide-by-zero check later and
             // is what Charts does too.

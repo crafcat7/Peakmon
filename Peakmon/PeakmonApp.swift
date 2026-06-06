@@ -389,6 +389,7 @@ private final class MenuBarLabelCache {
 private struct MenuBarLabelSignature: Equatable {
     let segments: [MenuBarSegment]
     let usesLightText: Bool
+    let appearanceGeneration: Int
     let tints: [String]      // [cpu, memory, disk, network, gpu, power] hex
     let latestValues: [Double]
     let historyHashes: [Int]
@@ -399,7 +400,8 @@ private struct MenuBarLabelSignature: Equatable {
         items: [MenuBarSegment],
         tints: [CardTintSlot: Color],
     ) -> Self {
-        let usesLightText = WallpaperLuminance.shared.usesLightText()
+        let luminance = WallpaperLuminance.shared
+        let usesLightText = luminance.usesLightText()
 
         var latests: [Double] = []
         var historyHashes: [Int] = []
@@ -432,6 +434,7 @@ private struct MenuBarLabelSignature: Equatable {
         return MenuBarLabelSignature(
             segments: items,
             usesLightText: usesLightText,
+            appearanceGeneration: luminance.generation,
             tints: tintHexes,
             latestValues: latests,
             historyHashes: historyHashes,
@@ -520,83 +523,110 @@ private struct MenuBarLabelSignature: Equatable {
 /// Decides whether the menu bar label should render with light or
 /// dark text.
 ///
-/// Earlier revisions sampled the actual wallpaper pixels under the
-/// menu bar to handle the case where a dark photo wallpaper makes
-/// the translucent menu bar visually dark even in Light Mode. That
-/// approach called `NSWorkspace.desktopImageURL(for:)` and then
-/// `CGImageSourceCreateWithURL` on the resulting file. On macOS 14+
-/// the system treats those reads as access to "data from another
-/// app" because wallpapers live under `~/Library/Application
-/// Support/com.apple.wallpaper/…`, which triggers an uncancellable
-/// TCC prompt at first launch.
+/// The menu bar's effective background colour depends on:
+///   1. System appearance (Dark Mode ↔ Light Mode)
+///   2. Full-screen state (another app covering the screen
+///      darkens the menu bar overlay)
+///   3. Translucency over a dark wallpaper
 ///
-/// To stay zero-prompt and zero-entitlement, this version decides
-/// purely from `NSApp.effectiveAppearance` plus a CGWindowList
-/// full-screen probe. That matches what the system menu bar itself
-/// does: in Dark Mode (or while another app is full-screen, which
-/// macOS overlays with a dark backing) it draws light glyphs, and
-/// in Light Mode it draws dark glyphs. The wallpaper-aware path
-/// would have been slightly more pleasant on a dark photo wallpaper
-/// in Light Mode, but the trade-off is not worth a TCC prompt.
+/// This class observes system notifications that signal a change
+/// to any of these factors and bumps a `generation` counter so
+/// the `MenuBarLabel` invalidates its cached rasterised image.
+///
+/// Detection uses the `NSStatusBarButton`'s resolved appearance
+/// (the actual menu bar context) instead of `NSApp.effectiveAppearance`
+/// (the app window context), because the two diverge when another
+/// app is full-screen — the system darkens the menu bar overlay
+/// but `NSApp.effectiveAppearance` still reports Light Mode.
 @MainActor
 private final class WallpaperLuminance {
     static let shared = WallpaperLuminance()
 
-    private init() {}
+    /// Monotonically increasing counter. Bumped whenever an
+    /// observed notification suggests the menu bar backdrop may
+    /// have changed. Included in `MenuBarLabelSignature` so the
+    /// label cache is invalidated and a new image is rendered.
+    private(set) var generation: Int = 0
+
+    /// Last computed result, cached until the next generation bump.
+    private var cachedResult: Bool?
+    private var cachedGeneration: Int = -1
+
+    /// Status item used to sample the menu bar's actual appearance.
+    /// Created once and kept for the process lifetime.
+    private let probeItem = NSStatusBar.system.statusItem(withLength: 0)
+
+    private init() {
+        // 1. System-wide appearance change (Dark Mode ↔ Light Mode,
+        //    or the "Auto" schedule switching).
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main,
+        ) { [weak self] _ in
+            self?.invalidate()
+        }
+
+        // 2. Space changes — entering or leaving a full-screen
+        //    Space triggers this.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main,
+        ) { [weak self] _ in
+            self?.invalidate()
+        }
+
+        // 3. Wake from sleep — appearance state may have changed
+        //    while the machine was asleep.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main,
+        ) { [weak self] _ in
+            self?.invalidate()
+        }
+    }
 
     /// Returns `true` if the menu bar text should be drawn in white.
+    /// Result is cached per generation to avoid redundant work
+    /// within the same tick.
     func usesLightText() -> Bool {
-        // When another app is full-screen, macOS overlays the menu
-        // bar with a near-opaque dark backing. Detect that via the
-        // public CGWindowList API (no entitlement required) so the
-        // label stays legible regardless of the user's appearance
-        // setting.
-        if Self.anyFullScreenWindowPresent() {
-            return true
+        if let cached = cachedResult, cachedGeneration == generation {
+            return cached
         }
+        let result = Self.compute(probeButton: probeItem.button)
+        cachedResult = result
+        cachedGeneration = generation
+        return result
+    }
+
+    private func invalidate() {
+        generation += 1
+        cachedResult = nil
+    }
+
+    /// The actual detection logic.
+    ///
+    /// Primary: check the `NSStatusBarButton`'s resolved appearance
+    /// — this is the menu bar's own visual context, not the app
+    /// window's. When another app is full-screen, the button's
+    /// appearance flips to `.darkAqua` even though
+    /// `NSApp.effectiveAppearance` still says `.aqua`.
+    ///
+    /// Fallback: if the button is unavailable, fall back to
+    /// `NSApp.effectiveAppearance`.
+    private static func compute(probeButton: NSButton?) -> Bool {
+        if let button = probeButton {
+            let match = button.effectiveAppearance.bestMatch(
+                from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight],
+            )
+            return match == .darkAqua || match == .vibrantDark
+        }
+        // Fallback when button is unavailable.
         let match = NSApp.effectiveAppearance.bestMatch(
             from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight],
         )
         return match == .darkAqua || match == .vibrantDark
-    }
-
-    /// Returns `true` when any on-screen window covers an entire
-    /// screen — the public proxy for "another app is full-screen".
-    ///
-    /// `CGWindowListCopyWindowInfo` returns metadata only and does
-    /// not require Screen Recording or Accessibility permissions.
-    /// We compare each window's `kCGWindowBounds` to every screen's
-    /// frame (in display points) and treat a match as full-screen.
-    /// Windows on layer 0 (normal app windows) are the only ones
-    /// considered; the Dock, menu bar shadow, and other system
-    /// chrome live on higher layers and are skipped.
-    private static func anyFullScreenWindowPresent() -> Bool {
-        guard let raw = CGWindowListCopyWindowInfo(
-            [.optionOnScreenOnly, .excludeDesktopElements],
-            kCGNullWindowID,
-        ) as? [[String: Any]] else {
-            return false
-        }
-        let screenFrames = NSScreen.screens.map(\.frame)
-        for info in raw {
-            guard let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
-                  let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
-                  let rect = CGRect(dictionaryRepresentation: boundsDict)
-            else { continue }
-            for frame in screenFrames {
-                // Width should match the screen width; height may
-                // be up to ~30pt shorter than the screen because
-                // hovering the cursor at the top re-exposes the
-                // menu bar and macOS temporarily shrinks the
-                // full-screen window to make room. Accept any
-                // shortfall less than 40pt as still "full-screen".
-                let widthMatches = abs(rect.width - frame.width) < 2
-                let heightDelta = frame.height - rect.height
-                if widthMatches, heightDelta >= -2, heightDelta < 40 {
-                    return true
-                }
-            }
-        }
-        return false
     }
 }

@@ -79,8 +79,8 @@ struct PowerCard: View {
         HStack(spacing: 0) {
             subsystemCell(label: "DISP", watts: powerDisplay)
             subsystemCell(label: "DRAM", watts: powerDRAM)
-            let hasLeft = !store.history(for: .fanLeftRPM).isEmpty
-            let hasRight = !store.history(for: .fanRightRPM).isEmpty
+            let hasLeft = store.hasHistory(for: .fanLeftRPM)
+            let hasRight = store.hasHistory(for: .fanRightRPM)
             if hasLeft, hasRight {
                 fanCell(label: "FAN-L", kind: .fanLeftRPM)
                 fanCell(label: "FAN-R", kind: .fanRightRPM)

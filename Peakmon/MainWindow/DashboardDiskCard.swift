@@ -49,7 +49,7 @@ struct DashboardDiskCard: View {
     private var summary: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(formatRateHeadline(max(read, write)))
+                Text(DashboardFormatting.rateHeadline(max(read, write)))
                     .font(.system(size: 32, weight: .semibold, design: .rounded).monospacedDigit())
                     .contentTransition(.numericText(value: max(read, write)))
                     .animation(.smooth, value: max(read, write))
@@ -63,8 +63,8 @@ struct DashboardDiskCard: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 14) {
-                metricChip(label: "read", value: read, color: .green, arrow: "arrow.down")
-                metricChip(label: "write", value: write, color: .orange, arrow: "arrow.up")
+                MetricChipView(label: "read", value: DashboardFormatting.rateShort(read), color: .blue, arrow: "arrow.down")
+                MetricChipView(label: "write", value: DashboardFormatting.rateShort(write), color: .orange, arrow: "arrow.up")
             }
         }
     }
@@ -74,7 +74,7 @@ struct DashboardDiskCard: View {
             SparklineSeries(
                 id: "disk.read",
                 samples: store.history(for: .diskReadRate),
-                color: .green,
+                color: .blue,
             ),
             SparklineSeries(
                 id: "disk.write",
@@ -95,7 +95,7 @@ struct DashboardDiskCard: View {
                 Text("Boot volume")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text("\(formatBytesShort(diskUsed)) of \(formatBytesShort(diskTotal))")
+                Text("\(DashboardFormatting.bytesShort(diskUsed)) of \(DashboardFormatting.bytesShort(diskTotal))")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -119,14 +119,7 @@ struct DashboardDiskCard: View {
     }
 
     private var usageBar: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(tint.opacity(0.18))
-                Capsule()
-                    .fill(usageTint(ratio))
-                    .frame(width: proxy.size.width * ratio)
-            }
-        }
+        ProportionalBarView(fraction: ratio, color: usageTint(ratio), height: 8)
     }
 
     private func usageTint(_ ratio: Double) -> Color {
@@ -135,26 +128,13 @@ struct DashboardDiskCard: View {
         return .red
     }
 
-    private func metricChip(label: String, value: Double, color: Color, arrow: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: arrow)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(color)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(formatRateShort(value))
-                .font(.caption.monospacedDigit().weight(.medium))
-        }
-    }
-
     private func capacityChip(label: String, value: Double, color: Color) -> some View {
         HStack(spacing: 4) {
             Circle().fill(color).frame(width: 6, height: 6)
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(formatBytesShort(value))
+            Text(DashboardFormatting.bytesShort(value))
                 .font(.caption.monospacedDigit().weight(.medium))
         }
     }
@@ -163,7 +143,7 @@ struct DashboardDiskCard: View {
 
     private var rateFooter: some View {
         HStack(spacing: 24) {
-            footerSlot(title: "Read", value: read, arrow: "arrow.down", color: .green)
+            footerSlot(title: "Read", value: read, arrow: "arrow.down", color: .blue)
             footerSlot(title: "Write", value: write, arrow: "arrow.up", color: .orange)
             Spacer()
         }
@@ -178,35 +158,9 @@ struct DashboardDiskCard: View {
                 Image(systemName: arrow)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(color)
-                Text(formatRateShort(value))
+                Text(DashboardFormatting.rateShort(value))
                     .font(.callout.monospacedDigit().weight(.medium))
             }
         }
-    }
-
-    // MARK: - Formatters
-
-    private func formatRateHeadline(_ bps: Double) -> String {
-        let mbps = bps / 1_048_576
-        if mbps >= 100 { return String(format: "%.0f MB/s", mbps) }
-        if mbps >= 1 { return String(format: "%.1f MB/s", mbps) }
-        let kbps = bps / 1024
-        return String(format: "%.0f KB/s", kbps)
-    }
-
-    private func formatRateShort(_ bps: Double) -> String {
-        let mbps = bps / 1_048_576
-        if mbps >= 1 { return String(format: "%.1f MB/s", mbps) }
-        let kbps = bps / 1024
-        return String(format: "%.0f KB/s", kbps)
-    }
-
-    private func formatBytesShort(_ bytes: Double) -> String {
-        let gb = bytes / 1_073_741_824
-        if gb >= 1000 { return String(format: "%.1f TB", gb / 1024) }
-        if gb >= 10 { return String(format: "%.0f GB", gb) }
-        if gb >= 1 { return String(format: "%.1f GB", gb) }
-        let mb = bytes / 1_048_576
-        return String(format: "%.0f MB", mb)
     }
 }

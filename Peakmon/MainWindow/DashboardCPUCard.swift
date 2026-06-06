@@ -82,7 +82,7 @@ struct DashboardCPUCard: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text("Total utilisation")
+            Text("Utilisation")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -91,9 +91,9 @@ struct DashboardCPUCard: View {
                 .padding(.top, 4)
 
             HStack(spacing: 14) {
-                metricChip(label: "user", value: user, color: .blue)
-                metricChip(label: "system", value: system, color: .orange)
-                metricChip(label: "idle", value: idle, color: .secondary)
+                MetricChipView(label: "user", value: String(format: "%.0f%%", user), color: .blue)
+                MetricChipView(label: "system", value: String(format: "%.0f%%", system), color: .orange)
+                MetricChipView(label: "idle", value: String(format: "%.0f%%", idle), color: .secondary)
             }
         }
     }
@@ -111,17 +111,6 @@ struct DashboardCPUCard: View {
                 Rectangle().fill(Color.secondary.opacity(0.25)).frame(width: idleW)
             }
             .clipShape(.capsule)
-        }
-    }
-
-    private func metricChip(label: String, value: Double, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(String(format: "%.0f%%", value))
-                .font(.caption.monospacedDigit().weight(.medium))
         }
     }
 
@@ -188,10 +177,10 @@ struct DashboardCPUCard: View {
                         HStack(spacing: 4) {
                             Image(systemName: "thermometer.medium")
                                 .font(.caption)
-                                .foregroundStyle(temperatureColor(cpuTemp))
+                                .foregroundStyle(DashboardFormatting.temperatureColor(cpuTemp))
                             Text("\(Int(cpuTemp.rounded()))°C")
                                 .font(.callout.monospacedDigit().weight(.medium))
-                                .foregroundStyle(temperatureColor(cpuTemp))
+                                .foregroundStyle(DashboardFormatting.temperatureColor(cpuTemp))
                         }
                     }
                 }
@@ -199,42 +188,38 @@ struct DashboardCPUCard: View {
         }
     }
 
-    private func temperatureColor(_ celsius: Double) -> Color {
-        if celsius < 60 { return .secondary }
-        if celsius < 80 { return .primary }
-        if celsius < 95 { return .yellow }
-        return .red
-    }
-
     // MARK: - Sparkline series
 
     private var sparklineSeries: [SparklineSeries] {
+        let totalHistory = store.history(for: .cpuTotal)
+        let userHistory = store.history(for: .cpuUser)
+        let systemHistory = store.history(for: .cpuSystem)
         var lines: [SparklineSeries] = []
         if cpuTotalEnabled {
             lines.append(SparklineSeries(
                 id: ChartSeries.cpuTotal.rawValue,
-                samples: store.history(for: .cpuTotal),
+                samples: totalHistory,
                 color: ChartSeries.cpuTotal.storedTint,
             ))
         }
         if cpuUserEnabled {
             lines.append(SparklineSeries(
                 id: ChartSeries.cpuUser.rawValue,
-                samples: store.history(for: .cpuUser),
+                samples: userHistory,
                 color: ChartSeries.cpuUser.storedTint,
             ))
         }
         if cpuSystemEnabled {
             lines.append(SparklineSeries(
                 id: ChartSeries.cpuSystem.rawValue,
-                samples: store.history(for: .cpuSystem),
+                samples: systemHistory,
                 color: ChartSeries.cpuSystem.storedTint,
             ))
         }
         if lines.isEmpty {
             lines.append(SparklineSeries(
                 id: "cpu.total",
-                samples: store.history(for: .cpuTotal),
+                samples: totalHistory,
                 color: tint,
             ))
         }

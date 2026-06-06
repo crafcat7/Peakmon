@@ -284,7 +284,15 @@ struct MenuBarSegmentBlock: View {
         let v = store.latest(for: kind)?.value ?? 0
         let pressureOverride = memoryPressureOverride(for: kind)
         Text("\(Int(v.rounded()))%")
-            .foregroundStyle(pressureOverride ?? .primary)
+            // Only override the foreground when a VM-pressure colour
+            // applies. Forcing `.primary` here used to repaint the
+            // percent digits in the app's color-scheme primary (black
+            // in Light Mode), ignoring the wallpaper-driven `textColour`
+            // the menu-bar HStack sets — so on a dark menu bar the
+            // labels stayed white while the numbers turned black
+            // ("部分全黑"). Falling through to the inherited foreground
+            // keeps the whole segment one colour.
+            .modifier(OptionalForegroundColor(pressureOverride))
             .frame(width: SegmentMetrics.percentValueWidth, alignment: .trailing)
     }
 
@@ -460,6 +468,27 @@ struct MenuBarSegmentBlock: View {
                 value: left.value + right.value,
                 timestamp: left.timestamp,
             )
+        }
+    }
+}
+
+/// Applies a `foregroundStyle` only when a colour is supplied,
+/// otherwise leaves the view's inherited foreground untouched. Used
+/// by the percent value so it can opt into the VM-pressure palette
+/// without clobbering the wallpaper-driven menu-bar text colour
+/// during routine operation.
+private struct OptionalForegroundColor: ViewModifier {
+    let color: Color?
+
+    init(_ color: Color?) {
+        self.color = color
+    }
+
+    func body(content: Content) -> some View {
+        if let color {
+            content.foregroundStyle(color)
+        } else {
+            content
         }
     }
 }

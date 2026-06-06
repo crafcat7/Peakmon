@@ -80,11 +80,6 @@ struct DisplayCardPreview: View {
             DashboardLayout.VisibleCard(
                 slot: slot,
                 width: widths[slot] ?? .full,
-                // `AnyView` here is fine: the preview never actually
-                // renders this view. It exists only so the
-                // `VisibleCard` shape lines up with what
-                // `DashboardLayout.rows(from:)` expects.
-                view: AnyView(EmptyView()),
             )
         }
         return DashboardLayout.rows(from: cards)

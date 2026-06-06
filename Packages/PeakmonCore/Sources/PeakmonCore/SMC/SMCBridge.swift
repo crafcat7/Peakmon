@@ -342,25 +342,6 @@ public final class SMCBridge: @unchecked Sendable {
         "spf0": (0, true),
     ]
 
-    // MARK: - Diagnostics
-
-    /// One-shot probe of a curated set of power-related keys; emits
-    /// `(key, type, value-or-error)` rows ordered as input. Used by
-    /// SystemPowerCollector to write a diagnostic dump on first
-    /// launch so users on unfamiliar hardware can mail us the
-    /// concrete SMC capabilities of their machine.
-    public func probe(_ keys: [SMCKey]) -> [(SMCKey, String, Result<Double, Error>)] {
-        keys.map { key in
-            do {
-                let info = try info(key)
-                let value = try readDouble(key)
-                return (key, info.typeString, .success(value))
-            } catch {
-                return (key, "—", .failure(error))
-            }
-        }
-    }
-
     // MARK: - Private
 
     private enum Command {

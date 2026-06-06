@@ -83,7 +83,7 @@ struct DashboardMemoryCard: View {
     private var summary: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(formatBytesHeadline(used))
+                Text(DashboardFormatting.bytesHeadline(used))
                     .font(.system(size: 32, weight: .semibold, design: .rounded).monospacedDigit())
                     .contentTransition(.numericText(value: used))
                     .animation(.smooth, value: used)
@@ -110,10 +110,10 @@ struct DashboardMemoryCard: View {
                 .padding(.top, 4)
 
             HStack(spacing: 14) {
-                metricChip(label: "wired", value: wired, color: .indigo)
-                metricChip(label: "compressed", value: compressed, color: .purple)
+                MetricChipView(label: "wired", value: DashboardFormatting.bytesShort(wired), color: .indigo)
+                MetricChipView(label: "compressed", value: DashboardFormatting.bytesShort(compressed), color: .purple)
                 if swap > 0 {
-                    metricChip(label: "swap", value: swap, color: .orange)
+                    MetricChipView(label: "swap", value: DashboardFormatting.bytesShort(swap), color: .orange)
                 }
             }
         }
@@ -138,17 +138,6 @@ struct DashboardMemoryCard: View {
                 Rectangle().fill(tint.opacity(0.6)).frame(width: otherW)
             }
             .clipShape(.capsule)
-        }
-    }
-
-    private func metricChip(label: String, value: Double, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(formatBytesShort(value))
-                .font(.caption.monospacedDigit().weight(.medium))
         }
     }
 
@@ -205,7 +194,7 @@ struct DashboardMemoryCard: View {
             Text(label)
                 .font(.caption.weight(.medium))
                 .frame(width: 110, alignment: .leading)
-            Text(formatBytesShort(value))
+            Text(DashboardFormatting.bytesShort(value))
                 .font(.caption.monospacedDigit())
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -235,7 +224,7 @@ struct DashboardMemoryCard: View {
                 Text("Swap")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(swap > 0 ? formatBytesShort(swap) : "Idle")
+                Text(swap > 0 ? DashboardFormatting.bytesShort(swap) : "Idle")
                     .font(.callout.monospacedDigit().weight(.medium))
                     .foregroundStyle(swap > 0 ? .orange : .secondary)
             }
@@ -248,26 +237,5 @@ struct DashboardMemoryCard: View {
         case 4, 8: "exclamationmark.octagon.fill"
         default: "checkmark.circle.fill"
         }
-    }
-
-    // MARK: - Formatters
-
-    /// Single-decimal GB above 1 GB, MB integers below. Matches
-    /// Activity Monitor's display logic.
-    private func formatBytesHeadline(_ bytes: Double) -> String {
-        let gb = bytes / 1_073_741_824
-        if gb >= 1 { return String(format: "%.1f GB", gb) }
-        let mb = bytes / 1_048_576
-        return String(format: "%.0f MB", mb)
-    }
-
-    /// Compact two-letter suffix for chip and breakdown rows
-    /// where horizontal space is tight.
-    private func formatBytesShort(_ bytes: Double) -> String {
-        let gb = bytes / 1_073_741_824
-        if gb >= 10 { return String(format: "%.0f GB", gb) }
-        if gb >= 1 { return String(format: "%.1f GB", gb) }
-        let mb = bytes / 1_048_576
-        return String(format: "%.0f MB", mb)
     }
 }

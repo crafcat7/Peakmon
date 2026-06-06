@@ -70,18 +70,21 @@ public final class GPUCollector: MetricCollector {
 
     public func collect() async throws -> [MetricSample] {
         guard let stats = Self.readBestPerformanceStatistics() else {
-            // No accelerator surfaced statistics this tick — happens on
-            // some VMs and during the very first second after boot.
-            // Returning [] (instead of throwing) keeps the scheduler
-            // ticking quietly until the kext is ready.
             return []
         }
         let now = Date.now
         let device = Self.percent(stats["Device Utilization %"])
+        let memInUse = Self.bytes(stats["In use system memory"])
 
-        return [
+        var samples: [MetricSample] = [
             MetricSample(kind: .gpuUtilization, unit: .percent, value: device, timestamp: now),
         ]
+        if let memInUse, memInUse > 0 {
+            samples.append(
+                MetricSample(kind: .gpuMemoryInUse, unit: .bytes, value: memInUse, timestamp: now),
+            )
+        }
+        return samples
     }
 
     // MARK: - Private
@@ -131,6 +134,16 @@ public final class GPUCollector: MetricCollector {
         if let double = raw as? Double { return double }
         if let number = raw as? NSNumber { return number.doubleValue }
         return 0
+    }
+
+    /// Coerces a PerformanceStatistics value into a byte count.
+    /// Returns `nil` when the key is absent.
+    private static func bytes(_ raw: Any?) -> Double? {
+        if let int = raw as? Int { return Double(int) }
+        if let double = raw as? Double { return double }
+        if let number = raw as? NSNumber { return number.doubleValue }
+        if let uint64 = raw as? UInt64 { return Double(uint64) }
+        return nil
     }
 
     /// Reads a string-typed IORegistry property, handling the common

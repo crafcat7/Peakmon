@@ -91,22 +91,9 @@ enum ChartSeries: String, CaseIterable, Identifiable, Hashable {
     }
 
     /// Hex string for `defaultTint`, used by reset detection in the
-    /// settings UI. Keep this in sync with `defaultTint`.
-    var defaultHex: String {
-        switch self {
-        case .cpuTotal: "#AF52DE"
-        case .cpuUser: "#007AFF"
-        case .cpuSystem: "#FF9500"
-        case .diskRead: "#5AC8FA"
-        case .diskWrite: "#FF2D55"
-        case .netIn: "#34C759"
-        case .netOut: "#5856D6"
-        case .gpuDevice: "#5856D6"
-        case .powerCPU: "#007AFF"
-        case .powerGPU: "#5856D6"
-        case .powerDRAM: "#5AC8FA"
-        }
-    }
+    /// settings UI. Derived from `defaultTint` so the two cannot
+    /// drift out of sync.
+    var defaultHex: String { defaultTint.hexString }
 
     /// `@AppStorage` key for the on/off boolean.
     var storageKey: String { "chart.series.\(rawValue)" }

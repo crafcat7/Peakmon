@@ -61,6 +61,13 @@ public final class MetricsStore {
         rings[kind]?.last
     }
 
+    /// `true` when at least one sample has been ingested for `kind`.
+    /// O(1) — avoids materialising the full history array that
+    /// `history(for:).isEmpty` would create.
+    public func hasHistory(for kind: MetricKind) -> Bool {
+        (rings[kind]?.count ?? 0) > 0
+    }
+
     /// Most recent numeric value for `kind`, or `fallback` if none.
     ///
     /// Convenience wrapper used throughout the dashboard and menu-bar

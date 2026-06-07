@@ -33,7 +33,7 @@ struct DashboardDiskCard: View {
             tint: tint,
             headline: { headlineRow },
             detail: { capacityDetail },
-            footer: { rateFooter },
+            footer: { EmptyView() },
         )
     }
 
@@ -90,26 +90,33 @@ struct DashboardDiskCard: View {
     /// CPU / Memory cards' height. Reads the boot volume via
     /// `.diskUsed` / `.diskTotal` — the volume users mean by "disk".
     private var capacityDetail: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Text("Boot volume")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Text("\(DashboardFormatting.bytesShort(diskUsed)) of \(DashboardFormatting.bytesShort(diskTotal))")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Text("Boot volume")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text("\(DashboardFormatting.bytesShort(diskUsed)) of \(DashboardFormatting.bytesShort(diskTotal))")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                usageBar
+                    .frame(height: 8)
+
+                HStack(spacing: 14) {
+                    MetricChipView(label: "used", value: DashboardFormatting.bytesShort(diskUsed), color: usageTint(ratio))
+                    MetricChipView(label: "free", value: DashboardFormatting.bytesShort(max(diskTotal - diskUsed, 0)), color: .secondary)
+                    Spacer()
+                    Text(String(format: "%.0f%%", ratio * 100))
+                        .font(.callout.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(usageTint(ratio))
+                }
             }
 
-            usageBar
-                .frame(height: 8)
-
-            HStack(spacing: 14) {
-                capacityChip(label: "used", value: diskUsed, color: usageTint(ratio))
-                capacityChip(label: "free", value: max(diskTotal - diskUsed, 0), color: .secondary)
-                Spacer()
-                Text(String(format: "%.0f%%", ratio * 100))
-                    .font(.callout.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(usageTint(ratio))
+            HStack(spacing: 12) {
+                sparkline(title: "Read", value: DashboardFormatting.rateShort(read), color: .blue, samples: store.history(for: .diskReadRate))
+                sparkline(title: "Write", value: DashboardFormatting.rateShort(write), color: .orange, samples: store.history(for: .diskWriteRate))
             }
         }
     }
@@ -128,39 +135,28 @@ struct DashboardDiskCard: View {
         return .red
     }
 
-    private func capacityChip(label: String, value: Double, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(DashboardFormatting.bytesShort(value))
-                .font(.caption.monospacedDigit().weight(.medium))
-        }
-    }
-
-    // MARK: - Footer
-
-    private var rateFooter: some View {
-        HStack(spacing: 24) {
-            footerSlot(title: "Read", value: read, arrow: "arrow.down", color: .blue)
-            footerSlot(title: "Write", value: write, arrow: "arrow.up", color: .orange)
-            Spacer()
-        }
-    }
-
-    private func footerSlot(title: String, value: Double, arrow: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 4) {
-                Image(systemName: arrow)
-                    .font(.caption2.weight(.semibold))
+    private func sparkline(title: String, value: String, color: Color, samples: [MetricSample]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(value)
+                    .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(color)
-                Text(DashboardFormatting.rateShort(value))
-                    .font(.callout.monospacedDigit().weight(.medium))
             }
+            MetricSparklineView(
+                samples: samples,
+                style: SparklineStyle(
+                    color: color,
+                    fillOpacity: 0.2,
+                    lineWidth: 1.4,
+                    yMin: 0,
+                    yMax: nil,
+                ),
+            )
+            .frame(height: 40)
         }
     }
 }

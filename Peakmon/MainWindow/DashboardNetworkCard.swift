@@ -30,8 +30,8 @@ struct DashboardNetworkCard: View {
             systemImage: "network",
             tint: tint,
             headline: { headlineRow },
-            detail: { throughputDetail },
-            footer: { rateFooter },
+            detail: { sparklineDetail },
+            footer: { EmptyView() },
         )
     }
 
@@ -84,60 +84,49 @@ struct DashboardNetworkCard: View {
 
     // MARK: - Detail
 
-    /// Throughput recap fills the detail slot: the headline numbers
-    /// as discrete rate rows with arrows, so the card matches its
-    /// row-mate (Disk) in height.
-    private var throughputDetail: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Live throughput")
-                .font(.subheadline.weight(.semibold))
-
-            VStack(spacing: 6) {
-                throughputRow(label: "Inbound", value: netIn, color: .green, arrow: "arrow.down")
-                throughputRow(label: "Outbound", value: netOut, color: .pink, arrow: "arrow.up")
-            }
+    /// Dual sparkline showing inbound and outbound rates
+    /// separately, providing more granular trend visibility
+    /// than the combined headline sparkline.
+    private var sparklineDetail: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            miniSeries(
+                title: "Download",
+                value: DashboardFormatting.rateShort(netIn),
+                color: .green,
+                samples: store.history(for: .netInRate),
+            )
+            miniSeries(
+                title: "Upload",
+                value: DashboardFormatting.rateShort(netOut),
+                color: .pink,
+                samples: store.history(for: .netOutRate),
+            )
         }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private func throughputRow(label: String, value: Double, color: Color, arrow: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: arrow)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(color)
-                .frame(width: 14)
-            Text(label)
-                .font(.caption.weight(.medium))
-                .frame(width: 80, alignment: .leading)
-            Text(DashboardFormatting.rateShort(value))
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(value > 1024 ? .primary : .secondary)
-            Spacer()
-        }
-    }
-
-    // MARK: - Footer
-
-    private var rateFooter: some View {
-        HStack(spacing: 24) {
-            footerSlot(title: "In", value: netIn, arrow: "arrow.down", color: .green)
-            footerSlot(title: "Out", value: netOut, arrow: "arrow.up", color: .pink)
-            Spacer()
-        }
-    }
-
-    private func footerSlot(title: String, value: Double, arrow: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 4) {
-                Image(systemName: arrow)
-                    .font(.caption2.weight(.semibold))
+    private func miniSeries(title: String, value: String, color: Color, samples: [MetricSample]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(value)
+                    .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(color)
-                Text(DashboardFormatting.rateShort(value))
-                    .font(.callout.monospacedDigit().weight(.medium))
             }
+            MetricSparklineView(
+                samples: samples,
+                style: SparklineStyle(
+                    color: color,
+                    fillOpacity: 0.2,
+                    lineWidth: 1.4,
+                    yMin: 0,
+                    yMax: nil,
+                ),
+            )
+            .frame(height: 40)
         }
     }
-
 }

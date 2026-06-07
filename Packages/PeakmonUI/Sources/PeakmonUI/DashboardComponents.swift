@@ -59,15 +59,28 @@ public struct MetricChipView: View {
 
 /// Single stat block in a card footer: title label above a
 /// monospaced value. Used by GPU, Power, Disk, Network cards.
+/// Optionally prefixed with an SF Symbol arrow for directional
+/// indicators (e.g. network in/out, disk read/write).
 public struct FooterStatView: View {
     let title: String
     let value: String
     let color: Color
+    let arrow: String?
 
+    /// Standard footer stat (no arrow).
     public init(title: String, value: String, color: Color) {
         self.title = title
         self.value = value
         self.color = color
+        self.arrow = nil
+    }
+
+    /// Footer stat with an SF Symbol arrow prefix.
+    public init(title: String, value: String, color: Color, arrow: String) {
+        self.title = title
+        self.value = value
+        self.color = color
+        self.arrow = arrow
     }
 
     public var body: some View {
@@ -75,9 +88,16 @@ public struct FooterStatView: View {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(value)
-                .font(.callout.monospacedDigit().weight(.medium))
-                .foregroundStyle(color)
+            HStack(spacing: 4) {
+                if let arrow {
+                    Image(systemName: arrow)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(color)
+                }
+                Text(value)
+                    .font(.callout.monospacedDigit().weight(.medium))
+                    .foregroundStyle(color)
+            }
         }
     }
 }

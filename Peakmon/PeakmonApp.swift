@@ -586,6 +586,15 @@ private final class WallpaperLuminance {
         ) { [weak self] _ in
             self?.invalidate()
         }
+
+        // 4. On first launch, the probe status item's button may
+        //    not have resolved its appearance yet. Force a
+        //    re-evaluation after the first run loop cycle so the
+        //    button has time to join the menu bar and inherit the
+        //    correct appearance.
+        DispatchQueue.main.asyncAfter(deadline: .now()) {[weak self] in
+            self?.invalidate()
+        }
     }
 
     /// Returns `true` if the menu bar text should be drawn in white.

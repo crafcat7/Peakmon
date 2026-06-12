@@ -159,7 +159,6 @@ struct DashboardView: View {
                         )
                 }
             }
-            .fixedSize(horizontal: false, vertical: true)
         }
     }
 

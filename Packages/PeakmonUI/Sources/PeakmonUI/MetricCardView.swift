@@ -71,6 +71,7 @@ extension MetricCardView {
             content
         }
         .padding(12)
+        .frame(minHeight: 160)
         .background(.background.secondary, in: .rect(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)

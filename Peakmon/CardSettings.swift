@@ -126,9 +126,14 @@ struct CardSettingsScope<Content: View>: View {
 
     @CardOrderStorage private var cardOrder: [CardTintSlot]
 
+    private let visibilityOverrides: [CardTintSlot: Bool]
     @ViewBuilder let content: () -> Content
 
-    init(@ViewBuilder content: @escaping () -> Content) {
+    init(
+        visibilityOverrides: [CardTintSlot: Bool] = [:],
+        @ViewBuilder content: @escaping () -> Content,
+    ) {
+        self.visibilityOverrides = visibilityOverrides
         self.content = content
     }
 
@@ -139,7 +144,10 @@ struct CardSettingsScope<Content: View>: View {
     private func makeSettings() -> CardSettings {
         CardSettings(
             visibility: { slot in
-                switch slot {
+                if let override = visibilityOverrides[slot] {
+                    return override
+                }
+                return switch slot {
                 case .cpu: showCPU
                 case .memory: showMemory
                 case .battery: showBattery
@@ -175,7 +183,10 @@ struct CardSettingsScope<Content: View>: View {
                 }
             },
             visibilityBinding: { slot in
-                switch slot {
+                if let override = visibilityOverrides[slot] {
+                    return .constant(override)
+                }
+                return switch slot {
                 case .cpu: $showCPU
                 case .memory: $showMemory
                 case .battery: $showBattery

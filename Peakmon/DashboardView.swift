@@ -10,12 +10,16 @@
 //  pure shell.
 //
 
+import AppKit
 import PeakmonCore
 import PeakmonUI
 import SwiftUI
 
 struct DashboardView: View {
+    var visibilityOverride: Bool? = nil
+
     @Environment(MetricsStore.self) private var store
+    @Environment(MetricsRuntime.self) private var runtime
     @Environment(\.cardSettings) private var cardSettings
     @Environment(\.openWindow) private var openWindow
 
@@ -37,8 +41,12 @@ struct DashboardView: View {
     static let popoverWidth: CGFloat = 420
 
     var body: some View {
+        let isContentVisible = visibilityOverride ?? isVisible
+        let needsProcesses = isContentVisible && cardSettings.visibility(.processes)
+        let collectorDemandSlots = isContentVisible ? configuredDemandSlots : []
+
         Group {
-            if isVisible {
+            if isContentVisible {
                 visibleContent
             } else {
                 // Fixed-size placeholder so the popover keeps the same
@@ -48,8 +56,25 @@ struct DashboardView: View {
                 Color.clear.frame(width: Self.popoverWidth, height: 1)
             }
         }
-        .onAppear { isVisible = true }
-        .onDisappear { isVisible = false }
+        .background {
+            if visibilityOverride == nil {
+                PopoverWindowVisibilityProbe(isVisible: $isVisible)
+            }
+        }
+        .onDisappear {
+            isVisible = false
+            runtime.popoverVisible = false
+            runtime.popoverNeedsProcesses = false
+        }
+        .onChange(of: isContentVisible, initial: true) { _, value in
+            runtime.popoverVisible = value
+        }
+        .onChange(of: collectorDemandSlots, initial: true) { _, value in
+            runtime.updatePopoverConfiguredSlots(value)
+        }
+        .onChange(of: needsProcesses, initial: true) { _, value in
+            runtime.popoverNeedsProcesses = value
+        }
     }
 
     /// Real popover content. Lives in its own computed property so the
@@ -70,6 +95,10 @@ struct DashboardView: View {
         }
         .padding(14)
         .frame(width: Self.popoverWidth)
+        .transaction { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: visibilityKey)
     }
 
@@ -87,6 +116,14 @@ struct DashboardView: View {
             ))
         }
         return cards
+    }
+
+    /// Demand is based on the user's configured cards, not the
+    /// data-filtered `visibleCards`: Power/Battery must be allowed
+    /// to collect their first sample before `hasData(_:)` can decide
+    /// whether those cards are actually renderable on this machine.
+    private var configuredDemandSlots: [CardTintSlot] {
+        cardSettings.order().filter { cardSettings.visibility($0) }
     }
 
     /// Extra per-slot gating beyond the user's visibility flag.
@@ -238,10 +275,88 @@ struct DashboardView: View {
     }
 }
 
+private struct PopoverWindowVisibilityProbe: NSViewRepresentable {
+    @Binding var isVisible: Bool
+
+    func makeNSView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.onChange = { isVisible = $0 }
+        return view
+    }
+
+    func updateNSView(_ nsView: ProbeView, context: Context) {
+        nsView.onChange = { isVisible = $0 }
+        nsView.scheduleReport()
+    }
+
+    final class ProbeView: NSView {
+        var onChange: ((Bool) -> Void)?
+        private var observers: [NSObjectProtocol] = []
+        private weak var observedWindow: NSWindow?
+        private var lastReported: Bool?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            installObservers()
+            scheduleReport()
+        }
+
+        deinit {
+            let center = NotificationCenter.default
+            observers.forEach(center.removeObserver)
+        }
+
+        func scheduleReport() {
+            DispatchQueue.main.async { [weak self] in
+                self?.report()
+            }
+        }
+
+        private func installObservers() {
+            guard observedWindow !== window else { return }
+
+            let center = NotificationCenter.default
+            observers.forEach(center.removeObserver)
+            observers.removeAll()
+            observedWindow = window
+
+            guard let window else { return }
+            let names: [Notification.Name] = [
+                NSWindow.didBecomeKeyNotification,
+                NSWindow.didResignKeyNotification,
+                NSWindow.didChangeOcclusionStateNotification,
+                NSWindow.willCloseNotification,
+            ]
+            for name in names {
+                observers.append(center.addObserver(
+                    forName: name,
+                    object: window,
+                    queue: .main,
+                ) { [weak self] _ in
+                    self?.scheduleReport()
+                })
+            }
+        }
+
+        private func report() {
+            let visible: Bool
+            if let window {
+                visible = window.isVisible && window.occlusionState.contains(.visible)
+            } else {
+                visible = false
+            }
+            guard visible != lastReported else { return }
+            lastReported = visible
+            onChange?(visible)
+        }
+    }
+}
+
 #Preview {
     CardSettingsScope {
         DashboardView()
-    }
-    .environment(MetricsStore())
-    .environment(ProcessesStore())
+}
+.environment(MetricsStore())
+.environment(ProcessesStore())
+.environment(MetricsRuntime())
 }

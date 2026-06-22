@@ -99,7 +99,7 @@ struct MainWindowView: View {
     @ViewBuilder
     private var detailSurface: some View {
         // Pad down past the pill so the surface content doesn't slide
-        // under it: 12 (inset) + ~32 (pill) + 16 (gap) = 60.
+        // under it while avoiding a tall empty band above the dashboard.
         Group {
             switch selection {
             case .dashboard:
@@ -110,7 +110,7 @@ struct MainWindowView: View {
                     .transition(.opacity)
             }
         }
-        .padding(.top, 60)
+        .padding(.top, 50)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: tabOf(selection))
     }
 
@@ -128,4 +128,5 @@ struct MainWindowView: View {
     MainWindowView(selection: .constant(.dashboard))
         .environment(MetricsStore())
         .environment(ProcessesStore())
+        .environment(MetricsRuntime())
 }

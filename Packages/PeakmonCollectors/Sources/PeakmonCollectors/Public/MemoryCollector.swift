@@ -10,8 +10,8 @@
 //  `sysctl(CTL_VM, VM_SWAPUSAGE)` which returns an `xsw_usage`
 //  struct populated by the kernel. The discrete VM-pressure level
 //  (1 = normal, 2 = warning, 4 = urgent, 8 = critical) is read from
-//  the `kern.memorystatus_vm_pressure_level` sysctl so the UI can
-//  recolour to match the same green/yellow/red bands Activity
+//  the `kern.memorystatus_vm_pressure_level` sysctl so dashboard
+//  surfaces can match the same green/yellow/red bands Activity
 //  Monitor's pressure graph uses.
 //
 
@@ -122,9 +122,8 @@ public final class MemoryCollector: MetricCollector {
     ///
     /// These are the buckets Activity Monitor's pressure graph maps
     /// to green / yellow / red bands, so surfacing the raw value lets
-    /// the UI tint its menu-bar segment in lockstep with what the user
-    /// sees in Activity Monitor instead of guessing from an
-    /// occupancy percentage.
+    /// dashboard UI match what the user sees in Activity Monitor
+    /// instead of guessing from an occupancy percentage.
     ///
     /// Returns `nil` if the sysctl is unavailable (none of the
     /// supported macOS versions actually decline it, but stay

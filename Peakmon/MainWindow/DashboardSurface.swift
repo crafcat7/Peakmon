@@ -17,6 +17,8 @@ import SwiftUI
 
 struct DashboardSurface: View {
     @Environment(MetricsStore.self) private var store
+    @Environment(MetricsRuntime.self) private var runtime
+    @Environment(\.cardSettings) private var cardSettings
     /// Visibility gate: when the main window isn't key, is
     /// minimised, or is fully occluded, swap the expensive subtree
     /// for an empty placeholder so SwiftUI stops re-evaluating six
@@ -25,7 +27,17 @@ struct DashboardSurface: View {
     /// snapshot since the scheduler kept running.
     @State private var visibility = MainWindowVisibility.shared
 
+    private enum Layout {
+        static let columnSpacing: CGFloat = 16
+        static let rowSpacing: CGFloat = 14
+        static let horizontalPadding: CGFloat = 24
+        static let topPadding: CGFloat = 12
+        static let bottomPadding: CGFloat = 40
+    }
+
     var body: some View {
+        let needsProcesses = visibility.isMainWindowActive && cardSettings.visibility(.processes)
+
         Group {
             if visibility.isMainWindowActive {
                 activeContent
@@ -35,6 +47,16 @@ struct DashboardSurface: View {
                 // the menu bar + popover need.
                 Color.clear
             }
+        }
+        .onDisappear {
+            runtime.mainDashboardVisible = false
+            runtime.mainDashboardNeedsProcesses = false
+        }
+        .onChange(of: visibility.isMainWindowActive, initial: true) { _, value in
+            runtime.mainDashboardVisible = value
+        }
+        .onChange(of: needsProcesses, initial: true) { _, value in
+            runtime.mainDashboardNeedsProcesses = value
         }
     }
 
@@ -49,33 +71,59 @@ struct DashboardSurface: View {
             // dominate the main thread during scroll. Each card
             // rebuilds once on re-entry, but its data lives in the
             // shared `MetricsStore` so that's a cheap copy.
-            LazyVStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: Layout.rowSpacing) {
                 DashboardSystemBanner()
                     .frame(maxWidth: .infinity)
-                HStack(alignment: .top, spacing: 16) {
+                cardRow(height: dashboardCardMinHeight) {
                     DashboardCPUCard()
-                        .frame(maxWidth: .infinity)
+                } right: {
                     DashboardMemoryCard()
-                        .frame(maxWidth: .infinity)
                 }
-                HStack(alignment: .top, spacing: 16) {
+                cardRow(height: dashboardCardMinHeight) {
                     DashboardGPUCard()
-                        .frame(maxWidth: .infinity)
+                } right: {
                     DashboardPowerCard()
-                        .frame(maxWidth: .infinity)
                 }
-                HStack(alignment: .top, spacing: 16) {
+                cardRow(height: dashboardRateCardMinHeight) {
                     DashboardDiskCard()
-                        .frame(maxWidth: .infinity)
+                } right: {
                     DashboardNetworkCard()
+                }
+                if cardSettings.visibility(.processes) {
+                    DashboardProcessesPanel()
                         .frame(maxWidth: .infinity)
                 }
-                DashboardProcessesPanel()
-                    .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
+            .padding(.horizontal, Layout.horizontalPadding)
+            .padding(.top, Layout.topPadding)
+            .padding(.bottom, Layout.bottomPadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .transaction { transaction in
+            // Metric ticks arrive as often as every 500 ms. Letting
+            // every numeric text and sparkline change animate keeps
+            // RenderBox redrawing interpolated display lists between
+            // ticks; the dashboard is clearer and much cheaper when
+            // live values snap to the latest sample.
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
+    }
+
+    private func cardRow<Left: View, Right: View>(
+        height: CGFloat,
+        @ViewBuilder left: () -> Left,
+        @ViewBuilder right: () -> Right,
+    ) -> some View {
+        HStack(alignment: .top, spacing: Layout.columnSpacing) {
+            left()
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(height: height, alignment: .topLeading)
+                .clipped()
+            right()
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(height: height, alignment: .topLeading)
+                .clipped()
         }
     }
 }
@@ -85,4 +133,5 @@ struct DashboardSurface: View {
         .frame(width: 1000, height: 680)
         .environment(MetricsStore())
         .environment(ProcessesStore())
+        .environment(MetricsRuntime())
 }

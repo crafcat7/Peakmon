@@ -156,26 +156,23 @@ public struct MetricSparklineView: View {
         // emit two `Path`s per series straight into the display
         // list and pay zero diff cost.
         //
-        // `resolvedDomains()` is hoisted out of the Canvas draw
+        // `resolvedYDomain()` is hoisted out of the Canvas draw
         // closure so it runs once per body evaluation rather than
         // on every CGContext pass (which can repeat during layer
         // compositing).
-        let (xDomain, yDomain) = resolvedDomains()
+        let yDomain = resolvedYDomain()
         Canvas(rendersAsynchronously: false) { context, size in
             // Treat zero-width / zero-height frames as nothing
             // to draw. Saves a divide-by-zero check later and
             // is what Charts does too.
             guard size.width > 0, size.height > 0 else { return }
-            guard xDomain.upperBound > xDomain.lowerBound,
-                  yDomain.upperBound > yDomain.lowerBound
-            else { return }
+            guard yDomain.upperBound > yDomain.lowerBound else { return }
 
             for line in series where line.samples.count >= 2 {
                 drawSeries(
                     line,
                     in: &context,
                     size: size,
-                    xDomain: xDomain,
                     yDomain: yDomain,
                 )
             }
@@ -204,14 +201,16 @@ public struct MetricSparklineView: View {
         _ line: SparklineSeries,
         in context: inout GraphicsContext,
         size: CGSize,
-        xDomain: ClosedRange<Date>,
         yDomain: ClosedRange<Double>,
     ) {
-        let points = line.samples.map { sample -> CGPoint in
+        let strokeInset = min(max(lineWidth * 0.5, 1), min(size.width, size.height) * 0.25)
+        let plotRect = CGRect(origin: .zero, size: size).insetBy(dx: strokeInset, dy: strokeInset)
+        let points = line.samples.enumerated().map { index, sample -> CGPoint in
             projected(
                 sample: sample,
-                size: size,
-                xDomain: xDomain,
+                index: index,
+                count: line.samples.count,
+                plotRect: plotRect,
                 yDomain: yDomain,
             )
         }
@@ -221,11 +220,11 @@ public struct MetricSparklineView: View {
         // anchor points along the baseline so the gradient
         // sweep clips cleanly to the row.
         var areaPath = Path()
-        areaPath.move(to: CGPoint(x: points[0].x, y: size.height))
+        areaPath.move(to: CGPoint(x: points[0].x, y: plotRect.maxY))
         for p in points {
             areaPath.addLine(to: p)
         }
-        areaPath.addLine(to: CGPoint(x: points.last!.x, y: size.height))
+        areaPath.addLine(to: CGPoint(x: points.last!.x, y: plotRect.maxY))
         areaPath.closeSubpath()
 
         let gradient = Gradient(colors: [
@@ -236,8 +235,8 @@ public struct MetricSparklineView: View {
             areaPath,
             with: .linearGradient(
                 gradient,
-                startPoint: CGPoint(x: size.width / 2, y: 0),
-                endPoint: CGPoint(x: size.width / 2, y: size.height),
+                startPoint: CGPoint(x: plotRect.midX, y: plotRect.minY),
+                endPoint: CGPoint(x: plotRect.midX, y: plotRect.maxY),
             ),
         )
 
@@ -255,36 +254,37 @@ public struct MetricSparklineView: View {
     }
 
     /// Map one `MetricSample` to the canvas's pixel space.
+    /// The x-axis is sample-index based rather than timestamp
+    /// based. Adaptive cadence and hidden-window throttling can
+    /// leave large timestamp gaps; using them directly stretches
+    /// those gaps into long diagonals and bunched points, which
+    /// reads oddly in a compact sparkline.
     /// We invert the y-axis (lower values go to higher pixel
     /// rows) so larger metrics render up, matching how every
     /// other dashboard renders these.
     private func projected(
         sample: MetricSample,
-        size: CGSize,
-        xDomain: ClosedRange<Date>,
+        index: Int,
+        count: Int,
+        plotRect: CGRect,
         yDomain: ClosedRange<Double>,
     ) -> CGPoint {
-        let xSpan = xDomain.upperBound.timeIntervalSince(xDomain.lowerBound)
-        let xFrac = sample.timestamp.timeIntervalSince(xDomain.lowerBound) / max(xSpan, 0.001)
-        let x = CGFloat(min(max(xFrac, 0), 1)) * size.width
+        let xFrac = count <= 1 ? 1 : Double(index) / Double(count - 1)
+        let x = plotRect.minX + CGFloat(min(max(xFrac, 0), 1)) * plotRect.width
 
         let ySpan = yDomain.upperBound - yDomain.lowerBound
         let yFrac = (sample.value - yDomain.lowerBound) / max(ySpan, 0.001)
-        let y = size.height - CGFloat(min(max(yFrac, 0), 1)) * size.height
+        let y = plotRect.maxY - CGFloat(min(max(yFrac, 0), 1)) * plotRect.height
 
         return CGPoint(x: x, y: y)
     }
 
     // MARK: - Domain resolution
 
-    /// Returns `(xDomain, yDomain)` exactly as the Charts
-    /// version did: x spans the union of all sample
-    /// timestamps; y spans `[yMin ?? observedMin,
-    /// yMax ?? observedMax * 1.15]` with a guard so the
-    /// range is always non-empty.
-    private func resolvedDomains() -> (x: ClosedRange<Date>, y: ClosedRange<Double>) {
-        var firstTS: Date?
-        var lastTS: Date?
+    /// Returns the same y-domain policy as the Charts version:
+    /// `[yMin ?? observedMin, yMax ?? observedMax * 1.15]`
+    /// with a guard so the range is always non-empty.
+    private func resolvedYDomain() -> ClosedRange<Double> {
         var minV: Double = .greatestFiniteMagnitude
         var maxV: Double = -.greatestFiniteMagnitude
 
@@ -294,20 +294,10 @@ public struct MetricSparklineView: View {
         // can't always elide.
         for line in series {
             for s in line.samples {
-                if firstTS == nil || s.timestamp < firstTS! { firstTS = s.timestamp }
-                if lastTS == nil || s.timestamp > lastTS! { lastTS = s.timestamp }
                 if s.value < minV { minV = s.value }
                 if s.value > maxV { maxV = s.value }
             }
         }
-
-        let xDomain: ClosedRange<Date> = {
-            guard let lo = firstTS, let hi = lastTS, lo < hi else {
-                let now = Date.now
-                return now.addingTimeInterval(-60) ... now
-            }
-            return lo ... hi
-        }()
 
         let yLo = yMin ?? (minV == .greatestFiniteMagnitude ? 0 : minV)
         let yHiBase: Double = {
@@ -316,6 +306,6 @@ public struct MetricSparklineView: View {
             return maxV * 1.15
         }()
         let yHi = max(yHiBase, yLo + 1)
-        return (xDomain, yLo ... yHi)
+        return yLo ... yHi
     }
 }

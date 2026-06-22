@@ -60,7 +60,7 @@ struct DashboardGPUCard: View {
             summary
                 .frame(maxWidth: .infinity, alignment: .leading)
             trendChart
-                .frame(width: 200, height: 110)
+                .frame(width: 200, height: dashboardHeadlineTrendChartHeight)
         }
     }
 
@@ -71,8 +71,6 @@ struct DashboardGPUCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(String(format: "%.1f", util))
                     .font(.system(size: 36, weight: .semibold, design: .rounded).monospacedDigit())
-                    .contentTransition(.numericText(value: util))
-                    .animation(.smooth, value: util)
                 Text("%")
                     .font(.title3.weight(.medium))
                     .foregroundStyle(.secondary)
@@ -101,7 +99,7 @@ struct DashboardGPUCard: View {
 
     private var trendChart: some View {
         MetricSparklineView(
-            samples: store.history(for: .gpuUtilization),
+            samples: store.historySuffix(for: .gpuUtilization, limit: dashboardSparklineSampleLimit),
             style: SparklineStyle(
                 color: tint,
                 fillOpacity: 0.18,
@@ -115,7 +113,7 @@ struct DashboardGPUCard: View {
     // MARK: - Expanded
 
     private var expandedDetail: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             thermalSection
             if hasGPUSubRails {
                 gpuSubRails
@@ -147,7 +145,7 @@ struct DashboardGPUCard: View {
                 }
             }
             MetricSparklineView(
-                samples: store.history(for: .thermalGPU),
+                samples: store.historySuffix(for: .thermalGPU, limit: dashboardSparklineSampleLimit),
                 style: SparklineStyle(
                     color: .orange,
                     fillOpacity: 0.18,
@@ -156,7 +154,7 @@ struct DashboardGPUCard: View {
                     yMax: nil,
                 ),
             )
-            .frame(height: 80)
+            .frame(height: dashboardThermalSparklineHeight)
         }
     }
 

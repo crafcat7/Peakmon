@@ -89,6 +89,14 @@ struct GeneralPage: View {
                 }
             }
 
+            SettingsSection("Shortcuts") {
+                HStack(spacing: 10) {
+                    Label("Show Dashboard", systemImage: "macwindow")
+                    Spacer()
+                    DashboardHotKeyRecorder()
+                }
+            }
+
             SettingsSection("Login") {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 10) {
@@ -438,4 +446,3 @@ private struct MetricSectionConfig {
 //
 // See `MenuBarPreview.swift` for `MenuBarLivePreview` and
 // `MenuBarSegmentRow`.
-

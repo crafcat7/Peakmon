@@ -7,9 +7,9 @@
 //
 //    Top row  — headline % + USI bar + chips (left), trend
 //               sparkline (right).
-//    Per-core — `PerCoreCPUReader` bar chart (2 Hz internal
-//               sampling, 4-sample rolling window ≈ 2 s smoothing,
-//               published at 1 Hz), split into E-core / P-core
+//    Per-core — `PerCoreCPUReader` bar chart (first refresh at 2 s,
+//               then 0.25 Hz; 2-sample rolling window ≈ 8 s steady
+//               smoothing), split into E-core / P-core
 //               bands on Apple silicon (perf-level via sysctl).
 //    Footer   — load average (1/5/15 min) + CPU temperature.
 //
@@ -33,6 +33,7 @@ struct DashboardCPUCard: View {
 
     @State private var perCoreReader = PerCoreCPUReader()
     @State private var perCoreUsage: [Double] = []
+    @State private var loadAverage = LoadAverageReader.current()
 
     private var tint: Color { cardSettings.tint(.cpu) }
 
@@ -54,9 +55,20 @@ struct DashboardCPUCard: View {
             detail: { perCoreSection },
             footer: { bottomRow },
         )
-        // Per-core sampler driven by a `TimelineView`, pulled into
-        // a modifier to keep the body focused on layout.
+        // Per-core sampler lives in a modifier to keep the body
+        // focused on layout and to isolate its async refresh loop.
         .modifier(PerCoreSamplerModifier(reader: perCoreReader, usage: $perCoreUsage))
+        .task {
+            loadAverage = LoadAverageReader.current()
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(30))
+                } catch {
+                    return
+                }
+                loadAverage = LoadAverageReader.current()
+            }
+        }
     }
 
     private var headlineRow: some View {
@@ -64,7 +76,7 @@ struct DashboardCPUCard: View {
             summary
                 .frame(maxWidth: .infinity, alignment: .leading)
             trendChart
-                .frame(width: 200, height: 110)
+                .frame(width: 200, height: dashboardHeadlineTrendChartHeight)
         }
     }
 
@@ -75,8 +87,6 @@ struct DashboardCPUCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(String(format: "%.1f", total))
                     .font(.system(size: 36, weight: .semibold, design: .rounded).monospacedDigit())
-                    .contentTransition(.numericText(value: total))
-                    .animation(.smooth, value: total)
                 Text("%")
                     .font(.title3.weight(.medium))
                     .foregroundStyle(.secondary)
@@ -142,10 +152,10 @@ struct DashboardCPUCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: 70)
+                    .frame(height: dashboardPerCoreChartHeight)
             } else {
                 PerCoreBarChart(values: perCoreUsage, tint: tint, topology: perCoreReader.topology)
-                    .frame(height: 70)
+                    .frame(height: dashboardPerCoreChartHeight)
             }
         }
     }
@@ -153,35 +163,32 @@ struct DashboardCPUCard: View {
     // MARK: - Footer
 
     private var bottomRow: some View {
-        TimelineView(.periodic(from: .now, by: 2)) { _ in
-            let load = LoadAverageReader.current()
-            HStack(alignment: .top, spacing: 24) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Load average")
+        HStack(alignment: .top, spacing: 24) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Load average")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(String(
+                    format: "%.2f · %.2f · %.2f",
+                    loadAverage.oneMinute, loadAverage.fiveMinute, loadAverage.fifteenMinute,
+                ))
+                .font(.callout.monospacedDigit().weight(.medium))
+            }
+
+            Spacer()
+
+            if let cpuTemp {
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text("CPU temperature")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text(String(
-                        format: "%.2f · %.2f · %.2f",
-                        load.oneMinute, load.fiveMinute, load.fifteenMinute,
-                    ))
-                    .font(.callout.monospacedDigit().weight(.medium))
-                }
-
-                Spacer()
-
-                if let cpuTemp {
-                    VStack(alignment: .trailing, spacing: 3) {
-                        Text("CPU temperature")
+                    HStack(spacing: 4) {
+                        Image(systemName: "thermometer.medium")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 4) {
-                            Image(systemName: "thermometer.medium")
-                                .font(.caption)
-                                .foregroundStyle(DashboardFormatting.temperatureColor(cpuTemp))
-                            Text("\(Int(cpuTemp.rounded()))°C")
-                                .font(.callout.monospacedDigit().weight(.medium))
-                                .foregroundStyle(DashboardFormatting.temperatureColor(cpuTemp))
-                        }
+                            .foregroundStyle(DashboardFormatting.temperatureColor(cpuTemp))
+                        Text("\(Int(cpuTemp.rounded()))°C")
+                            .font(.callout.monospacedDigit().weight(.medium))
+                            .foregroundStyle(DashboardFormatting.temperatureColor(cpuTemp))
                     }
                 }
             }
@@ -191,9 +198,9 @@ struct DashboardCPUCard: View {
     // MARK: - Sparkline series
 
     private var sparklineSeries: [SparklineSeries] {
-        let totalHistory = store.history(for: .cpuTotal)
-        let userHistory = store.history(for: .cpuUser)
-        let systemHistory = store.history(for: .cpuSystem)
+        let totalHistory = store.historySuffix(for: .cpuTotal, limit: dashboardSparklineSampleLimit)
+        let userHistory = store.historySuffix(for: .cpuUser, limit: dashboardSparklineSampleLimit)
+        let systemHistory = store.historySuffix(for: .cpuSystem, limit: dashboardSparklineSampleLimit)
         var lines: [SparklineSeries] = []
         if cpuTotalEnabled {
             lines.append(SparklineSeries(
@@ -227,22 +234,21 @@ struct DashboardCPUCard: View {
     }
 }
 
-/// Drives the per-core reader at 2 Hz internally and publishes the
-/// rolling-window average to the UI at 1 Hz. The short ~500 ms
-/// inner window stops a single burst from filling it end-to-end —
-/// what made the naive 1 Hz single-window reader binarise to ~0 %
-/// or ~100 %. `windowSize = 4` means the published mean covers the
-/// last ~2 s; the 1 Hz outer cadence is what the user sees. 2 Hz
-/// (vs 4 Hz) halves the reader's Mach-call cost with no visible
-/// difference. Pulled into a `ViewModifier` to keep the body on
-/// layout, not timing.
+/// Drives the per-core reader at 0.25 Hz after a faster first refresh.
+/// A two-sample rolling window smooths short bursts across ~8 s, and
+/// the async task avoids `TimelineView` invalidating the CPU card on a
+/// rigid schedule when the values did not visibly change.
 private struct PerCoreSamplerModifier: ViewModifier {
     let reader: PerCoreCPUReader
     @Binding var usage: [Double]
-    /// Counts inner 500 ms ticks; publishes every second tick. The
-    /// first publish lands after 2 samples, so the user sees at
-    /// least a 1 s mean rather than one 500 ms window's worst case.
-    @State private var innerTickCount = 0
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let firstCadence: Duration = .seconds(2)
+    private static let cadence: Duration = .seconds(4)
+    private static let publishThreshold = 0.01
+    private static let easedPublishFrameGap: Duration = .milliseconds(80)
+    private static let easedPublishProgress = [0.45, 0.72, 0.90, 1.0]
 
     func body(content: Content) -> some View {
         content
@@ -250,21 +256,79 @@ private struct PerCoreSamplerModifier: ViewModifier {
                 // Prime the baseline: first `sample()` returns []
                 // (no prior snapshot); the schedule below fills the
                 // window before the first UI tick.
+                reader.reset()
                 _ = reader.sample()
             }
-            .background {
-                TimelineView(.periodic(from: .now, by: 0.5)) { context in
-                    Color.clear.onChange(of: context.date) { _, _ in
-                        // Always advance the window (keeps the mean
-                        // fresh), publish only on even ticks.
-                        reader.sample()
-                        innerTickCount &+= 1
-                        if innerTickCount % 2 == 0 {
-                            usage = reader.averagedSample()
-                        }
+            .onDisappear {
+                reader.reset()
+                usage = []
+            }
+            .task {
+                var delay = Self.firstCadence
+                while !Task.isCancelled {
+                    do {
+                        try await Task.sleep(for: delay)
+                    } catch {
+                        return
                     }
+                    guard !Task.isCancelled else { return }
+                    delay = Self.cadence
+
+                    let next = await MainActor.run {
+                        reader.sample()
+                        return reader.averagedSample()
+                    }
+                    guard !Task.isCancelled else { return }
+                    await publish(next)
                 }
             }
+    }
+
+    /// Softens the otherwise abrupt 4 s per-core update without
+    /// enabling a display-link style implicit animation. Four small
+    /// binding writes cost far less than ~30 rendered animation frames
+    /// while still reading as an ease-out change.
+    private func publish(_ next: [Double]) async {
+        let current = await MainActor.run { usage }
+        guard !Task.isCancelled, Self.shouldPublish(next, current: current) else { return }
+
+        guard !reduceMotion, !current.isEmpty, current.count == next.count else {
+            await MainActor.run {
+                if !Task.isCancelled {
+                    usage = next
+                }
+            }
+            return
+        }
+
+        for (index, progress) in Self.easedPublishProgress.enumerated() {
+            if index > 0 {
+                do {
+                    try await Task.sleep(for: Self.easedPublishFrameGap)
+                } catch {
+                    return
+                }
+            }
+            guard !Task.isCancelled else { return }
+            let frame = Self.interpolate(from: current, to: next, progress: progress)
+            await MainActor.run {
+                if !Task.isCancelled {
+                    usage = frame
+                }
+            }
+        }
+    }
+
+    private static func shouldPublish(_ next: [Double], current: [Double]) -> Bool {
+        guard !next.isEmpty else { return !current.isEmpty }
+        guard next.count == current.count else { return true }
+        return zip(next, current).contains { abs($0 - $1) >= publishThreshold }
+    }
+
+    private static func interpolate(from current: [Double], to next: [Double], progress: Double) -> [Double] {
+        zip(current, next).map { start, end in
+            start + (end - start) * progress
+        }
     }
 }
 
@@ -349,24 +413,25 @@ private struct PerCoreBarChart: View {
         let barWidth = max(2, (width - spacing * CGFloat(max(count - 1, 0))) / CGFloat(max(count, 1)))
         HStack(alignment: .bottom, spacing: spacing) {
             ForEach(Array(range), id: \.self) { index in
-                let value = index < values.count ? values[index] : 0
+                let value = clamped(index < values.count ? values[index] : 0)
+                let minimumScale = min(1, 2 / max(height, 1))
+                let fillScale = max(CGFloat(value), minimumScale)
                 ZStack(alignment: .bottom) {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(.quaternary)
                     RoundedRectangle(cornerRadius: 2)
                         .fill(barTint(for: value, isPerformance: isPerformance).gradient)
-                        .frame(height: max(2, height * CGFloat(value)))
-                        // 300 ms linear tween between the 1 Hz
-                        // published values, leaving ~700 ms of
-                        // stillness that reads as a beat. Linear,
-                        // not spring, to avoid overshoot frames
-                        // indistinguishable from a clean step here.
-                        .animation(.linear(duration: 0.3), value: value)
+                        .frame(maxHeight: .infinity)
+                        .scaleEffect(x: 1, y: fillScale, anchor: .bottom)
                 }
-                .frame(width: barWidth)
+                .frame(width: barWidth, height: height)
             }
         }
         .frame(width: width, alignment: .leading)
+    }
+
+    private func clamped(_ value: Double) -> Double {
+        max(0, min(1, value))
     }
 
     /// Bar colour for a single core. P-cores get the card's full

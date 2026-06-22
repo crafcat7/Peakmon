@@ -26,3 +26,11 @@ public protocol MetricCollector: Sendable {
     /// the error and continues polling on the next tick.
     func collect() async throws -> [MetricSample]
 }
+
+/// Optional capability for collectors whose samples are derived from
+/// deltas against a previous snapshot. Demand-gated runtimes call this
+/// before reactivating such collectors so the first visible tick seeds
+/// a fresh baseline instead of averaging across the hidden interval.
+public protocol ResettableMetricCollector: MetricCollector {
+    func reset() async
+}

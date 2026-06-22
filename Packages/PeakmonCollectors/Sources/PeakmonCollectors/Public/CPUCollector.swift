@@ -19,7 +19,7 @@ import PeakmonCore
 /// The collector keeps the previous tick snapshot inside an internal
 /// actor so concurrent calls remain safe, then computes deltas to derive
 /// percentages.
-public final class CPUCollector: MetricCollector {
+public final class CPUCollector: ResettableMetricCollector {
     public let identifier = "cpu.host"
 
     private let state = SnapshotState()
@@ -52,6 +52,10 @@ public final class CPUCollector: MetricCollector {
         ]
     }
 
+    public func reset() async {
+        await state.reset()
+    }
+
     // MARK: - Private
 
     private struct Snapshot {
@@ -67,6 +71,10 @@ public final class CPUCollector: MetricCollector {
             let old = previous
             previous = new
             return old
+        }
+
+        func reset() {
+            previous = nil
         }
     }
 

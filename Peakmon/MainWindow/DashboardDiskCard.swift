@@ -7,8 +7,9 @@
 //  No per-volume / per-process drill-down: `IOBlockStorageDriver`
 //  aggregates at the device, not the filesystem, level, and
 //  per-process I/O needs entitlements ad-hoc signing can't grant.
-//  So the card shows the aggregate R/W rate, a root-volume capacity
-//  bar, and per-rate chips — every fact the metrics tier exposes.
+//  So the card shows total R/W throughput, a single dual-line trend,
+//  and root-volume capacity — every fact the metrics tier exposes
+//  without repeating the same current-rate numbers.
 //
 
 import PeakmonCore
@@ -23,6 +24,7 @@ struct DashboardDiskCard: View {
 
     private var read: Double { store.value(for: .diskReadRate) }
     private var write: Double { store.value(for: .diskWriteRate) }
+    private var throughputTotal: Double { max(0, read + write) }
     private var diskUsed: Double { store.value(for: .diskUsed) }
     private var diskTotal: Double { store.value(for: .diskTotal) }
 
@@ -31,8 +33,9 @@ struct DashboardDiskCard: View {
             title: "Disk",
             systemImage: "internaldrive",
             tint: tint,
+            minHeight: dashboardRateCardMinHeight,
             headline: { headlineRow },
-            detail: { capacityDetail },
+            detail: { detail },
             footer: { EmptyView() },
         )
     }
@@ -42,91 +45,77 @@ struct DashboardDiskCard: View {
             summary
                 .frame(maxWidth: .infinity, alignment: .leading)
             trendChart
-                .frame(width: 200, height: 110)
+                .frame(width: 200, height: dashboardRateTrendChartHeight)
         }
     }
 
     private var summary: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(DashboardFormatting.rateHeadline(max(read, write)))
+                Text(DashboardFormatting.rateHeadline(throughputTotal))
                     .font(.system(size: 32, weight: .semibold, design: .rounded).monospacedDigit())
-                    .contentTransition(.numericText(value: max(read, write)))
-                    .animation(.smooth, value: max(read, write))
-                Text("peak")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Text("Total")
                     .font(.title3.weight(.medium))
                     .foregroundStyle(.secondary)
             }
+            .lineLimit(1)
 
-            Text("Read + write throughput")
+            Text("Throughput")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 14) {
-                MetricChipView(label: "read", value: DashboardFormatting.rateShort(read), color: .blue, arrow: "arrow.down")
-                MetricChipView(label: "write", value: DashboardFormatting.rateShort(write), color: .orange, arrow: "arrow.up")
-            }
+            throughputChips
         }
+    }
+
+    private var throughputChips: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            MetricChipView(label: "read", value: DashboardFormatting.rateShort(read), color: .blue, arrow: "arrow.down")
+            MetricChipView(label: "write", value: DashboardFormatting.rateShort(write), color: .orange, arrow: "arrow.up")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var trendChart: some View {
         MetricSparklineView(series: [
             SparklineSeries(
                 id: "disk.read",
-                samples: store.history(for: .diskReadRate),
+                samples: store.historySuffix(for: .diskReadRate, limit: dashboardRateSparklineSampleLimit),
                 color: .blue,
             ),
             SparklineSeries(
                 id: "disk.write",
-                samples: store.history(for: .diskWriteRate),
+                samples: store.historySuffix(for: .diskWriteRate, limit: dashboardRateSparklineSampleLimit),
                 color: .orange,
             ),
         ])
     }
 
-    // MARK: - Detail (capacity)
+    // MARK: - Detail
 
-    /// Capacity block fills the detail slot so the card matches the
-    /// CPU / Memory cards' height. Reads the boot volume via
-    /// `.diskUsed` / `.diskTotal` — the volume users mean by "disk".
-    private var capacityDetail: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Text("Boot volume")
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text("\(DashboardFormatting.bytesShort(diskUsed)) of \(DashboardFormatting.bytesShort(diskTotal))")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-
-                usageBar
-                    .frame(height: 8)
-
-                HStack(spacing: 14) {
-                    MetricChipView(label: "used", value: DashboardFormatting.bytesShort(diskUsed), color: usageTint(ratio))
-                    MetricChipView(label: "free", value: DashboardFormatting.bytesShort(max(diskTotal - diskUsed, 0)), color: .secondary)
-                    Spacer()
-                    Text(String(format: "%.0f%%", ratio * 100))
-                        .font(.callout.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(usageTint(ratio))
-                }
-            }
-
-            HStack(spacing: 12) {
-                sparkline(title: "Read", value: DashboardFormatting.rateShort(read), color: .blue, samples: store.history(for: .diskReadRate))
-                sparkline(title: "Write", value: DashboardFormatting.rateShort(write), color: .orange, samples: store.history(for: .diskWriteRate))
-            }
-        }
+    /// Mirrors the Network card with a single fixed-height summary
+    /// block. Current read/write rates stay in the headline chips so
+    /// the detail area can carry a different dimension: capacity.
+    private var detail: some View {
+        DashboardRateBalanceDetail(
+            balance: DashboardRateBalance(
+                title: "Boot volume",
+                trailing: String(format: "%.0f%%", ratio * 100),
+                fraction: ratio,
+                primaryLabel: "Used",
+                primaryValue: DashboardFormatting.bytesShort(diskUsed),
+                primaryColor: usageTint(ratio),
+                secondaryLabel: "Free",
+                secondaryValue: DashboardFormatting.bytesShort(max(diskTotal - diskUsed, 0)),
+                secondaryColor: .secondary,
+            ),
+        )
     }
 
     private var ratio: Double {
         diskTotal > 0 ? diskUsed / diskTotal : 0
-    }
-
-    private var usageBar: some View {
-        ProportionalBarView(fraction: ratio, color: usageTint(ratio), height: 8)
     }
 
     private func usageTint(_ ratio: Double) -> Color {
@@ -135,28 +124,4 @@ struct DashboardDiskCard: View {
         return .red
     }
 
-    private func sparkline(title: String, value: String, color: Color, samples: [MetricSample]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(value)
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(color)
-            }
-            MetricSparklineView(
-                samples: samples,
-                style: SparklineStyle(
-                    color: color,
-                    fillOpacity: 0.2,
-                    lineWidth: 1.4,
-                    yMin: 0,
-                    yMax: nil,
-                ),
-            )
-            .frame(height: 40)
-        }
-    }
 }

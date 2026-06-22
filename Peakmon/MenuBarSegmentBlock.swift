@@ -4,8 +4,9 @@
 //
 //  Template-driven rendering for a single `MenuBarSegment`. Used by
 //  both the rasterised system menu-bar label (`MenuBarLabel`) and the
-//  Settings live preview (`MenuBarLivePreview`) so the two stay
-//  visually identical.
+//  Settings live preview (`MenuBarLivePreview`) so layout and value
+//  formatting stay identical while each caller supplies the graph
+//  tints appropriate to its surface.
 //
 //  Architecture
 //  ============
@@ -50,6 +51,8 @@ import SwiftUI
 /// so visual tuning happens in one place; widening one column does
 /// not silently push other columns around.
 enum SegmentMetrics {
+    /// Number of recent bars rendered for every menu-bar mini chart.
+    static let miniChartBarCount: Int = 18
     /// Min width of the horizontal leading label ("CPU", "MEM", "NET",
     /// "DSK", "BAT", "GPU") rendered at 11pt medium. `MEM` is the
     /// widest 3-letter abbreviation we ship and overflows a strict
@@ -106,8 +109,8 @@ enum IndicatorKind {
     case batteryPowerSource
 }
 
-/// Logical accent role used by a value template; resolved at draw
-/// time against the user's per-card tint AppStorage.
+/// Logical accent role used by a graph value template; resolved at
+/// draw time against the caller-provided tint map.
 ///
 /// `TintRole` is intentionally a strict subset of `CardTintSlot` —
 /// the menu bar never references thermal/fan/battery accents — so
@@ -172,15 +175,7 @@ extension ValueTemplate {
     var signatureInputs: [SignatureInput] {
         switch self {
         case let .percent(kind):
-            // Memory percent's *tint* depends on the kernel VM-pressure
-            // level (so it can flip yellow/red in sync with Activity
-            // Monitor). The kernel returns an integer in {1,2,4,8}, so
-            // `.percent(.memoryPressureLevel)` quantises to itself and
-            // adding it here is enough to invalidate the rasteriser
-            // cache when the pressure band changes.
-            kind == .memoryPressure
-                ? [.percent(kind), .percent(.memoryPressureLevel)]
-                : [.percent(kind)]
+            [.percent(kind)]
         case let .percentWithIndicator(kind, indicator):
             switch indicator {
             case .batteryPowerSource:
@@ -189,9 +184,6 @@ extension ValueTemplate {
         case let .dualRateStacked(_, a, b):
             [.rate(a), .rate(b)]
         case let .miniBarChart(kind, _, _):
-            // Same reasoning as the percent case: memory's mini bar
-            // chart now repaints in the pressure-level palette so the
-            // level has to participate in the cache key.
             if Self.isRateKind(kind) {
                 [.rateHistory(kind)]
             } else if kind == .memoryPressure {
@@ -262,7 +254,7 @@ struct MenuBarSegmentBlock: View {
             dualRateView(prefixes: prefixes, kindA: kindA, kindB: kindB)
         case let .miniBarChart(kind, tintRole, autoscale):
             chartView(
-                samples: store.history(for: kind),
+                samples: store.historySuffix(for: kind, limit: SegmentMetrics.miniChartBarCount),
                 tint: effectiveTint(for: kind, base: resolveTint(tintRole)),
                 maxValue: autoscale ? nil : 100,
             )
@@ -282,17 +274,7 @@ struct MenuBarSegmentBlock: View {
     @ViewBuilder
     private func percentView(kind: MetricKind) -> some View {
         let v = store.latest(for: kind)?.value ?? 0
-        let pressureOverride = memoryPressureOverride(for: kind)
         Text("\(Int(v.rounded()))%")
-            // Only override the foreground when a VM-pressure colour
-            // applies. Forcing `.primary` here used to repaint the
-            // percent digits in the app's color-scheme primary (black
-            // in Light Mode), ignoring the wallpaper-driven `textColour`
-            // the menu-bar HStack sets — so on a dark menu bar the
-            // labels stayed white while the numbers turned black
-            // ("部分全黑"). Falling through to the inherited foreground
-            // keeps the whole segment one colour.
-            .modifier(OptionalForegroundColor(pressureOverride))
             .frame(width: SegmentMetrics.percentValueWidth, alignment: .trailing)
     }
 
@@ -370,6 +352,7 @@ struct MenuBarSegmentBlock: View {
             tint: tint,
             maxValue: maxValue,
             size: .init(width: SegmentMetrics.chartWidth, height: SegmentMetrics.chartHeight),
+            rasterize: false,
         )
         .frame(width: SegmentMetrics.chartWidth, height: SegmentMetrics.chartHeight)
     }
@@ -378,34 +361,14 @@ struct MenuBarSegmentBlock: View {
         tints[role.slot] ?? .primary
     }
 
-    /// Returns the tint a value column should actually paint with,
-    /// after applying any data-driven override that the metric kind
-    /// pulls in. Today the only override is the macOS VM-pressure
-    /// level on the memory metrics — Activity Monitor's pressure
-    /// graph swaps its strip from green → yellow → red along the
-    /// same discrete bands the kernel publishes through
-    /// `kern.memorystatus_vm_pressure_level`, so the menu bar
-    /// should track that exact transition instead of staying on
-    /// the user's static accent (e.g. purple) while the system has
-    /// already escalated to "warning".
-    ///
-    /// Non-memory metrics fall straight through to `base`, since
-    /// macOS does not expose comparable discrete pressure levels
-    /// for CPU / GPU / network / disk and we do not want to
-    /// invent thresholds that disagree with Activity Monitor.
+    /// Returns the tint a graph column should paint with, after
+    /// applying data-driven overrides. Today the only override is the
+    /// macOS VM-pressure level on the memory graph; scalar text keeps
+    /// the inherited status-bar foreground colour.
     private func effectiveTint(for kind: MetricKind, base: Color) -> Color {
         memoryPressureOverride(for: kind) ?? base
     }
 
-    /// Looks up the active VM-pressure level when the metric is one
-    /// of the memory series, and maps it to the same green/yellow/red
-    /// palette Activity Monitor uses. Returns `nil` for non-memory
-    /// metrics or when the pressure level is `normal` (1) — in that
-    /// case the caller keeps its base tint, so the user's chosen
-    /// accent still shows during routine operation. The four kernel
-    /// levels are flattened to three visible colours because
-    /// `urgent` (4) and `critical` (8) both warrant the same alarm
-    /// red; we still distinguish them in the dashboard card stat.
     private func memoryPressureOverride(for kind: MetricKind) -> Color? {
         switch kind {
         case .memoryPressure, .memoryUsed, .memoryPressureLevel:
@@ -455,8 +418,8 @@ struct MenuBarSegmentBlock: View {
         kindA: MetricKind,
         kindB: MetricKind,
     ) -> [MetricSample] {
-        let lhs = store.history(for: kindA)
-        let rhs = store.history(for: kindB)
+        let lhs = store.historySuffix(for: kindA, limit: SegmentMetrics.miniChartBarCount)
+        let rhs = store.historySuffix(for: kindB, limit: SegmentMetrics.miniChartBarCount)
         let count = min(lhs.count, rhs.count)
         guard count > 0 else { return [] }
         return (0 ..< count).map { index in
@@ -468,27 +431,6 @@ struct MenuBarSegmentBlock: View {
                 value: left.value + right.value,
                 timestamp: left.timestamp,
             )
-        }
-    }
-}
-
-/// Applies a `foregroundStyle` only when a colour is supplied,
-/// otherwise leaves the view's inherited foreground untouched. Used
-/// by the percent value so it can opt into the VM-pressure palette
-/// without clobbering the wallpaper-driven menu-bar text colour
-/// during routine operation.
-private struct OptionalForegroundColor: ViewModifier {
-    let color: Color?
-
-    init(_ color: Color?) {
-        self.color = color
-    }
-
-    func body(content: Content) -> some View {
-        if let color {
-            content.foregroundStyle(color)
-        } else {
-            content
         }
     }
 }

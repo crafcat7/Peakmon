@@ -15,7 +15,7 @@ import Foundation
 import IOKit
 import PeakmonCore
 
-public final class DiskCollector: MetricCollector {
+public final class DiskCollector: ResettableMetricCollector {
     public let identifier = "disk.host"
 
     private let state = ThroughputState()
@@ -44,6 +44,10 @@ public final class DiskCollector: MetricCollector {
             ))
         }
         return samples
+    }
+
+    public func reset() async {
+        await state.reset()
     }
 
     // MARK: - statfs
@@ -114,5 +118,11 @@ private actor ThroughputState {
         let dr = read >= lastRead ? read &- lastRead : 0
         let dw = write >= lastWrite ? write &- lastWrite : 0
         return (read: Double(dr) / dt, write: Double(dw) / dt)
+    }
+
+    func reset() {
+        lastRead = 0
+        lastWrite = 0
+        lastTimestamp = nil
     }
 }

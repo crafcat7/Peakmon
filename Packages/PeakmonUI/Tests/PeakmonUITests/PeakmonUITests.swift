@@ -1,9 +1,10 @@
 @testable import PeakmonUI
+import SwiftUI
 import Testing
 
-@Suite("PeakmonUI scaffolding")
+@Suite("PeakmonUI")
 struct PeakmonUITests {
-    @Test func versionMarkerIsSet() {
-        #expect(PeakmonUI.versionMarker == "v0.0-scaffold")
+    @Test func colorHexRoundTripsOpaqueRGB() {
+        #expect(Color(hex: "#007AFF")?.hexString == "#007AFF")
     }
 }

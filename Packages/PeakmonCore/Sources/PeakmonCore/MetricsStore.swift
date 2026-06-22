@@ -68,6 +68,17 @@ public final class MetricsStore {
         (rings[kind]?.count ?? 0) > 0
     }
 
+    /// Rolling window for `kind`, limited to at most `limit` entries,
+    /// oldest first.
+    ///
+    /// This avoids materializing the full history when only a small
+    /// suffix is required (e.g. menu-bar mini charts). Pass a
+    /// positive `limit`; non-positive values return `[]`.
+    public func historySuffix(for kind: MetricKind, limit: Int) -> [MetricSample] {
+        guard limit > 0 else { return [] }
+        return rings[kind]?.suffix(limit) ?? []
+    }
+
     /// Most recent numeric value for `kind`, or `fallback` if none.
     ///
     /// Convenience wrapper used throughout the dashboard and menu-bar

@@ -38,7 +38,7 @@ struct DashboardMemoryCard: View {
     /// Discrete kernel VM pressure band (1 normal / 2 warning /
     /// 4 urgent / 8 critical). `nil` until the first sample.
     private var pressureLevel: Int? {
-        store.latest(for: .memoryPressureLevel).map { Int($0.value) }
+        return store.latest(for: .memoryPressureLevel).map { Int($0.value) }
     }
 
     private var pressureTint: Color {
@@ -74,7 +74,7 @@ struct DashboardMemoryCard: View {
             summary
                 .frame(maxWidth: .infinity, alignment: .leading)
             trendChart
-                .frame(width: 200, height: 110)
+                .frame(width: 200, height: dashboardHeadlineTrendChartHeight)
         }
     }
 
@@ -85,9 +85,7 @@ struct DashboardMemoryCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(DashboardFormatting.bytesHeadline(used))
                     .font(.system(size: 32, weight: .semibold, design: .rounded).monospacedDigit())
-                    .contentTransition(.numericText(value: used))
-                    .animation(.smooth, value: used)
-                Text("used")
+                Text("Used")
                     .font(.title3.weight(.medium))
                     .foregroundStyle(.secondary)
             }
@@ -96,7 +94,7 @@ struct DashboardMemoryCard: View {
                 Text(String(format: "%.0f%%", pressure))
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(pressureTint)
-                Text("pressure · \(pressureLabel)")
+                Text("Pressure · \(pressureLabel)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -146,7 +144,7 @@ struct DashboardMemoryCard: View {
         // says nothing, while a pressure trend shows whether the
         // workload is approaching swap.
         MetricSparklineView(
-            samples: store.history(for: .memoryPressure),
+            samples: store.historySuffix(for: .memoryPressure, limit: dashboardSparklineSampleLimit),
             style: SparklineStyle(
                 color: pressureTrendColor,
                 fillOpacity: 0.18,

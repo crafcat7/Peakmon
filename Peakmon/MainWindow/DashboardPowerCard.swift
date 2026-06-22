@@ -8,10 +8,9 @@
 //
 //    Collapsed — total package watts + CPU/GPU/DRAM/Display chips +
 //                dual sparkline (CPU / GPU).
-//    Expanded  — per-rail decomposition (CPU + GPU + DRAM + Display)
+//    Detail    — per-rail decomposition (CPU + GPU + DRAM + Display)
 //                as horizontal bars; battery sub-block when present
-//                (source, health, cycles).
-//    Footer    — total system watts + battery status chip.
+//                (level, source, health, cycles).
 //
 
 import PeakmonCore
@@ -40,13 +39,13 @@ struct DashboardPowerCard: View {
     // nil. Any missing field collapses the whole battery sub-block.
     private var batteryLevel: Double? { store.latest(for: .batteryLevel)?.value }
     private var batteryCycleCount: Int? {
-        store.latest(for: .batteryCycleCount).map { Int($0.value) }
+        return store.latest(for: .batteryCycleCount).map { Int($0.value) }
     }
     private var batteryHealth: Double? { store.latest(for: .batteryHealth)?.value }
     /// 0 = battery, 1 = AC. Stored as a numeric metric to fit the
     /// metrics-store value model.
     private var isOnBattery: Bool? {
-        store.latest(for: .batteryPowerSource).map { $0.value < 0.5 }
+        return store.latest(for: .batteryPowerSource).map { $0.value < 0.5 }
     }
     private var hasBattery: Bool { batteryLevel != nil }
 
@@ -57,7 +56,7 @@ struct DashboardPowerCard: View {
             tint: tint,
             headline: { headlineRow },
             detail: { expandedDetail },
-            footer: { systemFooter },
+            footer: { EmptyView() },
         )
     }
 
@@ -66,7 +65,7 @@ struct DashboardPowerCard: View {
             summary
                 .frame(maxWidth: .infinity, alignment: .leading)
             trendChart
-                .frame(width: 200, height: 110)
+                .frame(width: 200, height: dashboardHeadlineTrendChartHeight)
         }
     }
 
@@ -77,14 +76,12 @@ struct DashboardPowerCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(String(format: "%.1f", totalWatts))
                     .font(.system(size: 36, weight: .semibold, design: .rounded).monospacedDigit())
-                    .contentTransition(.numericText(value: totalWatts))
-                    .animation(.smooth, value: totalWatts)
                 Text("W")
                     .font(.title3.weight(.medium))
                     .foregroundStyle(.secondary)
             }
 
-            Text("System draw")
+            Text("System Draw")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -123,12 +120,12 @@ struct DashboardPowerCard: View {
         MetricSparklineView(series: [
             SparklineSeries(
                 id: "power.cpu",
-                samples: store.history(for: .powerCPU),
+                samples: store.historySuffix(for: .powerCPU, limit: dashboardSparklineSampleLimit),
                 color: .blue,
             ),
             SparklineSeries(
                 id: "power.gpu",
-                samples: store.history(for: .powerGPU),
+                samples: store.historySuffix(for: .powerGPU, limit: dashboardSparklineSampleLimit),
                 color: .indigo,
             ),
         ])
@@ -137,7 +134,7 @@ struct DashboardPowerCard: View {
     // MARK: - Expanded
 
     private var expandedDetail: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             railBreakdown
             if hasBattery {
                 batteryBlock
@@ -165,9 +162,11 @@ struct DashboardPowerCard: View {
             Text("Battery")
                 .font(.subheadline.weight(.semibold))
 
-            // Source / Health / Cycles — the state and lifetime
-            // facts not shown elsewhere on the card. `Level` is
-            // omitted (already in the footer's Battery stat).
+            // Level / source / health / cycles — the state and
+            // lifetime facts not shown by the headline watts.
+            // Keeping them here avoids a separate footer that repeats
+            // the headline and can clip inside the fixed dashboard
+            // card height on laptops.
             //
             // IOKit's `TimeRemaining` / `TimeToFullCharge` are also
             // omitted: the field is unreliable across device classes
@@ -176,7 +175,9 @@ struct DashboardPowerCard: View {
             // "Remaining" means different things depending on
             // `IsCharging`. Users who want the estimate have it in
             // the menu-bar icon and System Settings.
-            HStack(spacing: 24) {
+            HStack(spacing: 18) {
+                statBlock(title: "Level", value: batteryLevel.map { String(format: "%.0f%%", $0) } ?? "—",
+                          tint: batteryLevelTint)
                 statBlock(title: "Source", value: sourceLabel,
                           tint: isOnBattery == true ? .yellow : .green)
                 statBlock(title: "Health", value: batteryHealth.map { String(format: "%.0f%%", $0) } ?? "—",
@@ -220,35 +221,4 @@ struct DashboardPowerCard: View {
         }
     }
 
-    // MARK: - Footer
-
-    private var systemFooter: some View {
-        HStack(spacing: 24) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Total")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(DashboardFormatting.wattsChip(totalWatts))
-                    .font(.callout.monospacedDigit().weight(.medium))
-                    .foregroundStyle(tint)
-            }
-
-            if hasBattery {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Battery")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 4) {
-                        Image(systemName: isOnBattery == true ? "battery.50" : "powerplug.fill")
-                            .font(.caption)
-                            .foregroundStyle(batteryLevelTint)
-                        Text(batteryLevel.map { String(format: "%.0f%%", $0) } ?? "—")
-                            .font(.callout.monospacedDigit().weight(.medium))
-                    }
-                }
-            }
-
-            Spacer()
-        }
-    }
 }

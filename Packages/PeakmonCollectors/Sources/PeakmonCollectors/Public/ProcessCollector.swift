@@ -43,6 +43,7 @@ public final class ProcessCollector {
     public let limit: Int?
 
     private let state = State()
+    private let pathCache = ProcessPathCache()
 
     public init(limit: Int? = nil) {
         self.limit = limit
@@ -51,7 +52,7 @@ public final class ProcessCollector {
     public func collect() async throws -> [ProcessSnapshot] {
         let now = Date.now
         let pids = try Self.listPIDs()
-        let infos = Self.readInfos(for: pids)
+        let infos = readInfos(for: pids)
 
         let previous = await state.swap(infos: infos, at: now)
         guard let previous, previous.sampledAt < now else {
@@ -91,6 +92,11 @@ public final class ProcessCollector {
         return snapshots
     }
 
+    public func reset() async {
+        await state.reset()
+        pathCache.clear()
+    }
+
     // MARK: - libproc plumbing
 
     private struct Info: Sendable {
@@ -101,10 +107,15 @@ public final class ProcessCollector {
         let memoryBytes: UInt64
     }
 
+    private struct ProcessStartTime: Equatable {
+        let seconds: Int64
+        let microseconds: Int64
+    }
+
     /// Mach timebase used to convert raw `ptinfo_total_*` ticks into
     /// nanoseconds. Cached because it is constant per boot but the
     /// `mach_timebase_info` syscall is not free at 1 Hz × N processes.
-    private nonisolated(unsafe) static let timebase: mach_timebase_info_data_t = {
+    private static let timebase: mach_timebase_info_data_t = {
         var tb = mach_timebase_info_data_t()
         mach_timebase_info(&tb)
         return tb
@@ -137,12 +148,14 @@ public final class ProcessCollector {
     /// Bundling both halves into a single syscall keeps the per-tick
     /// cost flat compared to the prior task-only call.
     ///
-    /// `proc_pidpath` is then called separately because it has its
-    /// own (larger) buffer and isn't part of the all-info blob.
+    /// The BSD command name is read from the same all-info blob to
+    /// avoid an extra `proc_name` call per PID. `proc_pidpath` is
+    /// still called separately because it has its own (larger) buffer
+    /// and isn't part of the all-info blob.
     /// Failures are silently skipped — processes can exit between
     /// `listPIDs` and this call, and short-lived helpers regularly
     /// disappear under our feet.
-    private static func readInfos(for pids: [Int32]) -> [Int32: Info] {
+    private func readInfos(for pids: [Int32]) -> [Int32: Info] {
         var out: [Int32: Info] = [:]
         out.reserveCapacity(pids.count)
 
@@ -154,15 +167,18 @@ public final class ProcessCollector {
             let written = proc_pidinfo(pid, PROC_PIDTASKALLINFO, 0, &info, size)
             guard written == size else { continue }
 
-            let name = processName(pid: pid)
+            let name = Self.processName(fromBSDName: info.pbsd.pbi_name, pid: pid)
+            let startTime = ProcessStartTime(
+                seconds: Int64(info.pbsd.pbi_start_tvsec),
+                microseconds: Int64(info.pbsd.pbi_start_tvusec),
+            )
 
             // `proc_pidpath` returns the byte count on success, 0 on
             // failure (cross-user / kernel tasks). Empty path is a
             // valid state that downstream code already handles.
-            let pathLen = pathBuffer.withUnsafeMutableBufferPointer { ptr in
-                proc_pidpath(pid, ptr.baseAddress, UInt32(ptr.count))
+            let path = pathCache.path(for: pid, startTime: startTime) {
+                Self.processPath(pid: pid, buffer: &pathBuffer)
             }
-            let path: String = pathLen > 0 ? String(cString: pathBuffer) : ""
 
             out[pid] = Info(
                 name: name,
@@ -174,23 +190,81 @@ public final class ProcessCollector {
                 memoryBytes: info.ptinfo.pti_resident_size,
             )
         }
+        pathCache.retain(pids: Set(out.keys))
         return out
     }
 
-    /// Best-effort human-readable name. `proc_name` returns the BSD
+    private static func processPath(pid: Int32, buffer: inout [CChar]) -> String {
+        let pathLen = buffer.withUnsafeMutableBufferPointer { ptr in
+            proc_pidpath(pid, ptr.baseAddress, UInt32(ptr.count))
+        }
+        return pathLen > 0 ? fixedCString(buffer) : ""
+    }
+
+    /// Best-effort human-readable name. `pbi_name` is the BSD
     /// command name (15-char limit), which matches what `top` and
-    /// `ps` show. If that fails we fall back to "pid <n>" so the row
-    /// is still identifiable.
-    private static func processName(pid: Int32) -> String {
-        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
-        let written = buffer.withUnsafeMutableBufferPointer { ptr -> Int32 in
-            proc_name(pid, ptr.baseAddress, UInt32(ptr.count))
-        }
-        if written > 0 {
-            let name = String(cString: buffer)
-            if !name.isEmpty { return name }
-        }
+    /// `ps` show and is already returned by `PROC_PIDTASKALLINFO`.
+    /// If it is empty we fall back to "pid <n>" so the row is still
+    /// identifiable.
+    private static func processName<T>(fromBSDName pbiName: T, pid: Int32) -> String {
+        let name = fixedCString(pbiName)
+        if !name.isEmpty { return name }
         return "pid \(pid)"
+    }
+
+    private static func fixedCString<T>(_ value: T) -> String {
+        withUnsafeBytes(of: value) { raw in
+            let end = raw.firstIndex(of: 0) ?? raw.endIndex
+            guard end > raw.startIndex else { return "" }
+            return String(decoding: raw[raw.startIndex..<end], as: UTF8.self)
+        }
+    }
+
+    private static func fixedCString(_ buffer: [CChar]) -> String {
+        buffer.withUnsafeBytes { raw in
+            let end = raw.firstIndex(of: 0) ?? raw.endIndex
+            guard end > raw.startIndex else { return "" }
+            return String(decoding: raw[raw.startIndex..<end], as: UTF8.self)
+        }
+    }
+
+    private final class ProcessPathCache: @unchecked Sendable {
+        private struct Entry {
+            let startTime: ProcessStartTime
+            let path: String
+        }
+
+        private let lock = NSLock()
+        private var storage: [Int32: Entry] = [:]
+
+        func path(for pid: Int32, startTime: ProcessStartTime, load: () -> String) -> String {
+            lock.lock()
+            if let cached = storage[pid], cached.startTime == startTime {
+                lock.unlock()
+                return cached.path
+            }
+            lock.unlock()
+
+            let path = load()
+
+            lock.lock()
+            storage[pid] = Entry(startTime: startTime, path: path)
+            lock.unlock()
+
+            return path
+        }
+
+        func retain(pids: Set<Int32>) {
+            lock.lock()
+            storage = storage.filter { pids.contains($0.key) }
+            lock.unlock()
+        }
+
+        func clear() {
+            lock.lock()
+            storage.removeAll(keepingCapacity: true)
+            lock.unlock()
+        }
     }
 
     /// Holds the previous tick's per-PID `Info` plus the timestamp at
@@ -209,6 +283,10 @@ public final class ProcessCollector {
             let outgoing = previous
             previous = Snapshot(infos: infos, sampledAt: sampledAt)
             return outgoing
+        }
+
+        func reset() {
+            previous = nil
         }
     }
 }

@@ -40,9 +40,9 @@ struct DashboardSystemBanner: View {
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
             iconView
-                .frame(width: 44, height: 44)
+                .frame(width: 40, height: 40)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(info.modelName)
                     .font(.title3.weight(.semibold))
                 chipsRow
@@ -51,7 +51,7 @@ struct DashboardSystemBanner: View {
             Spacer()
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 14)
+        .padding(.vertical, 10)
         .background(.background.secondary, in: .rect(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
@@ -119,7 +119,7 @@ struct DashboardSystemBanner: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, 9)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
         .background(tint.opacity(0.10), in: .capsule)
         .overlay(Capsule().strokeBorder(tint.opacity(0.15), lineWidth: 0.5))
     }
@@ -141,7 +141,7 @@ struct DashboardSystemBanner: View {
                     .lineLimit(1)
             }
             .padding(.horizontal, 9)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .background(.gray.opacity(0.10), in: .capsule)
             .overlay(Capsule().strokeBorder(.gray.opacity(0.15), lineWidth: 0.5))
             .contentShape(.capsule)

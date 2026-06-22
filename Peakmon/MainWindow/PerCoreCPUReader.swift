@@ -15,8 +15,8 @@
 //  instantaneous deltas; the first call returns [] (no baseline).
 //
 //  Kept out of MetricsStore because the data is only used by the
-//  CPU card and runs at that card's own 1 Hz cadence — no work
-//  happens while it's off-screen.
+//  CPU card and runs at that card's own low-frequency cadence — no
+//  work happens while it's off-screen.
 //
 
 import Darwin
@@ -36,10 +36,9 @@ final class PerCoreCPUReader {
     /// window doesn't binarise the UI.
     private var ringBuffer: [[Double]] = []
 
-    /// Rolling-average window length. Four samples × the caller's
-    /// 500 ms internal cadence ≈ a 2 s smoothing window published at
-    /// 1 Hz.
-    private let windowSize = 4
+    /// Rolling-average window length. Two samples × the CPU card's
+    /// 4 s steady cadence ≈ an 8 s smoothing window.
+    private let windowSize = 2
 
     /// CPU topology (E-core / P-core split), read once from sysctl.
     let topology: Topology = .detect()

@@ -123,6 +123,23 @@ struct MetricRingBuffer {
         return out
     }
 
+    /// Materialises at most the latest `limit` samples in
+    /// oldest-first order. This avoids copying the full history when
+    /// callers only need a fixed-size window (for example, the
+    /// 18-sample menu-bar charts).
+    func suffix(_ limit: Int) -> [MetricSample] {
+        guard count > 0 && limit > 0 else { return [] }
+        let safeLimit = min(limit, count)
+        var out: [MetricSample] = []
+        out.reserveCapacity(safeLimit)
+        let start = (head + count - safeLimit) % capacity
+        for i in 0..<safeLimit {
+            let idx = (start + i) % capacity
+            out.append(storage[idx]!)
+        }
+        return out
+    }
+
     /// Drops every live sample without releasing the backing
     /// storage. Used by `MetricsStore.reset()` in tests.
     mutating func removeAll() {

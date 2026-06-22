@@ -2,13 +2,6 @@ import Foundation
 @testable import PeakmonCore
 import Testing
 
-@Suite("PeakmonCore scaffolding")
-struct PeakmonCoreTests {
-    @Test func versionMarkerIsSet() {
-        #expect(PeakmonCore.versionMarker == "v0.0-scaffold")
-    }
-}
-
 @Suite("MetricsStore")
 @MainActor
 struct MetricsStoreTests {
@@ -31,6 +24,30 @@ struct MetricsStoreTests {
         let window = store.history(for: .cpuTotal)
         #expect(window.count == 3)
         #expect(window.map(\.value) == [2, 3, 4])
+    }
+
+    @Test func historySuffixReturnsLatestWindow() {
+        let store = MetricsStore(historyLimit: 10)
+        for value in 0 ..< 5 {
+            store.ingest([
+                MetricSample(kind: .cpuTotal, unit: .percent, value: Double(value)),
+            ])
+        }
+        #expect(store.historySuffix(for: .cpuTotal, limit: 3).map(\.value) == [2, 3, 4])
+        #expect(store.historySuffix(for: .cpuTotal, limit: 5).map(\.value) == [0, 1, 2, 3, 4])
+        #expect(store.historySuffix(for: .cpuTotal, limit: 0).isEmpty)
+    }
+
+    @Test func historySuffixReadsWrappedRingBuffer() {
+        let store = MetricsStore(historyLimit: 4)
+        for value in 0 ..< 7 {
+            store.ingest([
+                MetricSample(kind: .cpuTotal, unit: .percent, value: Double(value)),
+            ])
+        }
+        #expect(store.history(for: .cpuTotal).map(\.value) == [3, 4, 5, 6])
+        #expect(store.historySuffix(for: .cpuTotal, limit: 2).map(\.value) == [5, 6])
+        #expect(store.historySuffix(for: .cpuTotal, limit: 10).map(\.value) == [3, 4, 5, 6])
     }
 
     @Test func resetClearsAllKinds() {

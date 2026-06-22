@@ -9,6 +9,8 @@
 import SwiftUI
 
 public struct MetricCardView<Content: View, Accessory: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     private let title: String
     private let systemImage: String
     private let tint: Color
@@ -72,12 +74,25 @@ extension MetricCardView {
         }
         .padding(12)
         .frame(minHeight: 160)
-        .background(.background.secondary, in: .rect(cornerRadius: 10))
+        .background(cardFill, in: .rect(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
-                .stroke(.separator, lineWidth: 0.5)
+                .stroke(cardStroke, lineWidth: 0.5)
         }
+        .contentShape(.rect(cornerRadius: 10))
         .clipShape(.rect(cornerRadius: 10))
+    }
+
+    private var cardFill: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.07)
+            : Color.black.opacity(0.035)
+    }
+
+    private var cardStroke: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.14)
+            : Color.black.opacity(0.08)
     }
 }
 

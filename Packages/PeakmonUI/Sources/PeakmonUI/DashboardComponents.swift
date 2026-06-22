@@ -51,7 +51,10 @@ public struct MetricChipView: View {
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.caption.monospacedDigit().weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
+        .lineLimit(1)
     }
 }
 

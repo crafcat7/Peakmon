@@ -43,7 +43,7 @@ import Foundation
 import PeakmonCore
 
 /// Samples per-subsystem energy counters and emits watts.
-public final class PowerCollector: MetricCollector {
+public final class PowerCollector: ResettableMetricCollector {
     public let identifier = "power.ioreport"
 
     /// Bridge + previous-snapshot cache, guarded by an actor.
@@ -53,6 +53,10 @@ public final class PowerCollector: MetricCollector {
 
     public func collect() async throws -> [MetricSample] {
         await state.sample()
+    }
+
+    public func reset() async {
+        await state.reset()
     }
 
     // MARK: - Actor state
@@ -114,6 +118,11 @@ public final class PowerCollector: MetricCollector {
                     timestamp: now,
                 ),
             ]
+        }
+
+        func reset() {
+            previous = nil
+            previousAt = nil
         }
 
         /// Per-rail energy totals for a single delta window (mJ).

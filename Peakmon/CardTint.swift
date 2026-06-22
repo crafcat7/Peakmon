@@ -12,7 +12,7 @@ import PeakmonUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
+enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Equatable, Transferable {
     case cpu
     case memory
     case gpu
@@ -76,11 +76,21 @@ enum CardTintSlot: String, CaseIterable, Identifiable, Codable, Transferable {
         }
     }
 
-    /// Factory default for the visibility flag. Every card is on by
-    /// default so a fresh install shows the full paired-row layout
-    /// (`CPU|GPU`, `Memory|Battery`, `Disk|Network`, `Processes`).
-    /// Users can opt cards out from Settings › Display.
-    var visibilityDefault: Bool { true }
+    /// Factory default for the visibility flag. Scalar metric cards
+    /// start visible so a fresh install shows the live dashboard;
+    /// Processes is opt-in because PID enumeration is much heavier
+    /// than reading host counters.
+    var visibilityDefault: Bool {
+        switch self {
+        case .processes:
+            // libproc walks are much heavier than scalar host metrics.
+            // Keep the feature opt-in so Peakmon stays quiet on first
+            // launch and menubar-only sessions do no PID enumeration.
+            false
+        default:
+            true
+        }
+    }
 
     /// Hex string for the factory default tint.
     var defaultHex: String {

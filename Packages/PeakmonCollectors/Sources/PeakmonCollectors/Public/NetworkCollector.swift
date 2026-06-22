@@ -12,7 +12,7 @@ import Darwin
 import Foundation
 import PeakmonCore
 
-public final class NetworkCollector: MetricCollector {
+public final class NetworkCollector: ResettableMetricCollector {
     public let identifier = "net.host"
 
     private let state = ThroughputState()
@@ -29,6 +29,10 @@ public final class NetworkCollector: MetricCollector {
             MetricSample(kind: .netInRate, unit: .bytesPerSecond, value: rate.rx, timestamp: now),
             MetricSample(kind: .netOutRate, unit: .bytesPerSecond, value: rate.tx, timestamp: now),
         ]
+    }
+
+    public func reset() async {
+        await state.reset()
     }
 
     // MARK: - sysctl walk
@@ -89,5 +93,11 @@ private actor ThroughputState {
         let dr = rx >= lastRx ? rx &- lastRx : 0
         let dw = tx >= lastTx ? tx &- lastTx : 0
         return (rx: Double(dr) / dt, tx: Double(dw) / dt)
+    }
+
+    func reset() {
+        lastRx = 0
+        lastTx = 0
+        lastTimestamp = nil
     }
 }

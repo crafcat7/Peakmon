@@ -7,8 +7,9 @@
 //  No per-interface / per-process drill-down: `getifaddrs` gives
 //  per-interface byte counters that don't map cleanly to "what's
 //  using my bandwidth", and per-process answers need entitlements
-//  out of reach for ad-hoc signing. So the card shows the aggregate
-//  in/out rate, chips, dual sparkline, and a totals detail block.
+//  out of reach for ad-hoc signing. So the card shows total transfer,
+//  in/out chips, one dual sparkline, and direction mix without
+//  repeating the same current-rate numbers.
 //
 
 import PeakmonCore
@@ -23,14 +24,19 @@ struct DashboardNetworkCard: View {
 
     private var netIn: Double { store.value(for: .netInRate) }
     private var netOut: Double { store.value(for: .netOutRate) }
+    private var transferTotal: Double { max(0, netIn + netOut) }
+    private var inboundShare: Double {
+        transferTotal > 0 ? netIn / transferTotal : 0.5
+    }
 
     var body: some View {
         DashboardMetricCard(
             title: "Network",
             systemImage: "network",
             tint: tint,
+            minHeight: dashboardRateCardMinHeight,
             headline: { headlineRow },
-            detail: { sparklineDetail },
+            detail: { transferDetail },
             footer: { EmptyView() },
         )
     }
@@ -40,43 +46,49 @@ struct DashboardNetworkCard: View {
             summary
                 .frame(maxWidth: .infinity, alignment: .leading)
             trendChart
-                .frame(width: 200, height: 110)
+                .frame(width: 200, height: dashboardRateTrendChartHeight)
         }
     }
 
     private var summary: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(DashboardFormatting.rateHeadline(max(netIn, netOut)))
+                Text(DashboardFormatting.rateHeadline(transferTotal))
                     .font(.system(size: 32, weight: .semibold, design: .rounded).monospacedDigit())
-                    .contentTransition(.numericText(value: max(netIn, netOut)))
-                    .animation(.smooth, value: max(netIn, netOut))
-                Text("peak")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Text("Total")
                     .font(.title3.weight(.medium))
                     .foregroundStyle(.secondary)
             }
+            .lineLimit(1)
 
-            Text("Up + down throughput")
+            Text("Throughput")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 14) {
-                MetricChipView(label: "in", value: DashboardFormatting.rateShort(netIn), color: .green, arrow: "arrow.down")
-                MetricChipView(label: "out", value: DashboardFormatting.rateShort(netOut), color: .pink, arrow: "arrow.up")
-            }
+            throughputChips
         }
+    }
+
+    private var throughputChips: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            MetricChipView(label: "in", value: DashboardFormatting.rateShort(netIn), color: .green, arrow: "arrow.down")
+            MetricChipView(label: "out", value: DashboardFormatting.rateShort(netOut), color: .pink, arrow: "arrow.up")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var trendChart: some View {
         MetricSparklineView(series: [
             SparklineSeries(
                 id: "net.in",
-                samples: store.history(for: .netInRate),
+                samples: store.historySuffix(for: .netInRate, limit: dashboardRateSparklineSampleLimit),
                 color: .green,
             ),
             SparklineSeries(
                 id: "net.out",
-                samples: store.history(for: .netOutRate),
+                samples: store.historySuffix(for: .netOutRate, limit: dashboardRateSparklineSampleLimit),
                 color: .pink,
             ),
         ])
@@ -84,49 +96,22 @@ struct DashboardNetworkCard: View {
 
     // MARK: - Detail
 
-    /// Dual sparkline showing inbound and outbound rates
-    /// separately, providing more granular trend visibility
-    /// than the combined headline sparkline.
-    private var sparklineDetail: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            miniSeries(
-                title: "Download",
-                value: DashboardFormatting.rateShort(netIn),
-                color: .green,
-                samples: store.history(for: .netInRate),
-            )
-            miniSeries(
-                title: "Upload",
-                value: DashboardFormatting.rateShort(netOut),
-                color: .pink,
-                samples: store.history(for: .netOutRate),
-            )
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
-    }
-
-    private func miniSeries(title: String, value: String, color: Color, samples: [MetricSample]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(title)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(value)
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(color)
-            }
-            MetricSparklineView(
-                samples: samples,
-                style: SparklineStyle(
-                    color: color,
-                    fillOpacity: 0.2,
-                    lineWidth: 1.4,
-                    yMin: 0,
-                    yMax: nil,
-                ),
-            )
-            .frame(height: 40)
-        }
+    /// Mirrors Disk's detail slot with a single fixed-height summary
+    /// block. Current in/out rates stay in the headline chips so the
+    /// detail area can show only the direction split.
+    private var transferDetail: some View {
+        DashboardRateBalanceDetail(
+            balance: DashboardRateBalance(
+                title: "Direction mix",
+                trailing: nil,
+                fraction: inboundShare,
+                primaryLabel: "In",
+                primaryValue: String(format: "%.0f%%", inboundShare * 100),
+                primaryColor: .green,
+                secondaryLabel: "Out",
+                secondaryValue: String(format: "%.0f%%", (1 - inboundShare) * 100),
+                secondaryColor: .pink,
+            ),
+        )
     }
 }

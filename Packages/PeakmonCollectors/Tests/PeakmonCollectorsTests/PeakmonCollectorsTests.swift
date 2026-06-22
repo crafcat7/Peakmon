@@ -3,10 +3,15 @@ import Foundation
 import PeakmonCore
 import Testing
 
-@Suite("PeakmonCollectors scaffolding")
-struct PeakmonCollectorsTests {
-    @Test func versionMarkerIsSet() {
-        #expect(PeakmonCollectors.versionMarker == "v0.0-scaffold")
+@Suite("ProcessCollector")
+struct ProcessCollectorTests {
+    @Test func exposesIdentifierAndOptionalLimit() {
+        let collector = ProcessCollector()
+        #expect(collector.identifier == "process.libproc")
+        #expect(collector.limit == nil)
+
+        let limited = ProcessCollector(limit: 10)
+        #expect(limited.limit == 10)
     }
 }
 
@@ -43,6 +48,18 @@ struct CPUCollectorTests {
             #expect(abs(total - (user + sys)) < 0.001)
         }
     }
+
+    @Test func resetDropsBaseline() async throws {
+        let collector = CPUCollector()
+        _ = try await collector.collect()
+        try await Task.sleep(for: .milliseconds(20))
+        _ = try await collector.collect()
+
+        await collector.reset()
+
+        let afterReset = try await collector.collect()
+        #expect(afterReset.isEmpty)
+    }
 }
 
 @Suite("MemoryCollector")
@@ -53,11 +70,31 @@ struct MemoryCollectorTests {
 
         let samples = try await collector.collect()
         let kinds = Set(samples.map(\.kind))
-        #expect(kinds == [.memoryUsed, .memoryPressure])
+        #expect(kinds.isSuperset(of: [.memoryUsed, .memoryPressure]))
 
         let used = samples.first(where: { $0.kind == .memoryUsed })
         #expect(used?.unit == .bytes)
         #expect((used?.value ?? 0) > 0)
+
+        if let wired = samples.first(where: { $0.kind == .memoryWired }) {
+            #expect(wired.unit == .bytes)
+            #expect(wired.value >= 0)
+        }
+
+        if let compressed = samples.first(where: { $0.kind == .memoryCompressed }) {
+            #expect(compressed.unit == .bytes)
+            #expect(compressed.value >= 0)
+        }
+
+        if let swap = samples.first(where: { $0.kind == .memorySwapUsed }) {
+            #expect(swap.unit == .bytes)
+            #expect(swap.value >= 0)
+        }
+
+        if let pressureLevel = samples.first(where: { $0.kind == .memoryPressureLevel }) {
+            #expect(pressureLevel.unit == .count)
+            #expect([1, 2, 4, 8].contains(Int(pressureLevel.value)))
+        }
 
         let pressure = samples.first(where: { $0.kind == .memoryPressure })
         #expect(pressure?.unit == .percent)
@@ -74,10 +111,12 @@ struct BatteryCollectorTests {
         let collector = BatteryCollector()
         #expect(collector.identifier == "battery.host")
 
-        // Desktop Macs have no battery → empty array is a valid outcome.
-        // Laptops should emit exactly 2 samples: level + powerSource.
+        // Desktop Macs have no battery -> empty array is a valid outcome.
+        // Laptops emit level + powerSource and may include SmartBattery
+        // health/cycle/time metrics when IORegistry exposes them.
         let samples = try await collector.collect()
-        #expect(samples.isEmpty || samples.count == 2)
+        let kinds = Set(samples.map(\.kind))
+        #expect(samples.isEmpty || kinds.isSuperset(of: [.batteryLevel, .batteryPowerSource]))
 
         if let level = samples.first(where: { $0.kind == .batteryLevel }) {
             #expect(level.unit == .percent)
@@ -89,6 +128,22 @@ struct BatteryCollectorTests {
             #expect(powerSource.unit == .count)
             let decoded = BatteryPowerSource(metricValue: powerSource.value)
             #expect(BatteryPowerSource.allCases.contains(decoded))
+        }
+
+        if let cycleCount = samples.first(where: { $0.kind == .batteryCycleCount }) {
+            #expect(cycleCount.unit == .count)
+            #expect(cycleCount.value >= 0)
+        }
+
+        if let health = samples.first(where: { $0.kind == .batteryHealth }) {
+            #expect(health.unit == .percent)
+            #expect(health.value > 0)
+            #expect(health.value <= 100)
+        }
+
+        if let remaining = samples.first(where: { $0.kind == .batteryTimeRemaining }) {
+            #expect(remaining.unit == .count)
+            #expect(remaining.value > 0)
         }
     }
 }
@@ -116,6 +171,22 @@ struct DiskCollectorTests {
             #expect(sample.value >= 0)
         }
     }
+
+    @Test func resetDropsThroughputBaselineButKeepsUsageSamples() async throws {
+        let collector = DiskCollector()
+        _ = try await collector.collect()
+        try await Task.sleep(for: .milliseconds(20))
+        _ = try await collector.collect()
+
+        await collector.reset()
+
+        let afterReset = try await collector.collect()
+        let kinds = Set(afterReset.map(\.kind))
+        #expect(kinds.contains(.diskUsed))
+        #expect(kinds.contains(.diskTotal))
+        #expect(!kinds.contains(.diskReadRate))
+        #expect(!kinds.contains(.diskWriteRate))
+    }
 }
 
 @Suite("NetworkCollector")
@@ -136,5 +207,17 @@ struct NetworkCollectorTests {
             #expect(sample.unit == .bytesPerSecond)
             #expect(sample.value >= 0)
         }
+    }
+
+    @Test func resetDropsThroughputBaseline() async throws {
+        let collector = NetworkCollector()
+        _ = try await collector.collect()
+        try await Task.sleep(for: .milliseconds(20))
+        _ = try await collector.collect()
+
+        await collector.reset()
+
+        let afterReset = try await collector.collect()
+        #expect(afterReset.isEmpty)
     }
 }

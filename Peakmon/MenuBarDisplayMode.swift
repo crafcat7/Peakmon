@@ -15,7 +15,7 @@ import UniformTypeIdentifiers
 
 /// One atomic piece of menu bar content. The label is built by
 /// concatenating the user's selected segments with `|` separators.
-enum MenuBarSegment: String, CaseIterable, Identifiable, Codable, Transferable {
+enum MenuBarSegment: String, CaseIterable, Identifiable, Codable, Equatable, Transferable {
     case cpuPercent
     case cpuGraph
     case memoryPercent

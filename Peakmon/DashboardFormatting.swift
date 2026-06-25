@@ -122,6 +122,16 @@ enum DashboardFormatting {
         return .red
     }
 
+    /// Battery packs should be treated as warm much earlier than
+    /// CPU/GPU dies. Keep normal room-temperature operation quiet,
+    /// then call out sustained charging / hot chassis conditions.
+    static func batteryTemperatureColor(_ celsius: Double) -> Color {
+        if celsius < 35 { return .secondary }
+        if celsius < 40 { return .primary }
+        if celsius < 45 { return .yellow }
+        return .red
+    }
+
     /// Dynamic colour for per-process CPU usage bars. Mirrors
     /// the thresholds used by Activity Monitor's CPU column.
     static func cpuTint(_ cpu: Double) -> Color {

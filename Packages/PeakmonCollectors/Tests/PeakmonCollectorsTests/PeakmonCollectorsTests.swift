@@ -107,6 +107,14 @@ struct MemoryCollectorTests {
 
 @Suite("BatteryCollector")
 struct BatteryCollectorTests {
+    @Test func convertsSmartBatteryTemperatureFromTenthsKelvin() {
+        let celsius = BatteryCollector.smartBatteryCelsius(from: 3066)
+        #expect(celsius != nil)
+        #expect(abs((celsius ?? 0) - 33.45) < 0.01)
+        #expect(BatteryCollector.smartBatteryCelsius(from: 0) == nil)
+        #expect(BatteryCollector.smartBatteryCelsius(from: 9999) == nil)
+    }
+
     @Test func emitsLevelAndPowerSourceSamplesAndNeverThrows() async throws {
         let collector = BatteryCollector()
         #expect(collector.identifier == "battery.host")
@@ -139,6 +147,12 @@ struct BatteryCollectorTests {
             #expect(health.unit == .percent)
             #expect(health.value > 0)
             #expect(health.value <= 100)
+        }
+
+        if let temperature = samples.first(where: { $0.kind == .batteryTemperature }) {
+            #expect(temperature.unit == .celsius)
+            #expect(temperature.value > -20)
+            #expect(temperature.value < 100)
         }
 
         if let remaining = samples.first(where: { $0.kind == .batteryTimeRemaining }) {

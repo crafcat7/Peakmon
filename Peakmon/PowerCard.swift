@@ -25,6 +25,7 @@ struct PowerCard: View {
     private var powerSystemSample: MetricSample? { store.latest(for: .powerSystem) }
     private var powerDRAM: Double { store.value(for: .powerDRAM) }
     private var powerDisplay: Double { store.value(for: .powerDisplay) }
+    private var batteryTemperature: Double? { store.latest(for: .batteryTemperature)?.value }
 
     var body: some View {
         DashboardCardTemplate(
@@ -79,6 +80,9 @@ struct PowerCard: View {
         HStack(spacing: 0) {
             subsystemCell(label: "DISP", watts: powerDisplay)
             subsystemCell(label: "DRAM", watts: powerDRAM)
+            if let batteryTemperature {
+                temperatureCell(label: "BATT", celsius: batteryTemperature)
+            }
             let hasLeft = store.hasHistory(for: .fanLeftRPM)
             let hasRight = store.hasHistory(for: .fanRightRPM)
             if hasLeft, hasRight {
@@ -105,6 +109,19 @@ struct PowerCard: View {
             Text(inactive ? "—" : "\(Int(rpm ?? 0))")
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(inactive ? .tertiary : .secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func temperatureCell(label: String, celsius: Double) -> some View {
+        VStack(spacing: 1) {
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text("\(Int(celsius.rounded()))°C")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(DashboardFormatting.batteryTemperatureColor(celsius))
         }
         .frame(maxWidth: .infinity)
     }

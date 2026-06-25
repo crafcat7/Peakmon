@@ -28,6 +28,7 @@ public enum MetricKind: String, Hashable, Codable, Sendable, CaseIterable {
     case batteryCycleCount = "battery.cycle_count"
     case batteryHealth = "battery.health"
     case batteryTimeRemaining = "battery.time_remaining"
+    case batteryTemperature = "battery.temperature"
     case diskUsed = "disk.used"
     case diskTotal = "disk.total"
     case diskReadRate = "disk.read_rate"

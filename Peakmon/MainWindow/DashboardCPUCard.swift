@@ -179,7 +179,7 @@ struct DashboardCPUCard: View {
 
             if let cpuTemp {
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text("CPU temperature")
+                    Text("Temp")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     HStack(spacing: 4) {

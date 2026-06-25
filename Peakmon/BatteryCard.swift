@@ -2,9 +2,10 @@
 //  BatteryCard.swift
 //  Peakmon
 //
-//  Dashboard battery card: percentage accessory, power-source
-//  badge, charging/AC corner dot, and a sparkline of the charge
-//  history pulled from `batteryLevel`.
+//  Dashboard battery card: percentage + temperature accessory,
+//  power-source badge, charging/AC corner dot, Smart Battery health
+//  facts, and a sparkline of the charge history pulled from
+//  `batteryLevel`.
 //
 
 import PeakmonCore
@@ -27,6 +28,9 @@ struct BatteryCard: View {
     private var health: Double? {
         store.latest(for: .batteryHealth)?.value
     }
+    private var temperature: Double? {
+        store.latest(for: .batteryTemperature)?.value
+    }
     private var timeRemainingSeconds: Double? {
         store.latest(for: .batteryTimeRemaining)?.value
     }
@@ -44,13 +48,7 @@ struct BatteryCard: View {
             tint: iconTint,
             stats: batteryStats(source: src),
             accessory: {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) {
-                        BatteryStatusBadge(source: src, tint: tint)
-                        percentageText(level: level, source: src)
-                    }
-                    percentageText(level: level, source: src)
-                }
+                accessoryStack(level: level, source: src)
             },
             chart: {
                 MetricSparklineView(
@@ -68,9 +66,11 @@ struct BatteryCard: View {
     }
 
     /// Builds the stats row. Always shows Source; appends Health
-    /// and Cycles when AppleSmartBattery exposed them. Time-remaining
-    /// is folded into the Source stat as a secondary line because
-    /// the template's stat layout is single-value-per-block.
+    /// and Cycles when AppleSmartBattery exposed them.
+    /// Time-remaining is folded into the Source stat as a secondary
+    /// line because the template's stat layout is single-value-per-
+    /// block. Temperature lives under the percentage accessory to
+    /// match CPU/GPU popover cards.
     private func batteryStats(source src: BatteryPowerSource) -> [CardStat] {
         var stats: [CardStat] = []
         stats.append(CardStat(
@@ -124,6 +124,23 @@ struct BatteryCard: View {
         case ..<60: .red
         case ..<80: .orange
         default: base
+        }
+    }
+
+    private func accessoryStack(level: Double, source: BatteryPowerSource) -> some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    BatteryStatusBadge(source: source, tint: tint)
+                    percentageText(level: level, source: source)
+                }
+                percentageText(level: level, source: source)
+            }
+            if let temperature, temperature.isFinite {
+                Text("\(Int(temperature.rounded()))°C")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

@@ -38,8 +38,6 @@ let dashboardHeadlineTrendChartHeight: CGFloat = 92
 
 let dashboardPerCoreChartHeight: CGFloat = 56
 
-let dashboardThermalSparklineHeight: CGFloat = 64
-
 /// Disk and network cards carry fewer independent facts than CPU,
 /// memory, GPU, and power. A compact height keeps the rate row from
 /// looking unfinished after duplicate throughput stats are removed.
@@ -64,6 +62,7 @@ struct DashboardMetricCard<Headline: View, Detail: View, Footer: View>: View {
     let systemImage: String
     let tint: Color
     let minHeight: CGFloat
+    let showsFooter: Bool
 
     @ViewBuilder var headline: () -> Headline
     @ViewBuilder var detail: () -> Detail
@@ -74,6 +73,7 @@ struct DashboardMetricCard<Headline: View, Detail: View, Footer: View>: View {
         systemImage: String,
         tint: Color,
         minHeight: CGFloat = dashboardCardMinHeight,
+        showsFooter: Bool? = nil,
         @ViewBuilder headline: @escaping () -> Headline,
         @ViewBuilder detail: @escaping () -> Detail = { EmptyView() },
         @ViewBuilder footer: @escaping () -> Footer = { EmptyView() },
@@ -82,13 +82,14 @@ struct DashboardMetricCard<Headline: View, Detail: View, Footer: View>: View {
         self.systemImage = systemImage
         self.tint = tint
         self.minHeight = minHeight
+        self.showsFooter = showsFooter ?? (Footer.self != EmptyView.self)
         self.headline = headline
         self.detail = detail
         self.footer = footer
     }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 12) {
                 header
 
@@ -105,15 +106,10 @@ struct DashboardMetricCard<Headline: View, Detail: View, Footer: View>: View {
 
             footerBlock
                 .padding(.horizontal, 20)
-                .padding(.bottom, dashboardCardBottomPadding)
+                .offset(y: footerTopOffset)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(
-            minHeight: minHeight,
-            idealHeight: minHeight,
-            maxHeight: minHeight,
-            alignment: .top,
-        )
+        .frame(height: minHeight, alignment: .top)
         .background(.background.secondary, in: .rect(cornerRadius: 14))
         .overlay {
             RoundedRectangle(cornerRadius: 14)
@@ -123,13 +119,17 @@ struct DashboardMetricCard<Headline: View, Detail: View, Footer: View>: View {
     }
 
     private var hasFooter: Bool {
-        Footer.self != EmptyView.self
+        showsFooter
     }
 
     private var contentBottomPadding: CGFloat {
         hasFooter
             ? dashboardCardBottomPadding + dashboardCardFooterBlockHeight
             : dashboardCardBottomPadding
+    }
+
+    private var footerTopOffset: CGFloat {
+        minHeight - dashboardCardBottomPadding - dashboardCardFooterBlockHeight
     }
 
     private var header: some View {

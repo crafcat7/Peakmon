@@ -32,6 +32,14 @@ struct DashboardView: View {
     /// `Text` formatters, then commits a CALayer transaction whose
     /// `CGDrawingLayer.draw` rasterises every glyph again.
     @State private var isVisible = false
+    @State private var popoverDemandArmed = false
+    @State private var popoverDemandTask: Task<Void, Never>?
+
+    /// Give AppKit one run-loop slice to show the popover window
+    /// before turning on demand-gated collectors and Processes. That
+    /// avoids stacking libproc / IOReport wake-ups onto the same frame
+    /// as the popover's material and SwiftUI tree creation.
+    private static let popoverDemandDelay: Duration = .milliseconds(180)
 
     /// Popover width, in points. Bumped from 300 → 420 to give two
     /// half-width cards enough horizontal room to render without
@@ -39,11 +47,13 @@ struct DashboardView: View {
     /// look balanced at this width because the new padding-to-content
     /// ratio (14:392) is close to the original (14:272).
     static let popoverWidth: CGFloat = 420
+    static let popoverHeight: CGFloat = 900
 
     var body: some View {
         let isContentVisible = visibilityOverride ?? isVisible
-        let needsProcesses = isContentVisible && cardSettings.visibility(.processes)
-        let collectorDemandSlots = isContentVisible ? configuredDemandSlots : []
+        let shouldStartDemand = isContentVisible && demandArmed
+        let needsProcesses = shouldStartDemand && cardSettings.visibility(.processes)
+        let collectorDemandSlots = shouldStartDemand ? configuredDemandSlots : []
 
         Group {
             if isContentVisible {
@@ -53,7 +63,7 @@ struct DashboardView: View {
                 // window geometry while hidden, and — critically — does
                 // *not* read any `store.*` property so the @Observable
                 // store no longer triggers `body` recomputes here.
-                Color.clear.frame(width: Self.popoverWidth, height: 1)
+                Color.clear.frame(width: Self.popoverWidth, height: Self.popoverHeight)
             }
         }
         .background {
@@ -62,12 +72,14 @@ struct DashboardView: View {
             }
         }
         .onDisappear {
+            disarmPopoverDemand()
             isVisible = false
             runtime.popoverVisible = false
             runtime.popoverNeedsProcesses = false
         }
         .onChange(of: isContentVisible, initial: true) { _, value in
             runtime.popoverVisible = value
+            updatePopoverDemandArming(isVisible: value)
         }
         .onChange(of: collectorDemandSlots, initial: true) { _, value in
             runtime.updatePopoverConfiguredSlots(value)
@@ -75,6 +87,40 @@ struct DashboardView: View {
         .onChange(of: needsProcesses, initial: true) { _, value in
             runtime.popoverNeedsProcesses = value
         }
+    }
+
+    private var demandArmed: Bool {
+        if visibilityOverride != nil {
+            return isVisible || visibilityOverride == true
+        }
+        return popoverDemandArmed
+    }
+
+    private func updatePopoverDemandArming(isVisible: Bool) {
+        popoverDemandTask?.cancel()
+
+        guard visibilityOverride == nil else {
+            popoverDemandArmed = isVisible
+            return
+        }
+
+        guard isVisible else {
+            popoverDemandArmed = false
+            return
+        }
+
+        popoverDemandArmed = false
+        popoverDemandTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.popoverDemandDelay)
+            guard !Task.isCancelled else { return }
+            popoverDemandArmed = true
+        }
+    }
+
+    private func disarmPopoverDemand() {
+        popoverDemandTask?.cancel()
+        popoverDemandTask = nil
+        popoverDemandArmed = false
     }
 
     /// Real popover content. Lives in its own computed property so the
@@ -99,7 +145,6 @@ struct DashboardView: View {
             transaction.animation = nil
             transaction.disablesAnimations = true
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: visibilityKey)
     }
 
     /// Materialises the user's visibility + width + order

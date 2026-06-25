@@ -2,15 +2,16 @@
 //  DashboardPowerCard.swift
 //  Peakmon
 //
-//  Power + battery panel for the unified dashboard. Battery folds
-//  into Power rather than getting its own card: desktops have none,
-//  and on a laptop the user wants watts and battery in one glance.
+//  Power panel for the unified dashboard. Battery facts ride in
+//  the footer on laptops, separated by the shared footer divider
+//  so the main Power body stays focused on watts.
 //
 //    Collapsed — total package watts + CPU/GPU/DRAM/Display chips +
 //                dual sparkline (CPU / GPU).
 //    Detail    — per-rail decomposition (CPU + GPU + DRAM + Display)
-//                as horizontal bars; battery sub-block when present
-//                (level, source, health, cycles).
+//                as horizontal bars.
+//    Footer    — battery level / source / health / cycles on the
+//                left, with battery temperature anchored bottom-right.
 //
 
 import PeakmonCore
@@ -42,6 +43,7 @@ struct DashboardPowerCard: View {
         return store.latest(for: .batteryCycleCount).map { Int($0.value) }
     }
     private var batteryHealth: Double? { store.latest(for: .batteryHealth)?.value }
+    private var batteryTemperature: Double? { store.latest(for: .batteryTemperature)?.value }
     /// 0 = battery, 1 = AC. Stored as a numeric metric to fit the
     /// metrics-store value model.
     private var isOnBattery: Bool? {
@@ -54,9 +56,10 @@ struct DashboardPowerCard: View {
             title: "Power",
             systemImage: "bolt.fill",
             tint: tint,
+            showsFooter: hasBattery,
             headline: { headlineRow },
             detail: { expandedDetail },
-            footer: { EmptyView() },
+            footer: { batteryFooter },
         )
     }
 
@@ -136,9 +139,6 @@ struct DashboardPowerCard: View {
     private var expandedDetail: some View {
         VStack(alignment: .leading, spacing: 12) {
             railBreakdown
-            if hasBattery {
-                batteryBlock
-            }
         }
     }
 
@@ -157,25 +157,14 @@ struct DashboardPowerCard: View {
         }
     }
 
-    private var batteryBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Battery")
-                .font(.subheadline.weight(.semibold))
-
-            // Level / source / health / cycles — the state and
-            // lifetime facts not shown by the headline watts.
-            // Keeping them here avoids a separate footer that repeats
-            // the headline and can clip inside the fixed dashboard
-            // card height on laptops.
-            //
-            // IOKit's `TimeRemaining` / `TimeToFullCharge` are also
-            // omitted: the field is unreliable across device classes
-            // (desktops report nothing; freshly unplugged or
-            // throttled batteries report `0xFFFF` for minutes) and
-            // "Remaining" means different things depending on
-            // `IsCharging`. Users who want the estimate have it in
-            // the menu-bar icon and System Settings.
-            HStack(spacing: 18) {
+    // Level / source / health / cycles — the state and lifetime facts
+    // not shown by the headline watts. IOKit's
+    // `TimeRemaining` / `TimeToFullCharge` are omitted: the field is
+    // unreliable across device classes and "Remaining" means
+    // different things depending on `IsCharging`.
+    private var batteryFooter: some View {
+        HStack(alignment: .top, spacing: 24) {
+            HStack(alignment: .top, spacing: 22) {
                 statBlock(title: "Level", value: batteryLevel.map { String(format: "%.0f%%", $0) } ?? "—",
                           tint: batteryLevelTint)
                 statBlock(title: "Source", value: sourceLabel,
@@ -185,6 +174,10 @@ struct DashboardPowerCard: View {
                 statBlock(title: "Cycles", value: batteryCycleCount.map { String($0) } ?? "—",
                           tint: .secondary)
             }
+
+            Spacer(minLength: 16)
+
+            temperatureFooter
         }
     }
 
@@ -196,6 +189,22 @@ struct DashboardPowerCard: View {
             Text(value)
                 .font(.callout.monospacedDigit().weight(.medium))
                 .foregroundStyle(tint)
+        }
+    }
+
+    private var temperatureFooter: some View {
+        VStack(alignment: .trailing, spacing: 3) {
+            Text("Temp")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Image(systemName: "thermometer.medium")
+                    .font(.caption)
+                    .foregroundStyle(batteryTemperatureTint)
+                Text(batteryTemperatureLabel)
+                    .font(.callout.monospacedDigit().weight(.medium))
+                    .foregroundStyle(batteryTemperatureTint)
+            }
         }
     }
 
@@ -211,6 +220,16 @@ struct DashboardPowerCard: View {
         if health < 80 { return .red }
         if health < 90 { return .orange }
         return .green
+    }
+
+    private var batteryTemperatureLabel: String {
+        guard let temperature = batteryTemperature else { return "—" }
+        return "\(Int(temperature.rounded()))°C"
+    }
+
+    private var batteryTemperatureTint: Color {
+        guard let temperature = batteryTemperature else { return .secondary }
+        return DashboardFormatting.batteryTemperatureColor(temperature)
     }
 
     private var sourceLabel: String {

@@ -4,12 +4,13 @@
 //
 //  Reports battery level (% of design capacity), power-source state,
 //  and — when an AppleSmartBattery IOService is present — cycle count,
-//  health (AppleRawMaxCapacity / DesignCapacity, in %), and estimated
-//  time remaining (seconds, charge-direction implicit by power source).
+//  health (AppleRawMaxCapacity / DesignCapacity, in %), battery
+//  temperature (°C), and estimated time remaining (seconds,
+//  charge-direction implicit by power source).
 //
 //  Level / source come from `IOPSCopyPowerSourcesInfo`, which is also
 //  the source of truth for desktops + external batteries. The extra
-//  three metrics come from `AppleSmartBattery` via IORegistry. They
+//  metrics come from `AppleSmartBattery` via IORegistry. They
 //  are emitted only when the keys are present and sensible.
 //
 
@@ -77,7 +78,7 @@ public final class BatteryCollector: MetricCollector {
         return .onBattery
     }
 
-    // MARK: - AppleSmartBattery (health + cycles + time)
+    // MARK: - AppleSmartBattery (health + cycles + temperature + time)
 
     private func collectFromSmartBattery() -> [MetricSample] {
         let service = IOServiceGetMatchingService(
@@ -135,6 +136,15 @@ public final class BatteryCollector: MetricCollector {
             ))
         }
 
+        if let rawTemperature = Self.integerValue(for: "Temperature", in: dict),
+           let celsius = Self.smartBatteryCelsius(from: rawTemperature) {
+            out.append(MetricSample(
+                kind: .batteryTemperature,
+                unit: .celsius,
+                value: celsius,
+            ))
+        }
+
         // TimeRemaining is reported in minutes by AppleSmartBattery.
         // 0xFFFF (65535) means "still computing" — skip in that case.
         // While charging, TimeToFullCharge takes over; pick whichever
@@ -152,5 +162,19 @@ public final class BatteryCollector: MetricCollector {
         }
 
         return out
+    }
+
+    static func smartBatteryCelsius(from rawValue: Int) -> Double? {
+        guard rawValue > 0 else { return nil }
+
+        let celsius = Double(rawValue) / 10.0 - 273.15
+        guard (-20 ... 100).contains(celsius) else { return nil }
+        return celsius
+    }
+
+    private static func integerValue(for key: String, in dict: [String: Any]) -> Int? {
+        if let value = dict[key] as? Int { return value }
+        if let value = dict[key] as? NSNumber { return value.intValue }
+        return nil
     }
 }

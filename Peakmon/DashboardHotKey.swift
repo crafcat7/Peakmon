@@ -146,24 +146,63 @@ struct DashboardHotKey: Equatable {
     ]
 }
 
+struct PopoverHotKey: Equatable {
+    static let keyCodeStorageKey = "popoverHotKeyKeyCode"
+    static let modifiersStorageKey = "popoverHotKeyModifiers"
+
+    static let defaultKeyCode = Int(kVK_ANSI_P)
+    static let defaultModifiers = Int(controlKey) | Int(shiftKey) | Int(cmdKey)
+
+    let keyCode: UInt32
+    let modifiers: UInt32
+
+    static var current: PopoverHotKey {
+        let defaults = UserDefaults.standard
+        let storedKeyCode = defaults.object(forKey: keyCodeStorageKey) as? Int ?? defaultKeyCode
+        let storedModifiers = defaults.object(forKey: modifiersStorageKey) as? Int ?? defaultModifiers
+        return PopoverHotKey(
+            keyCode: UInt32(max(storedKeyCode, 0)),
+            modifiers: UInt32(max(storedModifiers, 0)),
+        )
+    }
+
+    static func resetToDefault() {
+        let defaults = UserDefaults.standard
+        defaults.set(defaultKeyCode, forKey: keyCodeStorageKey)
+        defaults.set(defaultModifiers, forKey: modifiersStorageKey)
+    }
+}
+
 final class DashboardHotKeyController {
     static let shared = DashboardHotKeyController()
 
-    private static let signature: OSType = 0x506B4448 // "PkDH"
+    private static let dashboardSignature: OSType = 0x506B4448 // "PkDH"
+    private static let popoverSignature: OSType = 0x506B5048 // "PkPH"
     private static let hotKeyID: UInt32 = 1
 
-    private var hotKeyRef: EventHotKeyRef?
+    private var dashboardHotKeyRef: EventHotKeyRef?
+    private var popoverHotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
     private var defaultsObserver: NSObjectProtocol?
-    private var action: (() -> Void)?
+    private var dashboardAction: (() -> Void)?
+    private var popoverAction: (() -> Void)?
 
     private init() {}
 
     func start(action: @escaping () -> Void) {
-        self.action = action
+        dashboardAction = action
+        start()
+    }
+
+    func startPopover(action: @escaping () -> Void) {
+        popoverAction = action
+        start()
+    }
+
+    private func start() {
         installEventHandlerIfNeeded()
         observeDefaultsIfNeeded()
-        registerCurrentShortcut()
+        registerCurrentShortcuts()
     }
 
     private func observeDefaultsIfNeeded() {
@@ -173,7 +212,7 @@ final class DashboardHotKeyController {
             object: nil,
             queue: .main,
         ) { [weak self] _ in
-            self?.registerCurrentShortcut()
+            self?.registerCurrentShortcuts()
         }
     }
 
@@ -203,18 +242,25 @@ final class DashboardHotKeyController {
                     nil,
                     &hotKeyID,
                 )
-                guard status == noErr,
-                      hotKeyID.signature == DashboardHotKeyController.signature,
-                      hotKeyID.id == DashboardHotKeyController.hotKeyID
-                else {
-                    return noErr
-                }
+                guard status == noErr else { return noErr }
 
                 let controller = Unmanaged<DashboardHotKeyController>
                     .fromOpaque(userData)
                     .takeUnretainedValue()
+
+                let action: (() -> Void)?
+                switch (hotKeyID.signature, hotKeyID.id) {
+                case (DashboardHotKeyController.dashboardSignature, DashboardHotKeyController.hotKeyID):
+                    action = controller.dashboardAction
+                case (DashboardHotKeyController.popoverSignature, DashboardHotKeyController.hotKeyID):
+                    action = controller.popoverAction
+                default:
+                    action = nil
+                }
+
+                guard let action else { return noErr }
                 DispatchQueue.main.async {
-                    controller.action?()
+                    action()
                 }
                 return noErr
             },
@@ -225,8 +271,14 @@ final class DashboardHotKeyController {
         )
     }
 
-    private func registerCurrentShortcut() {
-        unregisterShortcut()
+    private func registerCurrentShortcuts() {
+        registerDashboardShortcut()
+        registerPopoverShortcut()
+    }
+
+    private func registerDashboardShortcut() {
+        unregisterDashboardShortcut()
+        guard dashboardAction != nil else { return }
         let shortcut = DashboardHotKey.current
         guard DashboardHotKey.isValid(
             keyCode: Int(shortcut.keyCode),
@@ -235,14 +287,50 @@ final class DashboardHotKeyController {
             return
         }
 
+        registerShortcut(
+            keyCode: shortcut.keyCode,
+            modifiers: shortcut.modifiers,
+            signature: Self.dashboardSignature,
+            name: "dashboard",
+            hotKeyRef: &dashboardHotKeyRef,
+        )
+    }
+
+    private func registerPopoverShortcut() {
+        unregisterPopoverShortcut()
+        guard popoverAction != nil else { return }
+        let shortcut = PopoverHotKey.current
+        guard DashboardHotKey.isValid(
+            keyCode: Int(shortcut.keyCode),
+            carbonModifiers: Int(shortcut.modifiers),
+        ) else {
+            return
+        }
+
+        registerShortcut(
+            keyCode: shortcut.keyCode,
+            modifiers: shortcut.modifiers,
+            signature: Self.popoverSignature,
+            name: "popover",
+            hotKeyRef: &popoverHotKeyRef,
+        )
+    }
+
+    private func registerShortcut(
+        keyCode: UInt32,
+        modifiers: UInt32,
+        signature: OSType,
+        name: String,
+        hotKeyRef: inout EventHotKeyRef?,
+    ) {
         var hotKeyID = EventHotKeyID()
-        hotKeyID.signature = Self.signature
+        hotKeyID.signature = signature
         hotKeyID.id = Self.hotKeyID
 
         var nextHotKeyRef: EventHotKeyRef?
         let status = RegisterEventHotKey(
-            shortcut.keyCode,
-            shortcut.modifiers,
+            keyCode,
+            modifiers,
             hotKeyID,
             GetApplicationEventTarget(),
             0,
@@ -251,13 +339,19 @@ final class DashboardHotKeyController {
         if status == noErr {
             hotKeyRef = nextHotKeyRef
         } else {
-            NSLog("Peakmon failed to register dashboard hotkey: \(status)")
+            NSLog("Peakmon failed to register \(name) hotkey: \(status)")
         }
     }
 
-    private func unregisterShortcut() {
-        guard let hotKeyRef else { return }
-        UnregisterEventHotKey(hotKeyRef)
-        self.hotKeyRef = nil
+    private func unregisterDashboardShortcut() {
+        guard let dashboardHotKeyRef else { return }
+        UnregisterEventHotKey(dashboardHotKeyRef)
+        self.dashboardHotKeyRef = nil
+    }
+
+    private func unregisterPopoverShortcut() {
+        guard let popoverHotKeyRef else { return }
+        UnregisterEventHotKey(popoverHotKeyRef)
+        self.popoverHotKeyRef = nil
     }
 }

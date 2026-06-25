@@ -111,6 +111,7 @@ struct PeakmonApp: App {
 
         installMenuBarStatusItem()
         installDashboardHotKey()
+        installPopoverHotKey()
 
         if isBenchmarkDashboardModeEnabled {
             Task { @MainActor in
@@ -174,6 +175,14 @@ struct PeakmonApp: App {
                 openWindow(id: "main")
                 ActivationPolicyController.shared.activateRegular()
                 MainWindowVisibility.shared.recompute()
+            }
+        }
+    }
+
+    private func installPopoverHotKey() {
+        DashboardHotKeyController.shared.startPopover {
+            Task { @MainActor in
+                menuBarStatusController?.togglePopoverFromHotKey()
             }
         }
     }
@@ -378,7 +387,7 @@ private final class BenchmarkStatusPopoverController {
         popover = NSPopover()
         popover.behavior = .applicationDefined
         popover.animates = false
-        popover.contentSize = CGSize(width: DashboardView.popoverWidth, height: 900)
+        popover.contentSize = CGSize(width: DashboardView.popoverWidth, height: DashboardView.popoverHeight)
         popover.contentViewController = NSHostingController(rootView:
             CardSettingsScope(visibilityOverrides: visibilityOverrides) {
                 DashboardView(visibilityOverride: true)
@@ -419,7 +428,7 @@ private final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
         popover = NSPopover()
         popover.behavior = .transient
         popover.animates = false
-        popover.contentSize = CGSize(width: DashboardView.popoverWidth, height: 900)
+        popover.contentSize = CGSize(width: DashboardView.popoverWidth, height: DashboardView.popoverHeight)
         popover.contentViewController = NSHostingController(rootView:
             CardSettingsScope(visibilityOverrides: visibilityOverrides) {
                 DashboardView()
@@ -495,14 +504,21 @@ private final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
         if popover.isShown {
             popover.performClose(sender)
         } else {
-            renderStatusItem(force: true)
             popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
+            scheduleStartupRender(after: .milliseconds(120))
         }
     }
 
+    func togglePopoverFromHotKey() {
+        guard let button = statusItem.button else { return }
+        togglePopover(button)
+    }
+
     func popoverWillShow(_ notification: Notification) {
-        runtime.popoverVisible = true
+        // DashboardView's visibility probe flips this after the
+        // window is actually visible. Doing it here turns collectors
+        // on during NSPopover.show and makes the open feel sticky.
     }
 
     func popoverDidClose(_ notification: Notification) {
@@ -1211,7 +1227,7 @@ private extension CardTintSlot {
         case .battery:
             [.battery]
         case .power:
-            [.power, .fan]
+            [.power, .fan, .battery]
         case .memory:
             [.memory]
         case .disk:

@@ -5,16 +5,17 @@
 //  GPU panel for the unified dashboard.
 //
 //    Collapsed — utilisation headline + trend sparkline.
-//    Expanded  — thermal history sparkline with live temperature,
-//                plus power-rail decomposition (Core / CS / SRAM)
+//    Expanded  — power-rail decomposition (Core / CS / SRAM)
 //                as horizontal bars when available.
-//    Footer    — total power + GPU temperature.
+//    Footer    — total power + temperature, matching the CPU card's
+//                bottom-right Temp treatment.
 //
 //  No per-engine breakdown (3D / Media / Compute): macOS exposes
 //  it only via private IOReport channels needing Screen Recording
 //  entitlement or root + tcc bypass — both out of scope for an
-//  ad-hoc signed app. The triple-series view answers the practical
-//  questions (busy? hot? drawing watts?).
+//  ad-hoc signed app. The card keeps the practical questions visible:
+//  busy in the headline, drawing watts in chips/footer, and hot in
+//  the bottom-right temperature footer.
 //
 
 import PeakmonCore
@@ -84,9 +85,6 @@ struct DashboardGPUCard: View {
                 .padding(.top, 4)
 
             HStack(spacing: 14) {
-                if let gpuTemp {
-                    MetricChipView(label: "temp", value: String(format: "%.0f°C", gpuTemp), color: .orange)
-                }
                 if let gpuPower {
                     MetricChipView(label: "power", value: String(format: "%.1f W", gpuPower), color: .yellow)
                 }
@@ -114,48 +112,11 @@ struct DashboardGPUCard: View {
 
     private var expandedDetail: some View {
         VStack(alignment: .leading, spacing: 12) {
-            thermalSection
             if hasGPUSubRails {
                 gpuSubRails
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
-    }
-
-    /// GPU temperature history sparkline. Always visible — the
-    /// thermal trend is the single most actionable GPU metric
-    /// after utilisation: sustained high temps lead to
-    /// thermal throttling, and the slope tells the user whether
-    /// the cooling solution is keeping up.
-    private var thermalSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Thermal")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                if let gpuTemp {
-                    HStack(spacing: 4) {
-                        Image(systemName: "thermometer.medium")
-                            .font(.caption)
-                            .foregroundStyle(DashboardFormatting.temperatureColor(gpuTemp))
-                        Text("\(Int(gpuTemp.rounded()))°C")
-                            .font(.caption.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(DashboardFormatting.temperatureColor(gpuTemp))
-                    }
-                }
-            }
-            MetricSparklineView(
-                samples: store.historySuffix(for: .thermalGPU, limit: dashboardSparklineSampleLimit),
-                style: SparklineStyle(
-                    color: .orange,
-                    fillOpacity: 0.18,
-                    lineWidth: 1.5,
-                    yMin: 0,
-                    yMax: nil,
-                ),
-            )
-            .frame(height: dashboardThermalSparklineHeight)
-        }
     }
 
     /// GPU sub-rail power decomposition: Core / CS / SRAM as
@@ -189,7 +150,7 @@ struct DashboardGPUCard: View {
 
             if let gpuTemp {
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text("GPU temperature")
+                    Text("Temp")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     HStack(spacing: 4) {

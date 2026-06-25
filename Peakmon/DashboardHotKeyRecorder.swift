@@ -12,6 +12,38 @@ import SwiftUI
 struct DashboardHotKeyRecorder: View {
     @AppStorage(DashboardHotKey.keyCodeStorageKey) private var keyCode = DashboardHotKey.defaultKeyCode
     @AppStorage(DashboardHotKey.modifiersStorageKey) private var modifiers = DashboardHotKey.defaultModifiers
+
+    var body: some View {
+        HotKeyRecorderContent(
+            keyCode: $keyCode,
+            modifiers: $modifiers,
+            resetToDefault: {
+                DashboardHotKey.resetToDefault()
+            },
+        )
+    }
+}
+
+struct PopoverHotKeyRecorder: View {
+    @AppStorage(PopoverHotKey.keyCodeStorageKey) private var keyCode = PopoverHotKey.defaultKeyCode
+    @AppStorage(PopoverHotKey.modifiersStorageKey) private var modifiers = PopoverHotKey.defaultModifiers
+
+    var body: some View {
+        HotKeyRecorderContent(
+            keyCode: $keyCode,
+            modifiers: $modifiers,
+            resetToDefault: {
+                PopoverHotKey.resetToDefault()
+            },
+        )
+    }
+}
+
+private struct HotKeyRecorderContent: View {
+    @Binding var keyCode: Int
+    @Binding var modifiers: Int
+    let resetToDefault: @MainActor () -> Void
+
     @State private var isRecording = false
     @State private var eventMonitor: Any?
 
@@ -27,7 +59,7 @@ struct DashboardHotKeyRecorder: View {
 
             Button {
                 stopRecording()
-                DashboardHotKey.resetToDefault()
+                resetToDefault()
             } label: {
                 Image(systemName: "arrow.counterclockwise")
                     .imageScale(.small)

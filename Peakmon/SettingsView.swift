@@ -90,10 +90,18 @@ struct GeneralPage: View {
             }
 
             SettingsSection("Shortcuts") {
-                HStack(spacing: 10) {
-                    Label("Show Dashboard", systemImage: "macwindow")
-                    Spacer()
-                    DashboardHotKeyRecorder()
+                VStack(spacing: 12) {
+                    HStack(spacing: 10) {
+                        Label("Show Dashboard", systemImage: "macwindow")
+                        Spacer()
+                        DashboardHotKeyRecorder()
+                    }
+
+                    HStack(spacing: 10) {
+                        Label("Show Popover", systemImage: "rectangle.on.rectangle")
+                        Spacer()
+                        PopoverHotKeyRecorder()
+                    }
                 }
             }
 

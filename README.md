@@ -1,28 +1,11 @@
-<p align="center">
-  <img src="Docs/assets/peakmon-icon.png" alt="Peakmon" width="128" height="128" />
-</p>
+# Peakmon
 
-<h1 align="center">Peakmon</h1>
+[![macOS](https://img.shields.io/badge/macOS-14.0%2B-blue?logo=apple)](https://github.com/crafcat7/Peakmon/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-<p align="center"><b>Native, lightweight macOS menu-bar system monitor.</b></p>
+Peakmon is a native macOS menu-bar system monitor for viewing common system metrics in the menu bar and a dashboard window.
 
-<p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a></p>
-
-Peakmon shows live CPU, GPU, Memory, Battery, Disk, Network, and
-top-process metrics right in your menu bar — no Activity Monitor, no
-Electron, no telemetry. Configure exactly what you want to see, pick
-your colours, and forget it is there.
-
-<p align="left">
-  <img alt="macOS" src="https://img.shields.io/badge/macOS-14.0%2B-blue?logo=apple" />
-  <img alt="Swift" src="https://img.shields.io/badge/Swift-6.3-orange?logo=swift" />
-  <img alt="Xcode" src="https://img.shields.io/badge/Xcode-26.4-1575F9?logo=xcode" />
-  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue" />
-</p>
-
----
-
-## Screenshots
+It currently supports real-time CPU, GPU, Memory, Battery, Disk, Network, and Processes metrics. Built with SwiftUI and local Swift packages. No Electron shell, no telemetry — data is collected and displayed locally only.
 
 <p align="center">
   <img alt="Menu bar (light)" src="Docs/assets/Run-Light.png" width="280" />
@@ -30,41 +13,19 @@ your colours, and forget it is there.
   <img alt="Menu bar (dark)" src="Docs/assets/Run-Dark.png" width="280" />
 </p>
 
-## Design goals
+<p align="center">
+  <img alt="Dashboard (light)" src="Docs/assets/Dashboard-Light.png" width="640" />
+</p>
 
-- **Native.** SwiftUI + Swift Concurrency + Swift Charts. No Combine,
-  no NSTimer, no third-party UI / DI / logging frameworks.
-- **Lightweight.** Lives quietly in the menu bar, sips CPU, and stays
-  out of your way.
-- **Apple Silicon first.** Uses unified-memory metrics, IOReport
-  channels, and HID sensor services.
-- **Modular & open.** Code is split into local Swift Packages so a
-  new contributor can navigate the entire codebase in under an hour.
+<p align="center">
+  <img alt="Dashboard (dark)" src="Docs/assets/Dashboard-Dark.png" width="640" />
+</p>
 
-## Requirements
+## Download
 
-- macOS **14.0** Sonoma or newer.
-- Xcode **26.4** or newer.
-- Apple Silicon recommended; Intel best-effort.
+**[https://github.com/crafcat7/Peakmon/releases](https://github.com/crafcat7/Peakmon/releases)**
 
-## Build
-
-```sh
-# Open in Xcode and Run, or:
-xcodebuild \
-  -project Peakmon.xcodeproj \
-  -scheme Peakmon \
-  -destination 'platform=macOS' \
-  build
-```
-
-Per-package tests:
-
-```sh
-swift test --package-path Packages/PeakmonCore
-```
-
-## Install
+Download the latest `Peakmon.app.zip`, unzip, drop into `/Applications`. Right-click → Open on first launch to bypass Gatekeeper.
 
 ### Homebrew
 
@@ -72,45 +33,63 @@ swift test --package-path Packages/PeakmonCore
 brew install crafcat7/cellar/peakmon
 ```
 
-This installs the latest release of Peakmon into your Homebrew
-prefix and prints instructions for symlinking it into `/Applications`
-if you want it to show up in Spotlight.
+## What it shows
 
-### Pre-built binary
+**Menu bar** — compact segments (CPU %, memory pressure, network rate, GPU utilization, etc.) rendered as a single image. Text color adapts to the menu bar background (light / dark / full-screen).
 
-Each release also ships an ad-hoc signed `.app.zip` on the
-[GitHub Releases][releases] page. Download, unzip, and drop the
-`.app` into `/Applications`.
+**Popover** — click the menu bar icon for sparkline charts, per-metric stats, and a top-process list.
 
-**App Sandbox is intentionally disabled** so Peakmon can read
-system-level metrics. The binary is ad-hoc signed; on first launch
-right-click → Open to bypass Gatekeeper.
+**Dashboard** — unified window with per-metric cards (CPU, Memory, GPU, Power, Disk, Network). Each card has headline numbers, sparkline charts, and expanded detail sections. Open via menu bar icon or global hotkey `⌃⌥⌘D`.
 
-Mac App Store release is not planned for the near future.
+**Customization** — toggle cards on/off, reorder by drag, pick per-card accent colors, choose which metrics appear in the menu bar.
 
-[releases]: https://github.com/crafcat7/Peakmon/releases
+## Data sources
+
+All data stays on-device. No network requests.
+
+| Metric | Source |
+|--------|--------|
+| CPU / Memory | `host_statistics64` (Darwin) |
+| GPU utilization | IOAccelerator `PerformanceStatistics` (IOKit) |
+| Power (per-rail) | IOReport "Energy Model" (libIOReport, dlopen) |
+| Temperature | SMC keys `Tp0X` / `Tg0D` |
+| Fan RPM | SMC key `F0Ac` |
+| Battery | IOKit `AppleSmartBattery` |
+| Disk | IOKit `IOBlockStorageDriver` |
+| Network | `getifaddrs` (Darwin) |
+| Processes | `proc_pidinfo` (libproc) |
+
+## Requirements
+
+- macOS **14.0** Sonoma or newer
+- Apple Silicon recommended; Intel best-effort
+
+## Build from source
+
+```sh
+git clone https://github.com/crafcat7/Peakmon.git
+cd Peakmon
+./Tools/release.sh
+```
+
+Or open `Peakmon.xcodeproj` in Xcode and press Run.
+
+Tests:
+
+```sh
+swift test --package-path Packages/PeakmonCore
+```
 
 ## Repository layout
 
 ```
-Peakmon/                 # App target sources (MenuBarExtra entry)
+Peakmon/                   # App target (menu bar + dashboard + settings)
 Packages/
-  PeakmonCore/           # Models, scheduler, store, logger facade
-  PeakmonCollectors/     # CPU / GPU / Memory / Battery / Disk / Network / Processes
-  PeakmonUI/             # Reusable views (sparkline, color hex helpers…)
+  PeakmonCore/             # MetricKind, MetricsStore, MetricsScheduler, SMC/IOReport bridges
+  PeakmonCollectors/       # 10 collectors (CPU, GPU, Memory, Power, Thermal, Fan, Battery, Disk, Network, Processes)
+  PeakmonUI/               # Shared views (sparkline, card templates, DashboardComponents)
 ```
-
-## Contributing
-
-See [`Docs/CONTRIBUTING.md`](Docs/CONTRIBUTING.md). TL;DR:
-
-- Swift 6.2+, macOS 14.0+ SDK.
-- SwiftUI + Swift Concurrency. **No** Combine, **no** NSTimer for
-  metric polling.
-- Only `MetricsScheduler` polls the system. Views read `MetricsStore`.
-- Run `swiftlint` before committing. CI runs `--strict`.
-- Conventional Commits (e.g. `feat(collectors): add NetworkCollector`).
 
 ## License
 
-Peakmon is released under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE)

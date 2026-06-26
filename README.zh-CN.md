@@ -1,28 +1,11 @@
-<p align="center">
-  <img src="Docs/assets/peakmon-icon.png" alt="Peakmon" width="128" height="128" />
-</p>
+# Peakmon
 
-<h1 align="center">Peakmon</h1>
+[![macOS](https://img.shields.io/badge/macOS-14.0%2B-blue?logo=apple)](https://github.com/crafcat7/Peakmon/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-<p align="center"><b>原生、轻量的 macOS 菜单栏系统监视器。</b></p>
+Peakmon 是一个原生 macOS 菜单栏系统监视器，用于在菜单栏和仪表盘窗口中查看常用系统指标。
 
-<p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a></p>
-
-Peakmon 把 CPU、GPU、内存、电量、磁盘、网络以及高占用进程等实时指标
-直接显示在 macOS 菜单栏中 —— 无需打开活动监视器，没有 Electron 外壳，
-也不上传任何数据。你可以精确选择想看的内容，自定义每张卡的配色，
-然后忘了它的存在。
-
-<p align="left">
-  <img alt="macOS" src="https://img.shields.io/badge/macOS-14.0%2B-blue?logo=apple" />
-  <img alt="Swift" src="https://img.shields.io/badge/Swift-6.3-orange?logo=swift" />
-  <img alt="Xcode" src="https://img.shields.io/badge/Xcode-26.4-1575F9?logo=xcode" />
-  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue" />
-</p>
-
----
-
-## 截图
+它目前支持 CPU、GPU、内存、电池、磁盘、网络和进程等实时指标。项目使用 SwiftUI 和本地 Swift packages 构建，无 Electron 外壳，无遥测上报，数据仅在本机采集和展示。
 
 <p align="center">
   <img alt="菜单栏（浅色）" src="Docs/assets/Run-Light.png" width="280" />
@@ -30,40 +13,19 @@ Peakmon 把 CPU、GPU、内存、电量、磁盘、网络以及高占用进程�
   <img alt="菜单栏（深色）" src="Docs/assets/Run-Dark.png" width="280" />
 </p>
 
-## 设计目标
+<p align="center">
+  <img alt="仪表盘（浅色）" src="Docs/assets/Dashboard-Light.png" width="640" />
+</p>
 
-- **原生**：SwiftUI + Swift Concurrency + Swift Charts，不使用
-  Combine、不使用 NSTimer，也不引入任何第三方 UI / DI / 日志库。
-- **轻量低扰**：常驻菜单栏，安静运行，不打扰你的工作。
-- **Apple Silicon 优先**：充分利用统一内存指标、IOReport 通道与
-  HID 传感器服务。
-- **模块化与开放**：代码拆分为多个本地 Swift Package，新贡献者
-  应能在一小时内浏览完整代码库。
+<p align="center">
+  <img alt="仪表盘（深色）" src="Docs/assets/Dashboard-Dark.png" width="640" />
+</p>
 
-## 系统要求
+## 下载
 
-- macOS **14.0** Sonoma 或更高。
-- Xcode **26.4** 或更高。
-- 推荐 Apple Silicon；Intel 尽力支持。
+**[https://github.com/crafcat7/Peakmon/releases](https://github.com/crafcat7/Peakmon/releases)**
 
-## 构建
-
-```sh
-# 用 Xcode 打开并 Run，或：
-xcodebuild \
-  -project Peakmon.xcodeproj \
-  -scheme Peakmon \
-  -destination 'platform=macOS' \
-  build
-```
-
-运行单包测试：
-
-```sh
-swift test --package-path Packages/PeakmonCore
-```
-
-## 安装
+下载最新 `Peakmon.app.zip`，解压后拖到 `/Applications`。首次启动右键 → 打开放行。
 
 ### Homebrew
 
@@ -71,42 +33,63 @@ swift test --package-path Packages/PeakmonCore
 brew install crafcat7/cellar/peakmon
 ```
 
-会把最新版 Peakmon 装到 Homebrew 前缀目录下，并提示如何创建软链
-到 `/Applications`，方便 Spotlight 检索。
+## 功能
 
-### 预编译二进制
+**菜单栏** — 紧凑的 segment 布局（CPU%、内存压力、网速、GPU 利用率等），栅格化为单张图片。文字颜色自动适配菜单栏背景（深色/浅色/全屏）。
 
-每个版本同时会在 [GitHub Releases][releases] 提供 ad-hoc 签名的
-`.app.zip`。下载解压后，把 `.app` 拖到 `/Applications` 即可。
+**弹窗** — 点击菜单栏图标查看 sparkline 图表、每项指标的详细数据、高占用进程列表。
 
-**App Sandbox 是被有意关闭的**，因为 Peakmon 需要读取系统级指标。
-首次启动若被 Gatekeeper 拦下，右键 → 打开放行即可。
+**仪表盘** — 统一窗口，包含 CPU、Memory、GPU、Power、Disk、Network 等卡片。每张卡有大数字、sparkline 图表和展开详情。支持全局快捷键 `⌃⌥⌘D`。
 
-Mac App Store 分发不在计划之内。
+**自定义** — 开关卡片、拖拽排序、自定义配色、选择菜单栏显示哪些指标。
 
-[releases]: https://github.com/crafcat7/Peakmon/releases
+## 数据来源
+
+所有数据保留在本地，无网络请求。
+
+| 指标 | 来源 |
+|------|------|
+| CPU / 内存 | `host_statistics64` (Darwin) |
+| GPU 利用率 | IOAccelerator `PerformanceStatistics` (IOKit) |
+| 功耗（分轨） | IOReport "Energy Model" (libIOReport, dlopen) |
+| 温度 | SMC keys `Tp0X` / `Tg0D` |
+| 风扇转速 | SMC key `F0Ac` |
+| 电池 | IOKit `AppleSmartBattery` |
+| 磁盘 | IOKit `IOBlockStorageDriver` |
+| 网络 | `getifaddrs` (Darwin) |
+| 进程 | `proc_pidinfo` (libproc) |
+
+## 系统要求
+
+- macOS **14.0** Sonoma 或更高
+- 推荐 Apple Silicon；Intel 尽力支持
+
+## 从源码构建
+
+```sh
+git clone https://github.com/crafcat7/Peakmon.git
+cd Peakmon
+./Tools/release.sh
+```
+
+或用 Xcode 打开 `Peakmon.xcodeproj` 直接 Run。
+
+测试：
+
+```sh
+swift test --package-path Packages/PeakmonCore
+```
 
 ## 仓库结构
 
 ```
-Peakmon/                 # 应用主体源码（MenuBarExtra 入口）
+Peakmon/                   # 应用主体（菜单栏 + 仪表盘 + 设置）
 Packages/
-  PeakmonCore/           # 模型、调度器、store、日志门面
-  PeakmonCollectors/     # CPU / GPU / 内存 / 电池 / 磁盘 / 网络 / 进程
-  PeakmonUI/             # 通用视图（迷你图、hex 颜色辅助…）
+  PeakmonCore/             # MetricKind, MetricsStore, MetricsScheduler, SMC/IOReport 桥
+  PeakmonCollectors/       # 10 个 collector（CPU, GPU, Memory, Power, Thermal, Fan, Battery, Disk, Network, Processes）
+  PeakmonUI/               # 共享视图（sparkline, card 模板, DashboardComponents）
 ```
-
-## 贡献
-
-详见 [`Docs/CONTRIBUTING.md`](Docs/CONTRIBUTING.md):
-
-- Swift 6.2+，macOS 14.0+ SDK。
-- SwiftUI + Swift Concurrency。**禁用** Combine，**禁用** NSTimer
-  做指标轮询。
-- 只有 `MetricsScheduler` 轮询系统，视图层只读 `MetricsStore`。
-- 提交前运行 `swiftlint`，CI 用 `--strict`。
-- 使用 Conventional Commits（例如：`feat(collectors): add NetworkCollector`）。
 
 ## 许可证
 
-Peakmon 基于 [Apache License 2.0](LICENSE) 协议发布。
+[Apache License 2.0](LICENSE)

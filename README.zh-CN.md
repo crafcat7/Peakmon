@@ -3,6 +3,8 @@
 [![macOS](https://img.shields.io/badge/macOS-14.0%2B-blue?logo=apple)](https://github.com/crafcat7/Peakmon/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
+[English](README.md) · [简体中文](README.zh-CN.md)
+
 Peakmon 是一个原生 macOS 菜单栏系统监视器，用于在菜单栏和仪表盘窗口中查看常用系统指标。
 
 它目前支持 CPU、GPU、内存、电池、磁盘、网络和进程等实时指标。项目使用 SwiftUI 和本地 Swift packages 构建，无 Electron 外壳，无遥测上报，数据仅在本机采集和展示。

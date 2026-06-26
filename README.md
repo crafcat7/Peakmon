@@ -3,6 +3,8 @@
 [![macOS](https://img.shields.io/badge/macOS-14.0%2B-blue?logo=apple)](https://github.com/crafcat7/Peakmon/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
+[English](README.md) · [简体中文](README.zh-CN.md)
+
 Peakmon is a native macOS menu-bar system monitor for viewing common system metrics in the menu bar and a dashboard window.
 
 It currently supports real-time CPU, GPU, Memory, Battery, Disk, Network, and Processes metrics. Built with SwiftUI and local Swift packages. No Electron shell, no telemetry — data is collected and displayed locally only.

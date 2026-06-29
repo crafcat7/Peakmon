@@ -396,12 +396,3 @@ private struct PopoverWindowVisibilityProbe: NSViewRepresentable {
         }
     }
 }
-
-#Preview {
-    CardSettingsScope {
-        DashboardView()
-}
-.environment(MetricsStore())
-.environment(ProcessesStore())
-.environment(MetricsRuntime())
-}

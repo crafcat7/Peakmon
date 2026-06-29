@@ -127,11 +127,3 @@ struct DashboardSurface: View {
         }
     }
 }
-
-#Preview {
-    DashboardSurface()
-        .frame(width: 1000, height: 680)
-        .environment(MetricsStore())
-        .environment(ProcessesStore())
-        .environment(MetricsRuntime())
-}

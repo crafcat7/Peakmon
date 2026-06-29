@@ -33,6 +33,8 @@
 //         "R 1.2M" / "W  45K")
 //       - `.miniBarChart(MetricKind, tint:, autoscale:)` a single
 //         metric history
+//       - `.miniBarChartWithFallback(...)` primary history with a
+//         secondary metric used when the primary has no positive data
 //       - `.miniBarChartCombined(MetricKind, MetricKind, tint:)` two
 //         histories summed into one chart (NET in+out, DSK r+w)
 //
@@ -98,8 +100,10 @@ enum ValueTemplate {
     case percentWithIndicator(MetricKind, indicator: IndicatorKind)
     case dualRateStacked(prefixes: (String, String), MetricKind, MetricKind)
     case miniBarChart(MetricKind, tintRole: TintRole, autoscale: Bool)
+    case miniBarChartWithFallback(primary: MetricKind, fallback: MetricKind, tintRole: TintRole, autoscale: Bool)
     case miniBarChartCombined(MetricKind, MetricKind, tintRole: TintRole)
     case watts(MetricKind)
+    case wattsWithFallback(primary: MetricKind, fallback: MetricKind)
 }
 
 /// Status glyph kinds emitted by `percentWithIndicator`. Currently only
@@ -152,6 +156,9 @@ enum SignatureInput: Equatable {
     /// Percent-style 18-sample history hashed at integer
     /// resolution. Used by `.miniBarChart` for non-rate metrics.
     case history(MetricKind)
+    /// History where the primary metric is preferred but a fallback
+    /// metric renders when the primary has no positive samples.
+    case historyWithFallback(primary: MetricKind, fallback: MetricKind)
     /// Rate-style 18-sample history hashed through `bucketRate`
     /// per sample. Used by `.miniBarChart` for rate metrics and
     /// by `.miniBarChartCombined`.
@@ -163,6 +170,8 @@ enum SignatureInput: Equatable {
     /// Watts scalar quantised to the granularity `shortWatts`
     /// actually renders: 0.1 W under 10 W, 1 W thereafter.
     case watts(MetricKind)
+    /// Watts scalar using the same primary/fallback decision as rendering.
+    case wattsWithFallback(primary: MetricKind, fallback: MetricKind)
 }
 
 extension ValueTemplate {
@@ -191,10 +200,14 @@ extension ValueTemplate {
             } else {
                 [.history(kind)]
             }
+        case let .miniBarChartWithFallback(primary, fallback, _, _):
+            [.historyWithFallback(primary: primary, fallback: fallback)]
         case let .miniBarChartCombined(a, b, _):
             [.rateHistory(a), .rateHistory(b)]
         case let .watts(kind):
             [.watts(kind)]
+        case let .wattsWithFallback(primary, fallback):
+            [.wattsWithFallback(primary: primary, fallback: fallback)]
         }
     }
 
@@ -258,6 +271,13 @@ struct MenuBarSegmentBlock: View {
                 tint: effectiveTint(for: kind, base: resolveTint(tintRole)),
                 maxValue: autoscale ? nil : 100,
             )
+        case let .miniBarChartWithFallback(primary, fallback, tintRole, autoscale):
+            let kind = fallbackKind(primary: primary, fallback: fallback)
+            chartView(
+                samples: store.historySuffix(for: kind, limit: SegmentMetrics.miniChartBarCount),
+                tint: effectiveTint(for: kind, base: resolveTint(tintRole)),
+                maxValue: autoscale ? nil : 100,
+            )
         case let .miniBarChartCombined(kindA, kindB, tintRole):
             chartView(
                 samples: Self.combinedHistory(store: store, kindA: kindA, kindB: kindB),
@@ -266,6 +286,8 @@ struct MenuBarSegmentBlock: View {
             )
         case let .watts(kind):
             wattsView(kind: kind)
+        case let .wattsWithFallback(primary, fallback):
+            wattsView(kind: fallbackKind(primary: primary, fallback: fallback))
         }
     }
 
@@ -283,6 +305,11 @@ struct MenuBarSegmentBlock: View {
         let v = store.latest(for: kind)?.value ?? 0
         Text(Self.shortWatts(v))
             .frame(width: SegmentMetrics.wattsValueWidth, alignment: .trailing)
+    }
+
+    private func fallbackKind(primary: MetricKind, fallback: MetricKind) -> MetricKind {
+        let primaryValue = store.latest(for: primary)?.value ?? 0
+        return primaryValue > 0 ? primary : fallback
     }
 
     @ViewBuilder
@@ -557,7 +584,7 @@ extension MenuBarSegment {
                 title: "Power W",
                 systemImage: "bolt.fill",
                 shortName: "PWR",
-                template: (.horizontal, .watts(.powerPackage)),
+                template: (.horizontal, .wattsWithFallback(primary: .powerSystem, fallback: .powerPackage)),
             )
         case .powerGraph:
             SegmentDescriptor(
@@ -566,7 +593,12 @@ extension MenuBarSegment {
                 shortName: "PWR",
                 template: (
                     .verticalGlyphs,
-                    .miniBarChart(.powerPackage, tintRole: .power, autoscale: true),
+                    .miniBarChartWithFallback(
+                        primary: .powerSystem,
+                        fallback: .powerPackage,
+                        tintRole: .power,
+                        autoscale: true,
+                    ),
                 ),
             )
         }

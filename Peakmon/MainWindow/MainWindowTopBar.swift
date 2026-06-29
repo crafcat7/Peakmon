@@ -91,21 +91,3 @@ struct MainWindowTopBar: View {
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
-
-#Preview {
-    struct PreviewHost: View {
-        @State private var selection: MainWindowTab = .dashboard
-        var body: some View {
-            VStack {
-                MainWindowTopBar(selection: $selection)
-                Text("Selected: \(selection.title)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 24)
-            }
-            .padding(40)
-            .frame(width: 600, height: 200)
-        }
-    }
-    return PreviewHost()
-}

@@ -123,10 +123,3 @@ struct MainWindowView: View {
         }
     }
 }
-
-#Preview {
-    MainWindowView(selection: .constant(.dashboard))
-        .environment(MetricsStore())
-        .environment(ProcessesStore())
-        .environment(MetricsRuntime())
-}

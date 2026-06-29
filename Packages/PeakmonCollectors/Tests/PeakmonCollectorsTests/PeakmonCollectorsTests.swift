@@ -13,6 +13,21 @@ struct ProcessCollectorTests {
         let limited = ProcessCollector(limit: 10)
         #expect(limited.limit == 10)
     }
+
+    @Test func treatsProcListAllPIDsReturnValueAsPIDCount() {
+        #expect(ProcessCollector.pidCount(
+            fromProcListAllPIDsReturn: 512,
+            bufferCapacity: 1_024,
+        ) == 512)
+        #expect(ProcessCollector.pidCount(
+            fromProcListAllPIDsReturn: 512,
+            bufferCapacity: 128,
+        ) == 128)
+        #expect(ProcessCollector.pidCount(
+            fromProcListAllPIDsReturn: 0,
+            bufferCapacity: 1_024,
+        ) == 0)
+    }
 }
 
 @Suite("CPUCollector")
@@ -25,15 +40,22 @@ struct CPUCollectorTests {
         let first = try await collector.collect()
         #expect(first.isEmpty)
 
-        // Burn a little CPU so the diff is non-zero, then sample again.
-        try await Task.sleep(for: .milliseconds(50))
-        var acc: Double = 1
-        for index in 1 ..< 50_000 {
-            acc += Double(index).squareRoot()
-        }
-        _ = acc
+        // Host CPU ticks can occasionally remain unchanged over a very
+        // short interval, especially under parallel test load. Try a
+        // handful of small windows before declaring the collector empty.
+        var second: [MetricSample] = []
+        for _ in 0 ..< 8 {
+            try await Task.sleep(for: .milliseconds(75))
+            var acc: Double = 1
+            for index in 1 ..< 150_000 {
+                acc += Double(index).squareRoot()
+            }
+            _ = acc
 
-        let second = try await collector.collect()
+            second = try await collector.collect()
+            if !second.isEmpty { break }
+        }
+
         let kinds = Set(second.map(\.kind))
         #expect(kinds == [.cpuTotal, .cpuUser, .cpuSystem])
         for sample in second {

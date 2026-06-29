@@ -31,8 +31,7 @@ struct PeakmonApp: App {
     @State private var processesStore = ProcessesStore()
     @State private var runtime = MetricsRuntime()
     @State private var menuBarStatusController: MenuBarStatusItemController?
-    @State private var benchmarkStatusPopoverController: BenchmarkStatusPopoverController?
-    @State private var didRunBenchmarkBootstrap = false
+    @State private var didBootstrap = false
     /// Current page of the unified main window. Persists across
     /// window close/reopen during the running process so reopening
     /// via ⌘, returns the user to wherever they were last. Not
@@ -49,18 +48,11 @@ struct PeakmonApp: App {
     @SceneBuilder
     private var appScenes: some Scene {
         Window("Peakmon", id: "main") {
-            CardSettingsScope(visibilityOverrides: benchmarkCardVisibilityOverrides) {
-                if isBenchmarkWindowNeedsCompactDashboard {
-                    DashboardView(visibilityOverride: true)
-                        .environment(store)
-                        .environment(processesStore)
-                        .environment(runtime)
-                } else {
-                    MainWindowView(selection: $mainSelection)
-                        .environment(store)
-                        .environment(processesStore)
-                        .environment(runtime)
-                }
+            CardSettingsScope {
+                MainWindowView(selection: $mainSelection)
+                    .environment(store)
+                    .environment(processesStore)
+                    .environment(runtime)
             }
         }
         .windowResizability(.contentMinSize)
@@ -80,7 +72,7 @@ struct PeakmonApp: App {
             runtime.updateInterval(seconds: newValue)
         }
         .onChange(of: showProcesses, initial: false) { _, newValue in
-            runtime.processesEnabled = benchmarkProcessesVisibilityOverride ?? newValue
+            runtime.processesEnabled = newValue
         }
     }
 
@@ -94,56 +86,9 @@ struct PeakmonApp: App {
         ActivationPolicyController.shared.refresh()
         MainWindowVisibility.shared.install()
 
-        if isBenchmarkStatusPopoverBenchmarkEnabled {
-            Task { @MainActor in
-                let controller = BenchmarkStatusPopoverController(
-                    store: store,
-                    processesStore: processesStore,
-                    runtime: runtime,
-                    visibilityOverrides: benchmarkCardVisibilityOverrides,
-                )
-                benchmarkStatusPopoverController = controller
-                controller.show()
-                benchmarkLog("opened benchmark single status-item popover")
-            }
-            return
-        }
-
         installMenuBarStatusItem()
         installDashboardHotKey()
         installPopoverHotKey()
-
-        if isBenchmarkDashboardModeEnabled {
-            Task { @MainActor in
-                mainSelection = .defaultLanding
-                openWindow(id: "main")
-                ActivationPolicyController.shared.activateRegular()
-                benchmarkLog("opened benchmark dashboard window")
-            }
-            return
-        }
-
-        if isBenchmarkPopoverModeEnabled {
-            Task { @MainActor in
-                let opened = await openMenuBarPopoverWindow()
-                if opened {
-                    benchmarkLog("opened menu bar popover window")
-                } else if allowsBenchmarkPopoverFallback {
-                    benchmarkLog("menu bar popover unavailable; opened explicit fallback window")
-                    openWindow(id: "main")
-                    ActivationPolicyController.shared.activateRegular()
-                } else {
-                    benchmarkLog("failed to open menu bar popover; pass --peakmon-benchmark-popover-fallback to measure the fallback DashboardView window")
-                    NSApp.terminate(nil)
-                }
-            }
-            return
-        }
-
-        if isBenchmarkMenubarOnlyModeEnabled {
-            benchmarkLog("running benchmark menubar-only mode")
-            return
-        }
 
         if !silentLaunch {
             Task { @MainActor in
@@ -162,7 +107,6 @@ struct PeakmonApp: App {
             store: store,
             processesStore: processesStore,
             runtime: runtime,
-            visibilityOverrides: benchmarkCardVisibilityOverrides,
         )
         menuBarStatusController = controller
         controller.start()
@@ -188,219 +132,20 @@ struct PeakmonApp: App {
     }
 
     private func bootstrapIfNeeded() {
-        guard !didRunBenchmarkBootstrap else {
+        guard !didBootstrap else {
             return
         }
-        didRunBenchmarkBootstrap = true
+        didBootstrap = true
         bootstrap()
     }
 
     private func startRuntime() {
-        let processesVisible = benchmarkProcessesVisibilityOverride ?? showProcesses
         runtime.start(
             store: store,
             processesStore: processesStore,
             interval: samplingInterval,
         )
-        runtime.processesEnabled = processesVisible
-    }
-
-    private var isBenchmarkStatusPopoverOnlyModeEnabled: Bool {
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains("--peakmon-benchmark-status-popover-only") {
-            return true
-        }
-        if let flag = ProcessInfo.processInfo.environment["PEAKMON_BENCHMARK_STATUS_POPOVER_ONLY"] {
-            let normalized = flag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return ["1", "true", "yes", "on"].contains(normalized)
-        }
-        return false
-    }
-
-    private var isBenchmarkWindowNeedsCompactDashboard: Bool {
-        isBenchmarkPopoverModeEnabled || isBenchmarkStatusPopoverBenchmarkEnabled
-    }
-
-    private var isBenchmarkModeEnabled: Bool {
-        isBenchmarkStatusPopoverBenchmarkEnabled || isBenchmarkDashboardModeEnabled || isBenchmarkPopoverModeEnabled
-    }
-
-    private var isBenchmarkStatusPopoverBenchmarkEnabled: Bool {
-        isBenchmarkStatusPopoverModeEnabled || isBenchmarkStatusPopoverOnlyModeEnabled
-    }
-
-    private var isBenchmarkDashboardModeEnabled: Bool {
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains("--peakmon-benchmark-dashboard") {
-            return true
-        }
-        if let flag = ProcessInfo.processInfo.environment["PEAKMON_BENCHMARK_DASHBOARD"] {
-            let normalized = flag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return ["1", "true", "yes", "on"].contains(normalized)
-        }
-        return false
-    }
-
-    private var isBenchmarkMenubarOnlyModeEnabled: Bool {
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains("--peakmon-benchmark-menubar-only") {
-            return true
-        }
-        if let flag = ProcessInfo.processInfo.environment["PEAKMON_BENCHMARK_MENUBAR_ONLY"] {
-            let normalized = flag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return ["1", "true", "yes", "on"].contains(normalized)
-        }
-        return false
-    }
-
-    private var benchmarkCardVisibilityOverrides: [CardTintSlot: Bool] {
-        if let processesVisible = benchmarkProcessesVisibilityOverride {
-            return [.processes: processesVisible]
-        }
-        return [:]
-    }
-
-    private var benchmarkProcessesVisibilityOverride: Bool? {
-        guard isBenchmarkModeEnabled else { return nil }
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains("--peakmon-benchmark-processes-on") {
-            return true
-        }
-        if args.contains("--peakmon-benchmark-processes-off") {
-            return false
-        }
-        if let flag = ProcessInfo.processInfo.environment["PEAKMON_BENCHMARK_PROCESSES"] {
-            let normalized = flag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if ["1", "true", "yes", "on"].contains(normalized) {
-                return true
-            }
-            if ["0", "false", "no", "off"].contains(normalized) {
-                return false
-            }
-        }
-        return nil
-    }
-
-    private var isBenchmarkPopoverModeEnabled: Bool {
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains("--peakmon-benchmark-popover") {
-            return true
-        }
-        if let flag = ProcessInfo.processInfo.environment["PEAKMON_BENCHMARK_POPOVER"] {
-            let normalized = flag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return ["1", "true", "yes", "on"].contains(normalized)
-        }
-        return false
-    }
-
-    private var isBenchmarkStatusPopoverModeEnabled: Bool {
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains("--peakmon-benchmark-status-popover") {
-            return true
-        }
-        if let flag = ProcessInfo.processInfo.environment["PEAKMON_BENCHMARK_STATUS_POPOVER"] {
-            let normalized = flag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return ["1", "true", "yes", "on"].contains(normalized)
-        }
-        return false
-    }
-
-    private var allowsBenchmarkPopoverFallback: Bool {
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains("--peakmon-benchmark-popover-fallback") {
-            return true
-        }
-        if let flag = ProcessInfo.processInfo.environment["PEAKMON_BENCHMARK_POPOVER_FALLBACK"] {
-            let normalized = flag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return ["1", "true", "yes", "on"].contains(normalized)
-        }
-        return false
-    }
-
-    private func benchmarkLog(_ message: String) {
-        let line = "[PeakmonBenchmark] \(message)\n"
-        if let data = line.data(using: .utf8) {
-            FileHandle.standardError.write(data)
-        }
-    }
-
-    @MainActor
-    private func openMenuBarPopoverWindow() async -> Bool {
-        for _ in 0..<12 {
-            if let window = preferredMenuBarExtraWindow() {
-                window.makeKeyAndOrderFront(nil)
-                window.orderFrontRegardless()
-                if window.isVisible {
-                    return true
-                }
-            }
-            try? await Task.sleep(for: .milliseconds(75))
-        }
-        return false
-    }
-
-    @MainActor
-    private func preferredMenuBarExtraWindow() -> NSWindow? {
-        let candidates = NSApp.windows
-            .filter(isLikelyMenuBarExtraWindow(_:))
-            .sorted { lhs, rhs in
-                lhs.level.rawValue > rhs.level.rawValue
-            }
-
-        if candidates.count == 1 { return candidates.first }
-        return candidates
-            .sorted { lhs, rhs in
-                lhs.frame.width < rhs.frame.width
-            }
-            .first
-    }
-
-    private func isLikelyMenuBarExtraWindow(_ window: NSWindow) -> Bool {
-        let className = String(describing: type(of: window))
-        let likelyClass =
-            className.contains("StatusBar") ||
-            className.contains("NSPopover") ||
-            className.contains("NSStatus")
-        let isSmallFloat = window.frame.width < 900 && window.frame.height < 900
-        let isHighLevel = window.level.rawValue >= NSWindow.Level.statusBar.rawValue
-        let unnamed = window.title.isEmpty
-        return (likelyClass || isHighLevel) && isSmallFloat && unnamed
-    }
-}
-
-@MainActor
-private final class BenchmarkStatusPopoverController {
-    private let statusItem: NSStatusItem
-    private let popover: NSPopover
-
-    init(
-        store: MetricsStore,
-        processesStore: ProcessesStore,
-        runtime: MetricsRuntime,
-        visibilityOverrides: [CardTintSlot: Bool],
-    ) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "Peakmon"
-        statusItem.button?.toolTip = "Peakmon benchmark popover"
-        statusItem.button?.setAccessibilityLabel("Peakmon benchmark popover")
-
-        popover = NSPopover()
-        popover.behavior = .applicationDefined
-        popover.animates = false
-        popover.contentSize = CGSize(width: DashboardView.popoverWidth, height: DashboardView.popoverHeight)
-        popover.contentViewController = NSHostingController(rootView:
-            CardSettingsScope(visibilityOverrides: visibilityOverrides) {
-                DashboardView(visibilityOverride: true)
-                    .environment(store)
-                    .environment(processesStore)
-                    .environment(runtime)
-            }
-        )
-    }
-
-    func show() {
-        guard let button = statusItem.button else { return }
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        runtime.processesEnabled = showProcesses
     }
 }
 
@@ -419,7 +164,6 @@ private final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
         store: MetricsStore,
         processesStore: ProcessesStore,
         runtime: MetricsRuntime,
-        visibilityOverrides: [CardTintSlot: Bool],
     ) {
         self.store = store
         self.runtime = runtime
@@ -430,7 +174,7 @@ private final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
         popover.animates = false
         popover.contentSize = CGSize(width: DashboardView.popoverWidth, height: DashboardView.popoverHeight)
         popover.contentViewController = NSHostingController(rootView:
-            CardSettingsScope(visibilityOverrides: visibilityOverrides) {
+            CardSettingsScope {
                 DashboardView()
                     .environment(store)
                     .environment(processesStore)
@@ -565,11 +309,6 @@ private final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
     }
 
     private func menuBarSegments() -> [MenuBarSegment] {
-        if let override = ProcessInfo.processInfo.environment["PEAKMON_BENCHMARK_MENU_SEGMENTS"],
-           !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            return MenuBarComposition.decode(override)
-        }
         let raw = UserDefaults.standard.string(forKey: MenuBarComposition.storageKey)
             ?? MenuBarComposition.encode(MenuBarComposition.defaultSegments)
         return MenuBarComposition.decode(raw)
@@ -672,7 +411,6 @@ final class MetricsRuntime {
     private var activeCollectorDemand: Set<CollectorDemand> = []
     private var collectorDemandGeneration: UInt64 = 0
     private let collectorDemandGate = CollectorDemandGate()
-    private let demandGatingDisabled = MetricsRuntime.isDemandGatingDisabled()
 
     /// True while the popover dashboard is actually on-screen. When
     /// false and the main dashboard is also hidden, the runtime keeps
@@ -838,10 +576,6 @@ final class MetricsRuntime {
     }
 
     private func effectiveCollectorDemand() -> Set<CollectorDemand> {
-        if demandGatingDisabled {
-            return Set(CollectorDemand.allCases)
-        }
-
         var demands = Set<CollectorDemand>()
 
         for segment in menuBarSegments {
@@ -944,18 +678,6 @@ final class MetricsRuntime {
         let clamped = max(minimum, seconds)
         let millis = Int((clamped * 1000).rounded())
         return .milliseconds(max(50, millis))
-    }
-
-    private static func isDemandGatingDisabled() -> Bool {
-        let args = ProcessInfo.processInfo.arguments
-        if args.contains("--peakmon-disable-demand-gating") {
-            return true
-        }
-        if let flag = ProcessInfo.processInfo.environment["PEAKMON_DISABLE_DEMAND_GATING"] {
-            let normalized = flag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return ["1", "true", "yes", "on"].contains(normalized)
-        }
-        return false
     }
 
     private func updateProcessGate() {
@@ -1278,11 +1000,6 @@ private struct MenuBarLabel: View {
     @ObservedObject private var foreground = StatusBarForeground.shared
 
     private var segments: [MenuBarSegment] {
-        if let override = ProcessInfo.processInfo.environment["PEAKMON_BENCHMARK_MENU_SEGMENTS"],
-           !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
-            return MenuBarComposition.decode(override)
-        }
         return MenuBarComposition.decode(segmentsRaw)
     }
 
@@ -1431,6 +1148,14 @@ private struct MenuBarLabelSignature: Equatable {
                             step: 1,
                         ),
                     )
+                case let .historyWithFallback(primary, fallback):
+                    let kind = (store.latest(for: primary)?.value ?? 0) > 0 ? primary : fallback
+                    historyHashes.append(
+                        Self.hashHistory(
+                            store.historySuffix(for: kind, limit: SegmentMetrics.miniChartBarCount),
+                            step: 1,
+                        ),
+                    )
                 case let .rateHistory(kind):
                     historyHashes.append(
                         Self.hashRateHistory(
@@ -1440,6 +1165,9 @@ private struct MenuBarLabelSignature: Equatable {
                 case let .raw(kind):
                     latests.append(store.latest(for: kind)?.value ?? -1)
                 case let .watts(kind):
+                    latests.append(Self.bucketWatts(store.latest(for: kind)?.value))
+                case let .wattsWithFallback(primary, fallback):
+                    let kind = (store.latest(for: primary)?.value ?? 0) > 0 ? primary : fallback
                     latests.append(Self.bucketWatts(store.latest(for: kind)?.value))
                 }
             }

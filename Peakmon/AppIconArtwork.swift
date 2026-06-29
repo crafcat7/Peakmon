@@ -23,9 +23,8 @@
 import SwiftUI
 
 struct AppIconArtwork: View {
-    /// Reference canvas side used by the rasteriser. Kept for the
-    /// debug `AppIconExporter` which renders at 1024 pt and rescales
-    /// via `ImageRenderer.scale` for each output size.
+    /// Reference canvas side used by the icon artwork and matching
+    /// Core Graphics asset generator.
     static let canvas: CGFloat = 1024
 
     var body: some View {
@@ -74,10 +73,4 @@ struct AppIconArtwork: View {
                 y: -side * 0.015,
             )
     }
-}
-
-#Preview {
-    AppIconArtwork()
-        .frame(width: 256, height: 256)
-        .padding()
 }

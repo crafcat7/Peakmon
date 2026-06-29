@@ -43,58 +43,17 @@ public final class ProcessCollector {
     public let limit: Int?
 
     private let state = State()
-    private let pathCache = ProcessPathCache()
 
     public init(limit: Int? = nil) {
         self.limit = limit
     }
 
     public func collect() async throws -> [ProcessSnapshot] {
-        let now = Date.now
-        let pids = try Self.listPIDs()
-        let infos = readInfos(for: pids)
-
-        let previous = await state.swap(infos: infos, at: now)
-        guard let previous, previous.sampledAt < now else {
-            // First sample or non-monotonic clock — nothing to diff.
-            return []
-        }
-
-        let elapsedNanos = now.timeIntervalSince(previous.sampledAt) * 1_000_000_000
-        guard elapsedNanos > 0 else { return [] }
-
-        let timebase = Self.timebase
-        var snapshots: [ProcessSnapshot] = []
-        snapshots.reserveCapacity(infos.count)
-
-        for (pid, info) in infos {
-            guard let prev = previous.infos[pid] else { continue }
-            // total_user + total_system are in mach_absolute_time units
-            // (subtract previous, convert via timebase to nanoseconds).
-            let deltaMachTime = (info.cpuTimeRaw &- prev.cpuTimeRaw)
-            let deltaNanos =
-                Double(deltaMachTime) * Double(timebase.numer) / Double(timebase.denom)
-            let cpuPercent = (deltaNanos / elapsedNanos) * 100
-            snapshots.append(ProcessSnapshot(
-                pid: pid,
-                ppid: info.ppid,
-                name: info.name,
-                cpuPercent: max(cpuPercent, 0),
-                memoryBytes: info.memoryBytes,
-                path: info.path,
-            ))
-        }
-
-        snapshots.sort { $0.cpuPercent > $1.cpuPercent }
-        if let limit, snapshots.count > limit {
-            snapshots.removeLast(snapshots.count - limit)
-        }
-        return snapshots
+        await state.collect(limit: limit)
     }
 
     public func reset() async {
         await state.reset()
-        pathCache.clear()
     }
 
     // MARK: - libproc plumbing
@@ -124,21 +83,43 @@ public final class ProcessCollector {
     /// Snapshot the full PID table. `proc_listallpids` is the modern
     /// replacement for `proc_listpids(PROC_ALL_PIDS, ...)` and returns
     /// the active BSD pid set.
-    private static func listPIDs() throws -> [Int32] {
+    static func pidCount(
+        fromProcListAllPIDsReturn returnedCount: Int32,
+        bufferCapacity: Int
+    ) -> Int {
+        guard returnedCount > 0, bufferCapacity > 0 else { return 0 }
+        return min(Int(returnedCount), bufferCapacity)
+    }
+
+    private static func listPIDs(into buffer: inout [pid_t]) -> Int {
         let needed = proc_listallpids(nil, 0)
-        guard needed > 0 else { return [] }
+        guard needed > 0 else { return 0 }
         // Add headroom because processes can appear between the two
         // calls; oversizing is fine, `proc_listallpids` clips to what
         // it actually wrote.
-        let capacity = Int(needed) + 64
-        var buffer = [pid_t](repeating: 0, count: capacity)
-        let written = buffer.withUnsafeMutableBufferPointer { ptr -> Int32 in
-            let bytes = Int32(ptr.count * MemoryLayout<pid_t>.size)
-            return proc_listallpids(ptr.baseAddress, bytes)
+        let capacity = max(Int(needed) + 64, 256)
+        if buffer.count < capacity {
+            buffer = [pid_t](repeating: 0, count: capacity)
         }
-        guard written > 0 else { return [] }
-        let count = Int(written) / MemoryLayout<pid_t>.size
-        return Array(buffer.prefix(count)).filter { $0 > 0 }
+
+        for attempt in 0 ..< 2 {
+            let written = buffer.withUnsafeMutableBufferPointer { ptr -> Int32 in
+                let bytes = Int32(ptr.count * MemoryLayout<pid_t>.size)
+                return proc_listallpids(ptr.baseAddress, bytes)
+            }
+            let count = pidCount(
+                fromProcListAllPIDsReturn: written,
+                bufferCapacity: buffer.count,
+            )
+            if count < buffer.count || attempt == 1 {
+                return count
+            }
+
+            let growth = max(128, buffer.count / 2)
+            buffer.append(contentsOf: repeatElement(pid_t(0), count: growth))
+        }
+
+        return 0
     }
 
     /// Per-PID lookup using `PROC_PIDTASKALLINFO`, which folds the
@@ -155,13 +136,24 @@ public final class ProcessCollector {
     /// Failures are silently skipped — processes can exit between
     /// `listPIDs` and this call, and short-lived helpers regularly
     /// disappear under our feet.
-    private func readInfos(for pids: [Int32]) -> [Int32: Info] {
-        var out: [Int32: Info] = [:]
-        out.reserveCapacity(pids.count)
+    private static func readInfos(
+        forPIDsIn pidBuffer: [pid_t],
+        count pidCount: Int,
+        pathBuffer: inout [CChar],
+        pathCache: ProcessPathCache,
+        into out: inout [Int32: Info]
+    ) {
+        out.removeAll(keepingCapacity: true)
+        out.reserveCapacity(pidCount)
 
-        var pathBuffer = [CChar](repeating: 0, count: 4096)
+        if pathBuffer.count < 4096 {
+            pathBuffer = [CChar](repeating: 0, count: 4096)
+        }
 
-        for pid in pids {
+        for index in 0 ..< pidCount {
+            let pid = Int32(pidBuffer[index])
+            guard pid > 0 else { continue }
+
             var info = proc_taskallinfo()
             let size = Int32(MemoryLayout<proc_taskallinfo>.size)
             let written = proc_pidinfo(pid, PROC_PIDTASKALLINFO, 0, &info, size)
@@ -190,15 +182,22 @@ public final class ProcessCollector {
                 memoryBytes: info.ptinfo.pti_resident_size,
             )
         }
-        pathCache.retain(pids: Set(out.keys))
-        return out
+        pathCache.retain(knownBy: out)
     }
 
     private static func processPath(pid: Int32, buffer: inout [CChar]) -> String {
         let pathLen = buffer.withUnsafeMutableBufferPointer { ptr in
             proc_pidpath(pid, ptr.baseAddress, UInt32(ptr.count))
         }
-        return pathLen > 0 ? fixedCString(buffer) : ""
+        guard pathLen > 0 else { return "" }
+
+        return buffer.withUnsafeBytes { raw in
+            let byteCount = min(Int(pathLen), raw.count)
+            let bytes = raw[..<byteCount]
+            let end = bytes.firstIndex(of: 0) ?? bytes.endIndex
+            guard end > bytes.startIndex else { return "" }
+            return String(decoding: bytes[bytes.startIndex..<end], as: UTF8.self)
+        }
     }
 
     /// Best-effort human-readable name. `pbi_name` is the BSD
@@ -228,7 +227,7 @@ public final class ProcessCollector {
         }
     }
 
-    private final class ProcessPathCache: @unchecked Sendable {
+    private final class ProcessPathCache {
         private struct Entry {
             let startTime: ProcessStartTime
             let path: String
@@ -254,9 +253,9 @@ public final class ProcessCollector {
             return path
         }
 
-        func retain(pids: Set<Int32>) {
+        func retain(knownBy infos: [Int32: Info]) {
             lock.lock()
-            storage = storage.filter { pids.contains($0.key) }
+            storage = storage.filter { infos[$0.key] != nil }
             lock.unlock()
         }
 
@@ -272,21 +271,81 @@ public final class ProcessCollector {
     /// invocations remain safe even though we never expect more than
     /// one outstanding call in practice.
     private actor State {
-        struct Snapshot {
-            let infos: [Int32: Info]
-            let sampledAt: Date
-        }
+        private var previousSampledAt: Date?
+        private var previousInfos: [Int32: Info] = [:]
+        private var currentInfos: [Int32: Info] = [:]
+        private var pidBuffer: [pid_t] = []
+        private var pathBuffer = [CChar](repeating: 0, count: 4096)
+        private var snapshotBuffer: [ProcessSnapshot] = []
+        private let pathCache = ProcessPathCache()
 
-        private var previous: Snapshot?
+        func collect(limit: Int?) -> [ProcessSnapshot] {
+            let now = Date.now
+            let pidCount = ProcessCollector.listPIDs(into: &pidBuffer)
+            ProcessCollector.readInfos(
+                forPIDsIn: pidBuffer,
+                count: pidCount,
+                pathBuffer: &pathBuffer,
+                pathCache: pathCache,
+                into: &currentInfos,
+            )
 
-        func swap(infos: [Int32: Info], at sampledAt: Date) -> Snapshot? {
-            let outgoing = previous
-            previous = Snapshot(infos: infos, sampledAt: sampledAt)
-            return outgoing
+            guard let sampledAt = previousSampledAt, sampledAt < now else {
+                rotateBaseline(sampledAt: now)
+                return []
+            }
+
+            let elapsedNanos = now.timeIntervalSince(sampledAt) * 1_000_000_000
+            guard elapsedNanos > 0 else {
+                rotateBaseline(sampledAt: now)
+                return []
+            }
+
+            let timebase = ProcessCollector.timebase
+            snapshotBuffer.removeAll(keepingCapacity: true)
+            snapshotBuffer.reserveCapacity(currentInfos.count)
+
+            for (pid, info) in currentInfos {
+                guard let prev = previousInfos[pid] else { continue }
+                // total_user + total_system are in mach_absolute_time units
+                // (subtract previous, convert via timebase to nanoseconds).
+                let deltaMachTime = (info.cpuTimeRaw &- prev.cpuTimeRaw)
+                let deltaNanos =
+                    Double(deltaMachTime) * Double(timebase.numer) / Double(timebase.denom)
+                let cpuPercent = (deltaNanos / elapsedNanos) * 100
+                snapshotBuffer.append(ProcessSnapshot(
+                    pid: pid,
+                    ppid: info.ppid,
+                    name: info.name,
+                    cpuPercent: max(cpuPercent, 0),
+                    memoryBytes: info.memoryBytes,
+                    path: info.path,
+                ))
+            }
+
+            snapshotBuffer.sort { $0.cpuPercent > $1.cpuPercent }
+            if let limit, snapshotBuffer.count > limit {
+                snapshotBuffer.removeLast(snapshotBuffer.count - limit)
+            }
+
+            let snapshots = Array(snapshotBuffer)
+            snapshotBuffer.removeAll(keepingCapacity: true)
+            rotateBaseline(sampledAt: now)
+            return snapshots
         }
 
         func reset() {
-            previous = nil
+            previousSampledAt = nil
+            previousInfos.removeAll(keepingCapacity: true)
+            currentInfos.removeAll(keepingCapacity: true)
+            snapshotBuffer.removeAll(keepingCapacity: true)
+            pathCache.clear()
+        }
+
+        private func rotateBaseline(sampledAt: Date) {
+            swap(&previousInfos, &currentInfos)
+            currentInfos.removeAll(keepingCapacity: true)
+            previousSampledAt = sampledAt
         }
     }
 }

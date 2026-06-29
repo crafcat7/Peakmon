@@ -257,13 +257,6 @@ struct DashboardProcessesPanel: View {
 
 }
 
-#Preview {
-    DashboardProcessesPanel()
-        .frame(width: 1000, height: 500)
-        .padding()
-        .environment(ProcessesStore())
-}
-
 /// Process-wide cache of bundle path → NSImage. Bundle icons are
 /// stable for the process lifetime, so entries are never evicted.
 private final class AppIconCache {

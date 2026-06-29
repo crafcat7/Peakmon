@@ -192,8 +192,8 @@ public final class SMCBridge: @unchecked Sendable {
     /// fails. Prefer `SMCBridge.shared` in production code.
     public init() throws {
         // Frozen since macOS 10.6; assert the layout invariant so
-        // any future tuple/field reshuffle fails loudly in debug
-        // rather than silently corrupting SMC reads in release.
+        // any future tuple/field reshuffle fails loudly during
+        // development rather than silently corrupting SMC reads.
         assert(
             MemoryLayout<SMCParamStruct>.size == 80,
             "SMCParamStruct layout drift — kernel ABI assumes 80 bytes",

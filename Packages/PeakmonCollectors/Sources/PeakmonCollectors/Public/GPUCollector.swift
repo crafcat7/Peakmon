@@ -41,8 +41,10 @@ public struct GPUDeviceInfo: Sendable, Hashable {
 }
 
 /// Samples GPU utilization for the host's primary accelerator.
-public final class GPUCollector: MetricCollector {
+public final class GPUCollector: ResettableMetricCollector {
     public let identifier = "gpu.ioaccelerator"
+
+    private let acceleratorCache = AcceleratorCache()
 
     public init() {}
 
@@ -69,17 +71,20 @@ public final class GPUCollector: MetricCollector {
     }
 
     public func collect() async throws -> [MetricSample] {
-        guard let stats = Self.readBestPerformanceStatistics() else {
+        guard let stats = await acceleratorCache.readBestPerformanceStatistics() else {
             return []
         }
         let now = Date.now
-        let device = Self.percent(stats["Device Utilization %"])
-        let memInUse = Self.bytes(stats["In use system memory"])
 
         var samples: [MetricSample] = [
-            MetricSample(kind: .gpuUtilization, unit: .percent, value: device, timestamp: now),
+            MetricSample(
+                kind: .gpuUtilization,
+                unit: .percent,
+                value: stats.deviceUtilization,
+                timestamp: now,
+            ),
         ]
-        if let memInUse, memInUse > 0 {
+        if let memInUse = stats.memoryInUse, memInUse > 0 {
             samples.append(
                 MetricSample(kind: .gpuMemoryInUse, unit: .bytes, value: memInUse, timestamp: now),
             )
@@ -87,32 +92,95 @@ public final class GPUCollector: MetricCollector {
         return samples
     }
 
+    public func reset() async {
+        await acceleratorCache.reset()
+    }
+
     // MARK: - Private
 
-    /// Iterates every `IOAccelerator` service entry and returns the
-    /// `PerformanceStatistics` dictionary belonging to the entry with
-    /// the highest reported device utilization. This avoids picking a
-    /// dormant secondary accelerator when the active one is busy.
-    private static func readBestPerformanceStatistics() -> [String: Any]? {
-        let matching = IOServiceMatching("IOAccelerator")
-        var iterator: io_iterator_t = 0
-        let kr = IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator)
-        guard kr == KERN_SUCCESS else { return nil }
-        defer { IOObjectRelease(iterator) }
+    private struct PerformanceSnapshot: Sendable {
+        let deviceUtilization: Double
+        let memoryInUse: Double?
+    }
 
-        var best: [String: Any]?
-        var bestUtil: Double = -1
+    /// Owns cached `IOAccelerator` registry entries. Each sample still
+    /// reads fresh `PerformanceStatistics` from every cached entry, then
+    /// picks the most active accelerator for that tick.
+    private actor AcceleratorCache {
+        private var entries: [io_registry_entry_t] = []
 
-        while case let entry = IOIteratorNext(iterator), entry != 0 {
-            defer { IOObjectRelease(entry) }
-            guard let stats = Self.readPerformanceStatistics(entry: entry) else { continue }
-            let util = percent(stats["Device Utilization %"])
-            if util > bestUtil {
-                bestUtil = util
-                best = stats
+        deinit {
+            for entry in entries {
+                IOObjectRelease(entry)
             }
         }
-        return best
+
+        func readBestPerformanceStatistics() -> PerformanceSnapshot? {
+            if entries.isEmpty {
+                refreshEntries()
+            }
+
+            if let stats = bestPerformanceStatistics(from: entries) {
+                return stats
+            }
+
+            refreshEntries()
+            return bestPerformanceStatistics(from: entries)
+        }
+
+        func reset() {
+            releaseEntries()
+        }
+
+        private func refreshEntries() {
+            releaseEntries()
+
+            guard let matching = IOServiceMatching("IOAccelerator") else {
+                return
+            }
+
+            var iterator: io_iterator_t = 0
+            let kr = IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator)
+            guard kr == KERN_SUCCESS else { return }
+            defer { IOObjectRelease(iterator) }
+
+            while case let entry = IOIteratorNext(iterator), entry != 0 {
+                entries.append(entry)
+            }
+        }
+
+        private func releaseEntries() {
+            for entry in entries {
+                IOObjectRelease(entry)
+            }
+            entries.removeAll(keepingCapacity: false)
+        }
+
+        /// Reads every cached entry and returns the `PerformanceStatistics`
+        /// dictionary with the highest reported device utilization. This
+        /// avoids picking a dormant secondary accelerator when the active
+        /// one is busy.
+        private func bestPerformanceStatistics(
+            from entries: [io_registry_entry_t],
+        ) -> PerformanceSnapshot? {
+            var best: PerformanceSnapshot?
+            var bestUtil: Double = -1
+
+            for entry in entries {
+                guard let stats = GPUCollector.readPerformanceStatistics(entry: entry) else {
+                    continue
+                }
+                let util = GPUCollector.percent(stats["Device Utilization %"])
+                if util > bestUtil {
+                    bestUtil = util
+                    best = PerformanceSnapshot(
+                        deviceUtilization: util,
+                        memoryInUse: GPUCollector.bytes(stats["In use system memory"]),
+                    )
+                }
+            }
+            return best
+        }
     }
 
     private static func readPerformanceStatistics(entry: io_registry_entry_t) -> [String: Any]? {

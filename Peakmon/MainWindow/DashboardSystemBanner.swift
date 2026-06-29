@@ -215,9 +215,3 @@ struct DashboardSystemBanner: View {
         return nil
     }
 }
-
-#Preview {
-    DashboardSystemBanner()
-        .frame(width: 1000)
-        .padding()
-}

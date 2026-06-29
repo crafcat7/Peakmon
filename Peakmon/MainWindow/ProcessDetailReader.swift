@@ -12,7 +12,7 @@
 //                                             run state, name, prio.
 //    • `KERN_PROCARGS2` sysctl              — argv for same-user pids.
 //
-//  None need `task_for_pid` (which needs the cs.debugger entitlement
+//  None need `task_for_pid` (which requires a privileged entitlement
 //  and usually fails for ad-hoc binaries against other processes)
 //  and none trigger TCC. Cross-user processes may deny procargs /
 //  proc_pidpath; those fields are left empty rather than treated as

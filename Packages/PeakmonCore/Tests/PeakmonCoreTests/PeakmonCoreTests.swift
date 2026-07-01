@@ -87,4 +87,37 @@ struct MetricsSchedulerTests {
         let latest = await store.latest(for: .cpuTotal)
         #expect(latest?.value == 42)
     }
+
+    @Test func sampleSinkReceivesSchedulerBatches() async throws {
+        let store = await MetricsStore()
+        let sink = BatchSink()
+        let scheduler = MetricsScheduler(
+            store: store,
+            collectors: [StubCollector(value: 55)],
+            interval: .milliseconds(20),
+            sampleSink: { samples in
+                await sink.ingest(samples)
+            },
+        )
+        await scheduler.start()
+        try await Task.sleep(for: .milliseconds(80))
+        await scheduler.stop()
+
+        let latest = await store.latest(for: .cpuTotal)
+        let sinkLatest = await sink.latest()
+        #expect(latest?.value == 55)
+        #expect(sinkLatest?.value == 55)
+    }
+}
+
+private actor BatchSink {
+    private var batches: [[MetricSample]] = []
+
+    func ingest(_ samples: [MetricSample]) {
+        batches.append(samples)
+    }
+
+    func latest() -> MetricSample? {
+        batches.flatMap { $0 }.last
+    }
 }

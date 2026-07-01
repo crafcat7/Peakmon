@@ -28,9 +28,18 @@ struct PeakmonApp: App {
     @NSApplicationDelegateAdaptor(PeakmonApplicationDelegate.self) private var appDelegate
 
     @State private var store = MetricsStore(historyLimit: 120)
+    @State private var historyRecorder = HistoryRecorder(
+        store: HistoryStore(
+            persistenceURL: PeakmonApp.historyPersistenceURL,
+            storagePolicy: .standard,
+            retainedKinds: HistoryRecorder.defaultRecordedKinds,
+        ),
+    )
     @State private var processesStore = ProcessesStore()
     @State private var runtime = MetricsRuntime()
     @State private var menuBarStatusController: MenuBarStatusItemController?
+    @State private var historyFlushObserver: NSObjectProtocol?
+    @State private var historySampleSink: HistorySampleSink?
     @State private var didBootstrap = false
     /// Current page of the unified main window. Persists across
     /// window close/reopen during the running process so reopening
@@ -50,6 +59,7 @@ struct PeakmonApp: App {
         Window("Peakmon", id: "main") {
             CardSettingsScope {
                 MainWindowView(selection: $mainSelection)
+                    .environment(\.historyRecorder, historyRecorder)
                     .environment(store)
                     .environment(processesStore)
                     .environment(runtime)
@@ -86,6 +96,7 @@ struct PeakmonApp: App {
         ActivationPolicyController.shared.refresh()
         MainWindowVisibility.shared.install()
 
+        installHistoryFlushObserver()
         installMenuBarStatusItem()
         installDashboardHotKey()
         installPopoverHotKey()
@@ -139,13 +150,49 @@ struct PeakmonApp: App {
         bootstrap()
     }
 
+    private func installHistoryFlushObserver() {
+        guard historyFlushObserver == nil else { return }
+        let historySampleSink = resolvedHistorySampleSink()
+        historyFlushObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: nil,
+        ) { _ in
+            let semaphore = DispatchSemaphore(value: 0)
+            Task.detached(priority: .utility) {
+                await historySampleSink.flush()
+                semaphore.signal()
+            }
+            _ = semaphore.wait(timeout: .now() + 1)
+        }
+    }
+
     private func startRuntime() {
+        let historySampleSink = resolvedHistorySampleSink()
         runtime.start(
             store: store,
+            historySampleSink: historySampleSink,
             processesStore: processesStore,
             interval: samplingInterval,
         )
         runtime.processesEnabled = showProcesses
+    }
+
+    private func resolvedHistorySampleSink() -> HistorySampleSink {
+        if let historySampleSink {
+            return historySampleSink
+        }
+        let sink = HistorySampleSink(recorder: historyRecorder)
+        historySampleSink = sink
+        return sink
+    }
+
+    private static var historyPersistenceURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first ?? FileManager.default.temporaryDirectory
+        return base
+            .appendingPathComponent("Peakmon", isDirectory: true)
+            .appendingPathComponent("history-buckets-v1.sqlite")
     }
 }
 
@@ -392,6 +439,58 @@ private enum CollectorDemand: String, CaseIterable, Hashable, Sendable {
     case battery
 }
 
+private actor HistorySampleSink {
+    private let recorder: HistoryRecorder
+    private let drainDelay: Duration
+    private var pendingSamples: [MetricSample] = []
+    private var drainTask: Task<Void, Never>?
+
+    init(recorder: HistoryRecorder, drainDelay: Duration = .milliseconds(250)) {
+        self.recorder = recorder
+        self.drainDelay = drainDelay
+    }
+
+    func enqueue(_ samples: [MetricSample]) {
+        let historySamples = samples.filter { HistoryRecorder.shouldRecord($0) }
+        guard !historySamples.isEmpty else { return }
+        pendingSamples.append(contentsOf: historySamples)
+        guard drainTask == nil else { return }
+        let drainDelay = drainDelay
+        drainTask = Task(priority: .utility) { [weak self] in
+            do {
+                try await Task.sleep(for: drainDelay)
+            } catch {}
+            await self?.drain()
+        }
+    }
+
+    func flush() async {
+        if let drainTask {
+            drainTask.cancel()
+            await drainTask.value
+        }
+        let samples = pendingSamples
+        pendingSamples.removeAll(keepingCapacity: true)
+        if !samples.isEmpty {
+            await recorder.ingestPrepared(samples.sorted { $0.timestamp < $1.timestamp })
+        }
+        await recorder.flush()
+    }
+
+    private func drain() async {
+        while !Task.isCancelled {
+            let samples = pendingSamples
+            pendingSamples.removeAll(keepingCapacity: true)
+            guard !samples.isEmpty else {
+                drainTask = nil
+                return
+            }
+            await recorder.ingestPrepared(samples.sorted { $0.timestamp < $1.timestamp })
+        }
+        drainTask = nil
+    }
+}
+
 @MainActor
 @Observable
 final class MetricsRuntime {
@@ -411,6 +510,28 @@ final class MetricsRuntime {
     private var activeCollectorDemand: Set<CollectorDemand> = []
     private var collectorDemandGeneration: UInt64 = 0
     private let collectorDemandGate = CollectorDemandGate()
+    private static let foregroundHistoryCollectorDemands: Set<CollectorDemand> = [
+        .cpu,
+        .memory,
+        .disk,
+        .network,
+        .gpu,
+        .power,
+        .thermal,
+        .fan,
+        .battery,
+    ]
+    private static let backgroundHistoryCollectorDemands: Set<CollectorDemand> = [
+        .cpu,
+        .memory,
+        .disk,
+        .network,
+        .gpu,
+        .power,
+        .thermal,
+        .fan,
+        .battery,
+    ]
 
     /// True while the popover dashboard is actually on-screen. When
     /// false and the main dashboard is also hidden, the runtime keeps
@@ -425,6 +546,16 @@ final class MetricsRuntime {
     /// True while the main dashboard surface is worth painting. This
     /// tracks visibility, not merely whether the Window scene exists.
     var mainDashboardVisible = false {
+        didSet {
+            updateCollectorDemand()
+        }
+    }
+
+    /// True while the history diagnostics surface is visible. History
+    /// recording runs at low cadence in the background; making the
+    /// surface visible raises those host collectors to foreground
+    /// diagnostic cadence without requiring the process collector.
+    var historyVisible = false {
         didSet {
             updateCollectorDemand()
         }
@@ -475,8 +606,9 @@ final class MetricsRuntime {
         updateCollectorDemand()
     }
 
-    func start(
+    fileprivate func start(
         store: MetricsStore,
+        historySampleSink: HistorySampleSink,
         processesStore: ProcessesStore,
         interval: Double,
     ) {
@@ -486,6 +618,9 @@ final class MetricsRuntime {
         self.processesStore = processesStore
         requestedSamplingIntervalSeconds = interval
         let cadence = effectiveCadence()
+        let historySink: @Sendable ([MetricSample]) async -> Void = { samples in
+            await historySampleSink.enqueue(samples)
+        }
         let fastScheduler = MetricsScheduler(
             store: store,
             collectors: [
@@ -495,6 +630,7 @@ final class MetricsRuntime {
                 DemandGatedCollector(demand: .network, collector: NetworkCollector(), gate: collectorDemandGate),
             ],
             interval: cadence.fast,
+            sampleSink: historySink,
         )
         let mediumScheduler = MetricsScheduler(
             store: store,
@@ -506,6 +642,7 @@ final class MetricsRuntime {
                 DemandGatedCollector(demand: .fan, collector: FanCollector(), gate: collectorDemandGate),
             ],
             interval: cadence.medium,
+            sampleSink: historySink,
         )
         let slowScheduler = MetricsScheduler(
             store: store,
@@ -513,6 +650,7 @@ final class MetricsRuntime {
                 DemandGatedCollector(demand: .battery, collector: BatteryCollector(), gate: collectorDemandGate),
             ],
             interval: cadence.slow,
+            sampleSink: historySink,
         )
         self.fastScheduler = fastScheduler
         self.mediumScheduler = mediumScheduler
@@ -578,6 +716,16 @@ final class MetricsRuntime {
     private func effectiveCollectorDemand() -> Set<CollectorDemand> {
         var demands = Set<CollectorDemand>()
 
+        // Keep a low-frequency baseline for every History metric before
+        // the user opens the panel. Showing History raises the same
+        // collectors to foreground cadence instead of cold-starting
+        // sparse series such as GPU, thermal, or fans.
+        demands.formUnion(
+            historyVisible
+                ? Self.foregroundHistoryCollectorDemands
+                : Self.backgroundHistoryCollectorDemands,
+        )
+
         for segment in menuBarSegments {
             demands.formUnion(segment.collectorDemands)
         }
@@ -596,19 +744,11 @@ final class MetricsRuntime {
             demands.formUnion([.cpu, .memory, .disk, .network, .gpu, .power, .thermal, .battery])
         }
 
-        if !popoverVisible && !mainDashboardVisible {
-            // Keep a low-frequency battery sample alive in the
-            // background so power-aware cadence can react to AC /
-            // battery / low-battery state without waiting for the
-            // user to display a battery card or menu segment.
-            demands.insert(.battery)
-        }
-
         return demands
     }
 
     private func effectiveCadence() -> SchedulerCadence {
-        let detailedSurfaceVisible = popoverVisible || mainDashboardVisible
+        let detailedSurfaceVisible = popoverVisible || mainDashboardVisible || historyVisible
         let hasFastDemand = !activeCollectorDemand.isDisjoint(with: [.cpu, .memory, .disk, .network])
         let hasMediumDemand = !activeCollectorDemand.isDisjoint(with: [.gpu, .power, .thermal, .fan])
         let hasSlowDemand = activeCollectorDemand.contains(.battery)
@@ -618,17 +758,17 @@ final class MetricsRuntime {
         let backgroundSlowMinimum: Double
         switch backgroundPolicy {
         case .normal:
-            backgroundFastMinimum = 2
-            backgroundMediumMinimum = hasMediumDemand ? 5 : 60
-            backgroundSlowMinimum = hasSlowDemand ? 30 : 300
-        case .onBattery:
-            backgroundFastMinimum = 3
-            backgroundMediumMinimum = hasMediumDemand ? 10 : 60
-            backgroundSlowMinimum = hasSlowDemand ? 60 : 300
-        case .lowPower:
             backgroundFastMinimum = 5
-            backgroundMediumMinimum = hasMediumDemand ? 15 : 60
+            backgroundMediumMinimum = hasMediumDemand ? 30 : 60
+            backgroundSlowMinimum = hasSlowDemand ? 60 : 300
+        case .onBattery:
+            backgroundFastMinimum = 10
+            backgroundMediumMinimum = hasMediumDemand ? 60 : 120
             backgroundSlowMinimum = hasSlowDemand ? 120 : 300
+        case .lowPower:
+            backgroundFastMinimum = 15
+            backgroundMediumMinimum = hasMediumDemand ? 120 : 300
+            backgroundSlowMinimum = 300
         }
         let fastMinimum = hasFastDemand
             ? (detailedSurfaceVisible ? 0.05 : backgroundFastMinimum)

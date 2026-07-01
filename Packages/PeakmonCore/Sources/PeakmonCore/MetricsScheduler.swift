@@ -18,6 +18,7 @@ import Foundation
 public actor MetricsScheduler {
     private let store: MetricsStore
     private let collectors: [any MetricCollector]
+    private let sampleSink: (@Sendable ([MetricSample]) async -> Void)?
     private var interval: Duration
     private var task: Task<Void, Never>?
 
@@ -25,10 +26,12 @@ public actor MetricsScheduler {
         store: MetricsStore,
         collectors: [any MetricCollector],
         interval: Duration = .seconds(1),
+        sampleSink: (@Sendable ([MetricSample]) async -> Void)? = nil,
     ) {
         self.store = store
         self.collectors = collectors
         self.interval = interval
+        self.sampleSink = sampleSink
     }
 
     /// Begin polling. No-op if already running.
@@ -60,11 +63,13 @@ public actor MetricsScheduler {
         let collectors = collectors
         let interval = interval
         let store = store
+        let sampleSink = sampleSink
         task = Task.detached(priority: .utility) {
             await Self.runLoop(
                 collectors: collectors,
                 interval: interval,
                 store: store,
+                sampleSink: sampleSink,
             )
         }
     }
@@ -73,6 +78,7 @@ public actor MetricsScheduler {
         collectors: [any MetricCollector],
         interval: Duration,
         store: MetricsStore,
+        sampleSink: (@Sendable ([MetricSample]) async -> Void)?,
     ) async {
         while !Task.isCancelled {
             await withTaskGroup(of: [MetricSample].self) { group in
@@ -87,6 +93,7 @@ public actor MetricsScheduler {
                 }
                 if !batch.isEmpty {
                     await store.ingest(batch)
+                    await sampleSink?(batch)
                 }
             }
             do {

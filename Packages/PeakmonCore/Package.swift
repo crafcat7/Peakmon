@@ -8,7 +8,12 @@ let package = Package(
         .library(name: "PeakmonCore", targets: ["PeakmonCore"]),
     ],
     targets: [
-        .target(name: "PeakmonCore"),
+        .target(
+            name: "PeakmonCore",
+            linkerSettings: [
+                .linkedLibrary("sqlite3"),
+            ],
+        ),
         .testTarget(name: "PeakmonCoreTests", dependencies: ["PeakmonCore"]),
     ],
 )

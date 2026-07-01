@@ -3,8 +3,7 @@
 //  Peakmon
 //
 //  Root view of the unified `Window("main")` scene: a top-pill nav
-//  (`MainWindowTopBar`) floating over a detail surface that is either
-//  `DashboardSurface` or `SettingsSurface`.
+//  (`MainWindowTopBar`) floating over a detail surface.
 //
 //  The scene's title bar is hidden (`.hiddenTitleBar` in `PeakmonApp`),
 //  so the pill is the only top chrome; the window stays draggable from
@@ -17,6 +16,7 @@
 //
 //  Pill ↔ selection mapping:
 //    • Dashboard ⇒ .dashboard
+//    • History   ⇒ .history
 //    • Settings  ⇒ .settings(remembered), remembered = last sub-
 //      category picked, defaulting to `.general`.
 //
@@ -62,6 +62,7 @@ struct MainWindowView: View {
             get: {
                 switch selection {
                 case .dashboard: .dashboard
+                case .history: .history
                 case .settings: .settings
                 }
             },
@@ -70,6 +71,8 @@ struct MainWindowView: View {
                     switch newTab {
                     case .dashboard:
                         selection = .dashboard
+                    case .history:
+                        selection = .history
                     case .settings:
                         selection = .settings(lastSettingsCategory)
                     }
@@ -105,6 +108,9 @@ struct MainWindowView: View {
             case .dashboard:
                 DashboardSurface()
                     .transition(.opacity)
+            case .history:
+                HistorySurface()
+                    .transition(.opacity)
             case .settings:
                 SettingsSurface(selection: settingsCategoryBinding)
                     .transition(.opacity)
@@ -119,6 +125,7 @@ struct MainWindowView: View {
     private func tabOf(_ selection: MainWindowSelection) -> MainWindowTab {
         switch selection {
         case .dashboard: .dashboard
+        case .history: .history
         case .settings: .settings
         }
     }

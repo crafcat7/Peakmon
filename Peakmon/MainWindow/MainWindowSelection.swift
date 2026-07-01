@@ -8,7 +8,7 @@
 //
 //  Navigation shape (2026-05-26 rev 3):
 //    • Top-level: a centered floating pill in the toolbar — Dashboard
-//      / Settings.
+//      / History / Settings.
 //    • Inside Settings: a smaller segmented control switches three
 //      sub-pages (General / Display / About), kept separate (not
 //      merged) and relocated from the old sidebar to a sub-toolbar.
@@ -25,10 +25,12 @@ import SwiftUI
 ///
 /// - `.dashboard`: full-width KPI grid; default landing for ⌘, and
 ///   the popover's "Open Window" footer.
+/// - `.history`: local diagnostics timeline and anomaly review.
 /// - `.settings(category)`: classic sidebar+detail settings layout,
 ///   one detail page per `SettingsCategory`.
 enum MainWindowSelection: Hashable {
     case dashboard
+    case history
     case settings(SettingsCategory)
 
     /// Page opened when ⌘, or the popover's "Open Window" footer
@@ -41,6 +43,7 @@ enum MainWindowSelection: Hashable {
     var title: String {
         switch self {
         case .dashboard: "Dashboard"
+        case .history: "History"
         case .settings(let category): category.title
         }
     }
@@ -50,6 +53,7 @@ enum MainWindowSelection: Hashable {
     var systemImage: String {
         switch self {
         case .dashboard: "gauge.with.dots.needle.67percent"
+        case .history: "chart.xyaxis.line"
         case .settings(let category): category.systemImage
         }
     }
@@ -58,6 +62,7 @@ enum MainWindowSelection: Hashable {
     var tint: Color {
         switch self {
         case .dashboard: .accentColor
+        case .history: .purple
         case .settings(let category): category.tint
         }
     }
@@ -69,6 +74,7 @@ enum MainWindowSelection: Hashable {
 /// active is local to the Settings surface.
 enum MainWindowTab: Hashable, CaseIterable, Identifiable {
     case dashboard
+    case history
     case settings
 
     var id: Self { self }
@@ -77,6 +83,7 @@ enum MainWindowTab: Hashable, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .dashboard: "Dashboard"
+        case .history: "History"
         case .settings: "Settings"
         }
     }
@@ -87,6 +94,7 @@ enum MainWindowTab: Hashable, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .dashboard: "gauge.with.dots.needle.67percent"
+        case .history: "chart.xyaxis.line"
         case .settings: "slider.horizontal.3"
         }
     }

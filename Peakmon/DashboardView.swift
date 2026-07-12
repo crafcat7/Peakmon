@@ -131,15 +131,25 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             header
 
+//            ScrollView {
+//                LazyVStack(alignment: .leading, spacing: 12) {
+//                    ForEach(DashboardLayout.rows(from: visibleCards), id: \.rowID) { row in
+//                        rowView(row)
+//                    }
+//
+//                    if visibleCards.isEmpty { emptyState }
+//                }
+//                .frame(maxWidth: .infinity, alignment: .topLeading)
+//            }
+
             ForEach(DashboardLayout.rows(from: visibleCards), id: \.rowID) { row in
                 rowView(row)
             }
 
-            if visibleCards.isEmpty { emptyState }
-
             footer
         }
         .padding(14)
+//        .frame(width: Self.popoverWidth, height: Self.popoverHeight, alignment: .topLeading)
         .frame(width: Self.popoverWidth)
         .transaction { transaction in
             transaction.animation = nil
@@ -334,9 +344,18 @@ private struct PopoverWindowVisibilityProbe: NSViewRepresentable {
         nsView.scheduleReport()
     }
 
+    private final class ObserverBag: @unchecked Sendable {
+        nonisolated(unsafe) var tokens: [NSObjectProtocol] = []
+
+        nonisolated func removeAll(from center: NotificationCenter = .default) {
+            tokens.forEach(center.removeObserver)
+            tokens.removeAll()
+        }
+    }
+
     final class ProbeView: NSView {
         var onChange: ((Bool) -> Void)?
-        private var observers: [NSObjectProtocol] = []
+        private let observers = ObserverBag()
         private weak var observedWindow: NSWindow?
         private var lastReported: Bool?
 
@@ -347,8 +366,7 @@ private struct PopoverWindowVisibilityProbe: NSViewRepresentable {
         }
 
         deinit {
-            let center = NotificationCenter.default
-            observers.forEach(center.removeObserver)
+            observers.removeAll()
         }
 
         func scheduleReport() {
@@ -361,8 +379,7 @@ private struct PopoverWindowVisibilityProbe: NSViewRepresentable {
             guard observedWindow !== window else { return }
 
             let center = NotificationCenter.default
-            observers.forEach(center.removeObserver)
-            observers.removeAll()
+            observers.removeAll(from: center)
             observedWindow = window
 
             guard let window else { return }
@@ -373,12 +390,14 @@ private struct PopoverWindowVisibilityProbe: NSViewRepresentable {
                 NSWindow.willCloseNotification,
             ]
             for name in names {
-                observers.append(center.addObserver(
+                observers.tokens.append(center.addObserver(
                     forName: name,
                     object: window,
                     queue: .main,
                 ) { [weak self] _ in
-                    self?.scheduleReport()
+                    Task { @MainActor [weak self] in
+                        self?.scheduleReport()
+                    }
                 })
             }
         }

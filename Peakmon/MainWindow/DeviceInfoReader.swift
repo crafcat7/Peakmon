@@ -110,22 +110,23 @@ enum DeviceInfoReader {
 
     /// String-valued sysctl, sized via a two-call probe so no max
     /// length is hard-coded per key.
-    private static func sysctlString(_ name: String) -> String? {
+    nonisolated private static func sysctlString(_ name: String) -> String? {
         var size = 0
         guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
         var buffer = [CChar](repeating: 0, count: size)
         guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else { return nil }
-        return String(cString: buffer)
+        let end = buffer.firstIndex(of: 0) ?? buffer.endIndex
+        return String(decoding: buffer[..<end].map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
-    private static func sysctlInt(_ name: String) -> Int? {
+    nonisolated private static func sysctlInt(_ name: String) -> Int? {
         var value: Int32 = 0
         var size = MemoryLayout<Int32>.size
         guard sysctlbyname(name, &value, &size, nil, 0) == 0 else { return nil }
         return Int(value)
     }
 
-    private static func sysctlUInt64(_ name: String) -> UInt64? {
+    nonisolated private static func sysctlUInt64(_ name: String) -> UInt64? {
         var value: UInt64 = 0
         var size = MemoryLayout<UInt64>.size
         guard sysctlbyname(name, &value, &size, nil, 0) == 0 else { return nil }
@@ -134,7 +135,7 @@ enum DeviceInfoReader {
 
     /// `kern.boottime` returns a `timeval` whose tv_sec field
     /// is the wall-clock boot moment.
-    private static func sysctlBootTime() -> Date? {
+    nonisolated private static func sysctlBootTime() -> Date? {
         var tv = timeval()
         var size = MemoryLayout<timeval>.size
         let result = "kern.boottime".withCString { name in
@@ -149,7 +150,7 @@ enum DeviceInfoReader {
     /// Pulls `product-name` and `IOPlatformSerialNumber` from the
     /// `IOPlatformExpertDevice` root entry in one open. Returns
     /// (`nil`, "") on any failure — both call sites tolerate it.
-    private static func ioPlatformExpertInfo() -> (productName: String?, serial: String) {
+    nonisolated private static func ioPlatformExpertInfo() -> (productName: String?, serial: String) {
         let service = IOServiceGetMatchingService(
             kIOMainPortDefault,
             IOServiceMatching("IOPlatformExpertDevice"),
@@ -188,7 +189,7 @@ enum DeviceInfoReader {
     /// Coarse fallback when IORegistry lacks a product-name (older
     /// Macs, rare). Only needs to bucket to a product line; the
     /// generation comes from the chip line.
-    private static func friendlyName(forModelId id: String) -> String {
+    nonisolated private static func friendlyName(forModelId id: String) -> String {
         if id.hasPrefix("MacBookPro") { return "MacBook Pro" }
         if id.hasPrefix("MacBookAir") { return "MacBook Air" }
         if id.hasPrefix("Macmini")    { return "Mac mini" }
@@ -200,7 +201,7 @@ enum DeviceInfoReader {
 
     /// macOS marketing name + version, e.g. "macOS Sequoia 15.4".
     /// Build number is omitted to keep the banner short.
-    private static func osMarketingName() -> String {
+    nonisolated private static func osMarketingName() -> String {
         let v = ProcessInfo.processInfo.operatingSystemVersion
         let marketing: String
         switch v.majorVersion {

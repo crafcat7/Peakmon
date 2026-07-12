@@ -30,7 +30,7 @@ import PeakmonCore
 /// (`[ProcessSnapshot]`) does not fit into the time-series
 /// `[MetricSample]` model. Callers drive it from their own task at
 /// whatever cadence makes sense (we use 2 s in production).
-public final class ProcessCollector {
+public final class ProcessCollector: Sendable {
     public let identifier = "process.libproc"
 
     /// Maximum number of processes returned per snapshot, or `nil`

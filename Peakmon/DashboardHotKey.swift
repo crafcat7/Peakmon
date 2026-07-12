@@ -212,7 +212,9 @@ final class DashboardHotKeyController {
             object: nil,
             queue: .main,
         ) { [weak self] _ in
-            self?.registerCurrentShortcuts()
+            Task { @MainActor [weak self] in
+                self?.registerCurrentShortcuts()
+            }
         }
     }
 

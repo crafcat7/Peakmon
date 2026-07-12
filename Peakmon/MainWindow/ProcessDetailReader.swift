@@ -26,7 +26,7 @@
 import Darwin
 import Foundation
 
-struct ThreadInfo: Identifiable, Hashable {
+struct ThreadInfo: Identifiable, Hashable, Sendable {
     let id: UInt64       // thread ID (`pth_threadid` is 64-bit)
     let name: String     // empty if unset (Apple never names most threads)
     let cpuUserMs: UInt64
@@ -36,7 +36,7 @@ struct ThreadInfo: Identifiable, Hashable {
 
     /// Total CPU time (user + system) in ms. Convenient for
     /// sorting threads by cost.
-    var cpuTotalMs: UInt64 { cpuUserMs &+ cpuSystemMs }
+    nonisolated var cpuTotalMs: UInt64 { cpuUserMs &+ cpuSystemMs }
 
     /// Human-readable run state, mapped from the `TH_STATE_*`
     /// constants in `<mach/thread_info.h>`. Unknown values are
@@ -53,7 +53,7 @@ struct ThreadInfo: Identifiable, Hashable {
     }
 }
 
-struct ProcessDetail: Identifiable, Hashable {
+struct ProcessDetail: Identifiable, Hashable, Sendable {
     let id: Int32        // pid (matches `ProcessSnapshot.id` so we can drive `.sheet(item:)` interchangeably)
     let pid: Int32
     let ppid: Int32
@@ -87,21 +87,22 @@ enum ProcessDetailReader {
     /// Absolute executable path. Returns "" if the process is
     /// owned by another user or has exited between snapshot and
     /// sheet open.
-    private static func readPath(pid: Int32) -> String {
+    nonisolated private static func readPath(pid: Int32) -> String {
         // `PROC_PIDPATHINFO_MAXSIZE` (MAXPATHLEN * 4 = 4096) isn't
         // bridged to Swift, so hard-code it — Apple hasn't changed
         // the value in over a decade.
         var buf = [CChar](repeating: 0, count: 4096)
         let n = proc_pidpath(pid, &buf, UInt32(buf.count))
         guard n > 0 else { return "" }
-        return String(cString: buf)
+        let end = buf.firstIndex(of: 0) ?? buf.endIndex
+        return String(decoding: buf[..<end].map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
     // MARK: - proc_pidinfo PROC_PIDTBSDINFO (ppid + start)
 
     /// Reads `proc_bsdinfo` for ppid. Surfaced even when path/args
     /// are denied so the sheet shows lineage for cross-user procs.
-    private static func readPPID(pid: Int32) -> Int32 {
+    nonisolated private static func readPPID(pid: Int32) -> Int32 {
         var info = proc_bsdinfo()
         let size = MemoryLayout<proc_bsdinfo>.size
         let got = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(size))
@@ -109,7 +110,7 @@ enum ProcessDetailReader {
         return Int32(bitPattern: info.pbi_ppid)
     }
 
-    private static func readStartTime(pid: Int32) -> Date? {
+    nonisolated private static func readStartTime(pid: Int32) -> Date? {
         var info = proc_bsdinfo()
         let size = MemoryLayout<proc_bsdinfo>.size
         let got = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(size))
@@ -134,7 +135,7 @@ enum ProcessDetailReader {
     /// Cross-user processes return EINVAL; kernel_task returns
     /// nothing useful. In both cases we return an empty array
     /// and let the sheet render "(arguments unavailable)".
-    private static func readArgs(pid: Int32) -> [String] {
+    nonisolated private static func readArgs(pid: Int32) -> [String] {
         // First call: query the maximum argument size.
         var maxArgs: Int32 = 0
         var maxArgsSize = MemoryLayout<Int32>.size
@@ -192,7 +193,7 @@ enum ProcessDetailReader {
     /// for `proc_pidinfo` list APIs, where threads may spawn between
     /// calls. CPU times (`pth_user_time` / `pth_system_time`) are
     /// nanoseconds, converted to ms for display.
-    private static func readThreads(pid: Int32) -> [ThreadInfo] {
+    nonisolated private static func readThreads(pid: Int32) -> [ThreadInfo] {
         // 1. Size the thread ID list.
         let firstSize = proc_pidinfo(pid, PROC_PIDLISTTHREADS, 0, nil, 0)
         guard firstSize > 0 else { return [] }

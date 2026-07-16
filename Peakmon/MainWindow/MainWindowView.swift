@@ -27,6 +27,7 @@ import SwiftUI
 
 struct MainWindowView: View {
     @Binding var selection: MainWindowSelection
+    @Environment(HistoryIssuesStore.self) private var historyIssuesStore
 
     /// Last `SettingsCategory` touched. Survives Dashboard ↔ Settings
     /// flips so returning to Settings restores the same sub-page
@@ -34,12 +35,16 @@ struct MainWindowView: View {
     @State private var lastSettingsCategory: SettingsCategory = .general
 
     var body: some View {
+        mainContent
+            .modifier(MainWindowMaterialBackground())
+    }
+
+    private var mainContent: some View {
         ZStack(alignment: .top) {
             // Detail surface fills the window; the pill floats over
             // it with top padding.
             detailSurface
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(NSColor.windowBackgroundColor))
 
             MainWindowTopBar(selection: topTabBinding)
                 .padding(.top, 12)
@@ -106,7 +111,12 @@ struct MainWindowView: View {
         Group {
             switch selection {
             case .dashboard:
-                DashboardSurface()
+                DashboardSurface { event in
+                    historyIssuesStore.requestHistoryFocus(for: event)
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                        selection = .history
+                    }
+                }
                     .transition(.opacity)
             case .history:
                 HistorySurface()
@@ -127,6 +137,22 @@ struct MainWindowView: View {
         case .dashboard: .dashboard
         case .history: .history
         case .settings: .settings
+        }
+    }
+}
+
+/// Supplies a real translucent window backdrop without raising the
+/// deployment target. `ContainerBackgroundPlacement.window` begins on
+/// macOS 15; macOS 14 receives the closest material fallback.
+private struct MainWindowMaterialBackground: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content
+                .containerBackground(.ultraThinMaterial, for: .window)
+        } else {
+            content
+                .background(.regularMaterial)
         }
     }
 }

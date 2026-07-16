@@ -294,12 +294,7 @@ public enum HistoryMetricDefinition: String, CaseIterable, Hashable, Sendable {
     }
 
     public var chartMode: HistoryChartMode {
-        switch self {
-        case .disk, .network:
-            .bars
-        case .cpu, .memory, .power, .gpu, .temperature, .fan:
-            .line
-        }
+        .line
     }
 
     public var thresholdBands: [HistoryThresholdBand] {
@@ -382,21 +377,50 @@ public enum HistoryMetricDefinition: String, CaseIterable, Hashable, Sendable {
     }
 }
 
+public struct HistoryMetricSummary: Identifiable, Hashable, Sendable {
+    public let definition: HistoryMetricDefinition
+    public let latest: Double?
+
+    public var id: HistoryMetricDefinition { definition }
+
+    public init(definition: HistoryMetricDefinition, latest: Double?) {
+        self.definition = definition
+        self.latest = latest
+    }
+}
+
 public struct HistorySnapshot: Hashable, Sendable {
     public let capturedAt: Date
-    public let metrics: [HistoryMetricSnapshot]
+    public let summaries: [HistoryMetricSummary]
+    public let selectedMetric: HistoryMetricSnapshot?
     public let events: [HistoryAnomalyEvent]
 
-    public static let empty = HistorySnapshot(capturedAt: .now, metrics: [], events: [])
+    public static let empty = HistorySnapshot(
+        capturedAt: .now,
+        summaries: [],
+        selectedMetric: nil,
+        events: [],
+    )
 
-    public init(capturedAt: Date, metrics: [HistoryMetricSnapshot], events: [HistoryAnomalyEvent]) {
+    public init(
+        capturedAt: Date,
+        summaries: [HistoryMetricSummary],
+        selectedMetric: HistoryMetricSnapshot?,
+        events: [HistoryAnomalyEvent],
+    ) {
         self.capturedAt = capturedAt
-        self.metrics = metrics
+        self.summaries = summaries
+        self.selectedMetric = selectedMetric
         self.events = events
     }
 
     public func metric(for definition: HistoryMetricDefinition) -> HistoryMetricSnapshot? {
-        metrics.first { $0.definition == definition }
+        guard selectedMetric?.definition == definition else { return nil }
+        return selectedMetric
+    }
+
+    public func summary(for definition: HistoryMetricDefinition) -> HistoryMetricSummary? {
+        summaries.first { $0.definition == definition }
     }
 
     public func events(for definition: HistoryMetricDefinition) -> [HistoryAnomalyEvent] {
@@ -413,35 +437,74 @@ public struct HistoryQueryService: Sendable {
         self.recorder = recorder
     }
 
-    public func snapshot(range: HistoryRange, at now: Date = .now) async -> HistorySnapshot {
-        let allBuckets = await recorder.buckets(range: range, now: now)
-        var bucketsByKey: [HistoryBucketKey: [MetricHistoryBucket]] = [:]
-        for bucket in allBuckets {
-            bucketsByKey[HistoryBucketKey(kind: bucket.kind, unit: bucket.unit), default: []].append(bucket)
+    public func read(
+        range: HistoryRange,
+        selected definition: HistoryMetricDefinition,
+        at now: Date = .now,
+    ) async -> HistorySnapshot {
+        let selectedKeys = Set(definition.series.flatMap { series in
+            [HistoryBucketKey(kind: series.kind, unit: series.unit)]
+                + series.fallbackKinds.map { HistoryBucketKey(kind: $0, unit: series.unit) }
+        })
+        let result = await recorder.read(range: range, selectedKeys: selectedKeys, now: now)
+
+        let summaries = HistoryMetricDefinition.allCases.compactMap { item -> HistoryMetricSummary? in
+            let values = item.series.compactMap { series -> Double? in
+                latestBucket(for: series, in: result.latestByKey)?.last
+            }
+            guard !values.isEmpty else { return nil }
+            let latest: Double
+            switch item {
+            case .disk, .network:
+                latest = values.reduce(0, +)
+            case .cpu, .memory, .power, .gpu, .temperature, .fan:
+                latest = values[0]
+            }
+            return HistoryMetricSummary(definition: item, latest: latest)
         }
 
-        let metrics = HistoryMetricDefinition.allCases.compactMap { definition -> HistoryMetricSnapshot? in
-            let series = definition.series.map { seriesDefinition -> HistoryMetricSeriesSnapshot in
-                var buckets = bucketsByKey[
-                    HistoryBucketKey(kind: seriesDefinition.kind, unit: seriesDefinition.unit),
+        let bucketsByKey = Dictionary(grouping: result.selectedBuckets) {
+            HistoryBucketKey(kind: $0.kind, unit: $0.unit)
+        }
+        let selectedSeries = definition.series.map { seriesDefinition -> HistoryMetricSeriesSnapshot in
+            var buckets = bucketsByKey[
+                HistoryBucketKey(kind: seriesDefinition.kind, unit: seriesDefinition.unit),
+                default: []
+            ]
+            for fallbackKind in seriesDefinition.fallbackKinds where buckets.isEmpty {
+                buckets = bucketsByKey[
+                    HistoryBucketKey(kind: fallbackKind, unit: seriesDefinition.unit),
                     default: []
                 ]
-                for fallbackKind in seriesDefinition.fallbackKinds where buckets.isEmpty {
-                    buckets = bucketsByKey[
-                        HistoryBucketKey(kind: fallbackKind, unit: seriesDefinition.unit),
-                        default: []
-                    ]
-                }
-                return HistoryMetricSeriesSnapshot(definition: seriesDefinition, buckets: buckets)
             }
-            let snapshot = HistoryMetricSnapshot(definition: definition, series: series)
-            return snapshot.hasData ? snapshot : nil
+            return HistoryMetricSeriesSnapshot(definition: seriesDefinition, buckets: buckets)
         }
+        let selectedMetric = HistoryMetricSnapshot(definition: definition, series: selectedSeries)
 
         let events = await recorder.anomalies(in: range, at: now)
             .filter { Self.visibleAnomalyKinds.contains($0.kind) }
-        return HistorySnapshot(capturedAt: now, metrics: metrics, events: events)
+        return HistorySnapshot(
+            capturedAt: now,
+            summaries: summaries,
+            selectedMetric: selectedMetric.hasData ? selectedMetric : nil,
+            events: events,
+        )
     }
 
     private static let visibleAnomalyKinds = Set(HistoryAnomalyKind.allCases)
+
+    private func latestBucket(
+        for definition: HistoryMetricSeriesDefinition,
+        in latestByKey: [HistoryBucketKey: MetricHistoryBucket],
+    ) -> MetricHistoryBucket? {
+        if let bucket = latestByKey[HistoryBucketKey(kind: definition.kind, unit: definition.unit)] {
+            return bucket
+        }
+        for fallbackKind in definition.fallbackKinds {
+            if let bucket = latestByKey[HistoryBucketKey(kind: fallbackKind, unit: definition.unit)] {
+                return bucket
+            }
+        }
+        return nil
+    }
 }

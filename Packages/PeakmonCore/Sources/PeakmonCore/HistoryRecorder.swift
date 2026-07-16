@@ -65,6 +65,11 @@ public actor HistoryRecorder {
         recordedKinds.contains(sample.kind) && sample.value.isFinite
     }
 
+    /// Restore persisted buckets ahead of the first foreground query.
+    public func prepare() async {
+        await store.prepare()
+    }
+
     /// Ingest samples, update short/long range aggregates, and emit
     /// lightweight anomalies when needed.
     public func ingest(_ samples: [MetricSample]) async {
@@ -97,9 +102,28 @@ public actor HistoryRecorder {
         )
     }
 
+    func read(
+        range: HistoryRange,
+        selectedKeys: Set<HistoryBucketKey>,
+        now: Date = .now,
+    ) async -> HistoryBucketReadResult {
+        await store.read(range: range, selectedKeys: selectedKeys, now: now)
+    }
+
     /// Return detected anomalies within the requested window.
     public func anomalies(in range: HistoryRange, at now: Date = .now) -> [HistoryAnomalyEvent] {
         anomalyEngine.events(in: range, at: now)
+    }
+
+    /// Attach a one-time, privacy-limited process snapshot to a reportable
+    /// anomaly. Process context stays in memory and is not persisted by
+    /// `HistoryStore`.
+    @discardableResult
+    public func attachProcesses(
+        _ processes: [HistoryAnomalyProcessSnapshot],
+        to eventID: UUID,
+    ) -> Bool {
+        anomalyEngine.attachProcesses(processes, to: eventID)
     }
 
     /// Wipe both history and anomaly state.

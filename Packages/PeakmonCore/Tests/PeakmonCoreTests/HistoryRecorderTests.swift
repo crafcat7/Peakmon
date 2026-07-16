@@ -149,16 +149,24 @@ struct HistoryRecorderTests {
             MetricSample(kind: .cpuTotal, unit: .percent, value: 92, timestamp: now.addingTimeInterval(6)),
         ])
 
-        let snapshot = await HistoryQueryService(recorder: recorder).snapshot(
+        let snapshot = await HistoryQueryService(recorder: recorder).read(
             range: .oneHour,
+            selected: .cpu,
+            at: now.addingTimeInterval(7),
+        )
+        let powerSnapshot = await HistoryQueryService(recorder: recorder).read(
+            range: .oneHour,
+            selected: .power,
             at: now.addingTimeInterval(7),
         )
 
-        let power = try #require(snapshot.metric(for: .power))
+        let power = try #require(powerSnapshot.metric(for: .power))
+        let powerSummary = try #require(snapshot.summary(for: .power))
         let cpu = try #require(snapshot.metric(for: .cpu))
         let cpuDiagnostics = cpu.diagnostics(in: .oneHour, at: now.addingTimeInterval(7))
         let cpuEvents = snapshot.events(for: .cpu)
         #expect(power.latest == 17)
+        #expect(powerSummary.latest == 17)
         #expect(power.primarySeries?.definition.kind == .powerSystem)
         #expect(power.primarySeries?.buckets.first?.kind == .powerPackage)
         #expect(cpuDiagnostics.sampleCount == 2)
@@ -263,6 +271,48 @@ struct HistoryRecorderTests {
         #expect(events[0].kind == .cpuSustainedHigh)
         #expect(events[0].endDate == now.addingTimeInterval(8))
         #expect(events[0].severity == .medium)
+    }
+
+    @Test
+    func anomalyKeepsStableIdentityAndOneTimeProcessContext() async throws {
+        let recorder = HistoryRecorder()
+        let now = Date(timeIntervalSince1970: 560_000)
+        let cpuBurst = (0..<8).map { offset in
+            MetricSample(
+                kind: .cpuTotal,
+                unit: .percent,
+                value: 90,
+                timestamp: now.addingTimeInterval(Double(offset)),
+            )
+        }
+        await recorder.ingest(cpuBurst)
+
+        let first = await recorder.anomalies(in: .oneHour, at: now.addingTimeInterval(8))
+        let second = await recorder.anomalies(in: .oneHour, at: now.addingTimeInterval(9))
+        #expect(first.count == 1)
+        #expect(second.first?.id == first.first?.id)
+
+        let process = HistoryAnomalyProcessSnapshot(
+            pid: 42,
+            name: "Example",
+            cpuPercent: 120,
+            memoryBytes: 512 * 1_024 * 1_024,
+        )
+        let eventID = try #require(first.first?.id)
+        #expect(await recorder.attachProcesses([process], to: eventID))
+        #expect(!(await recorder.attachProcesses([process], to: eventID)))
+
+        await recorder.ingest([
+            MetricSample(
+                kind: .cpuTotal,
+                unit: .percent,
+                value: 20,
+                timestamp: now.addingTimeInterval(10),
+            ),
+        ])
+        let closed = await recorder.anomalies(in: .oneHour, at: now.addingTimeInterval(10))
+        #expect(closed.first?.id == eventID)
+        #expect(closed.first?.processes == [process])
     }
 
     @Test
@@ -605,6 +655,81 @@ struct HistoryRecorderTests {
         #expect(restoredBuckets.count == 60)
         #expect(restoredBuckets.first?.min == 0)
         #expect(restoredBuckets.last?.max == 59)
+    }
+
+    @Test
+    func prepareAndFirstReadSharePersistenceRestore() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PeakmonHistoryStoreTests-\(UUID().uuidString)", isDirectory: true)
+        let url = directory.appendingPathComponent("history.json")
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let now = Date()
+        let store = HistoryStore(persistenceURL: url, persistenceSaveInterval: 3_600)
+        let samples = (0..<120).map { offset in
+            MetricSample(
+                kind: .cpuTotal,
+                unit: .percent,
+                value: Double(offset),
+                timestamp: now.addingTimeInterval(Double(offset - 119)),
+            )
+        }
+        await store.ingest(samples)
+        await store.flush()
+
+        let restoredStore = HistoryStore(persistenceURL: url, persistenceSaveInterval: 3_600)
+        async let preparation: Void = restoredStore.prepare()
+        async let firstRead: [MetricHistoryBucket] = restoredStore.buckets(
+            for: .cpuTotal,
+            unit: .percent,
+            range: .oneHour,
+            now: now,
+        )
+        let (_, buckets) = await (preparation, firstRead)
+
+        #expect(buckets.count == 120)
+        #expect(buckets.first?.min == 0)
+        #expect(buckets.last?.max == 119)
+    }
+
+    @Test
+    func scheduledPersistenceWritesWithoutExplicitFlush() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PeakmonHistoryStoreTests-\(UUID().uuidString)", isDirectory: true)
+        let url = directory.appendingPathComponent("history.json")
+        let databaseURL = url.deletingPathExtension().appendingPathExtension("sqlite")
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let now = Date()
+        let store = HistoryStore(persistenceURL: url, persistenceSaveInterval: 0.02)
+        await store.ingest([
+            MetricSample(
+                kind: .cpuTotal,
+                unit: .percent,
+                value: 42,
+                timestamp: now,
+            ),
+        ])
+
+        #expect(sqliteRowCount(at: databaseURL) == 0)
+        for _ in 0 ..< 50 where sqliteRowCount(at: databaseURL) == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(sqliteRowCount(at: databaseURL) > 0)
+
+        let restoredStore = HistoryStore(persistenceURL: url, persistenceSaveInterval: 3_600)
+        let restoredBuckets = await restoredStore.buckets(
+            for: .cpuTotal,
+            unit: .percent,
+            range: .oneHour,
+            now: now,
+        )
+        #expect(restoredBuckets.count == 1)
+        #expect(restoredBuckets.first?.last == 42)
     }
 
     @Test

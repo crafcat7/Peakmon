@@ -33,10 +33,17 @@ struct MainWindowView: View {
     /// flips so returning to Settings restores the same sub-page
     /// instead of snapping to `.general`.
     @State private var lastSettingsCategory: SettingsCategory = .general
+    @State private var historyRange: HistoryRange = .oneHour
+    @State private var historyMetric: HistoryMetricDefinition = .cpu
 
     var body: some View {
         mainContent
             .modifier(MainWindowMaterialBackground())
+            .onChange(of: tabOf(selection)) { previousTab, currentTab in
+                if previousTab == .history, currentTab != .history {
+                    historyIssuesStore.clearHistoryFocus()
+                }
+            }
     }
 
     private var mainContent: some View {
@@ -119,7 +126,10 @@ struct MainWindowView: View {
                 }
                     .transition(.opacity)
             case .history:
-                HistorySurface()
+                HistorySurface(
+                    range: $historyRange,
+                    selectedDefinition: $historyMetric,
+                )
                     .transition(.opacity)
             case .settings:
                 SettingsSurface(selection: settingsCategoryBinding)

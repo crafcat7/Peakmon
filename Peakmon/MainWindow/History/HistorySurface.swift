@@ -24,8 +24,8 @@ struct HistorySurface: View {
     @Environment(MetricsRuntime.self) private var runtime
     @Environment(HistoryIssuesStore.self) private var issuesStore
 
-    @State private var range: HistoryRange = .oneHour
-    @State private var selectedDefinition: HistoryMetricDefinition = .cpu
+    @Binding var range: HistoryRange
+    @Binding var selectedDefinition: HistoryMetricDefinition
     @State private var snapshot = HistorySnapshot.empty
     @State private var isRefreshing = false
     @State private var visibility = MainWindowVisibility.shared

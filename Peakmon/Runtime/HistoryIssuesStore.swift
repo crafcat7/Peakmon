@@ -34,6 +34,11 @@ final class HistoryIssuesStore {
         navigationRevision &+= 1
     }
 
+    func clearHistoryFocus() {
+        focusedEventID = nil
+        focusedMetric = nil
+    }
+
     func update(_ events: [HistoryAnomalyEvent], at now: Date = .now) {
         let cutoff = now.addingTimeInterval(-HistoryRange.oneHour.duration)
         let recent = events

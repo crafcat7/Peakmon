@@ -131,30 +131,28 @@ struct DashboardView: View {
     private var visibleContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-                .padding(.bottom, 10)
+                .padding(.bottom, 8)
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 ForEach(DashboardLayout.rows(from: visibleCards), id: \.rowID) { row in
                     rowView(row)
                 }
 
                 if visibleCards.isEmpty { emptyState }
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 4)
             .frame(
                 maxWidth: .infinity,
                 maxHeight: .infinity,
                 alignment: .topLeading,
             )
 
-            Divider()
             footer
-                .padding(.top, 10)
-                .padding(.bottom, 4)
+                .padding(.vertical, 3)
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 8)
         .frame(
             width: Self.popoverWidth,
             height: Self.popoverHeight,
@@ -327,22 +325,38 @@ struct DashboardView: View {
                 openWindow(id: "main")
                 ActivationPolicyController.shared.activateRegular()
             } label: {
-                Label("Open Window", systemImage: "macwindow")
-                    .labelStyle(.iconOnly)
+                Image(systemName: "macwindow")
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
+            .accessibilityLabel("Open Peakmon")
             .help("Open Peakmon Window")
 
-            Spacer()
+            Spacer(minLength: 12)
 
-            Button("Quit") {
+            Button {
                 NSApplication.shared.terminate(nil)
+            } label: {
+                Image(systemName: "power")
             }
+            .accessibilityLabel("Quit Peakmon")
             .keyboardShortcut("q")
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
+            .help("Quit Peakmon")
         }
+        .buttonStyle(PopoverFooterIconButtonStyle())
+    }
+}
+
+private struct PopoverFooterIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(width: 28, height: 26)
+            .background(
+                Color.primary.opacity(configuration.isPressed ? 0.08 : 0),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous),
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .opacity(configuration.isPressed ? 0.82 : 1)
     }
 }
 

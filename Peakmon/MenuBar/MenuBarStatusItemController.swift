@@ -16,7 +16,10 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
     private let store: MetricsStore
     private let historyIssuesStore: HistoryIssuesStore
     private let runtime: MetricsRuntime
+    private let onShowDashboard: () -> Void
     private var cache = MenuBarLabelCache()
+    private var menuBarEnabled = true
+    private var popoverEnabled = true
     nonisolated(unsafe) private var updateTimer: Timer?
     nonisolated(unsafe) private var defaultsObserver: NSObjectProtocol?
     private var foregroundCancellable: AnyCancellable?
@@ -26,11 +29,13 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
         processesStore: ProcessesStore,
         historyIssuesStore: HistoryIssuesStore,
         runtime: MetricsRuntime,
+        onShowDashboard: @escaping () -> Void,
         onShowHistory: @escaping (HistoryAnomalyEvent?) -> Void,
     ) {
         self.store = store
         self.historyIssuesStore = historyIssuesStore
         self.runtime = runtime
+        self.onShowDashboard = onShowDashboard
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         popover = NSPopover()
@@ -72,6 +77,8 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
     }
 
     func start() {
+        refreshSurfacePreferences()
+
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.renderStatusItem()
@@ -86,6 +93,7 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
             queue: .main,
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                self?.refreshSurfacePreferences()
                 self?.renderStatusItem(force: true)
             }
         }
@@ -113,6 +121,12 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
 
     @objc
     private func togglePopover(_ sender: NSStatusBarButton) {
+        guard menuBarEnabled else { return }
+        guard popoverEnabled else {
+            onShowDashboard()
+            return
+        }
+
         if popover.isShown {
             popover.performClose(sender)
         } else {
@@ -123,6 +137,7 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
     }
 
     func togglePopoverFromHotKey() {
+        guard menuBarEnabled, popoverEnabled else { return }
         guard let button = statusItem.button else { return }
         togglePopover(button)
     }
@@ -138,7 +153,27 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
         runtime.popoverNeedsProcesses = false
     }
 
+    private func refreshSurfacePreferences() {
+        menuBarEnabled = AppSurfacePreferences.menuBarEnabled
+        popoverEnabled = AppSurfacePreferences.popoverEnabled
+        statusItem.isVisible = menuBarEnabled
+
+        guard menuBarEnabled, popoverEnabled else {
+            if popover.isShown {
+                popover.performClose(nil)
+            }
+            runtime.popoverVisible = false
+            runtime.popoverNeedsProcesses = false
+            if !menuBarEnabled {
+                runtime.updateMenuBarSegments([])
+            }
+            return
+        }
+    }
+
     private func renderStatusItem(force: Bool = false) {
+        guard menuBarEnabled else { return }
+
         let items = menuBarSegments()
         runtime.updateMenuBarSegments(items)
 

@@ -70,6 +70,8 @@ struct GeneralPage: View {
     @AppStorage("samplingIntervalSeconds") private var samplingInterval: Double = 1.0
     @AppStorage("silentLaunch") private var silentLaunch = false
     @AppStorage(HistoryIssueNotificationService.enabledKey) private var anomalyNotificationsEnabled = false
+    @AppStorage(AppSurfacePreferences.menuBarEnabledKey) private var menuBarEnabled = true
+    @AppStorage(AppSurfacePreferences.popoverEnabledKey) private var popoverEnabled = true
     @State private var loginController = LaunchAtLoginController()
 
     private var version: String {
@@ -131,6 +133,39 @@ struct GeneralPage: View {
                     iconTint: .indigo,
                 ) {
                     VStack(alignment: .leading, spacing: 12) {
+                        settingsGroupLabel("SURFACES")
+
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Menu Bar")
+                                Text("Show live metrics in the macOS menu bar.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $menuBarEnabled)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                                .controlSize(.small)
+                        }
+
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Popover")
+                                Text(popoverDescription)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $popoverEnabled)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                                .controlSize(.small)
+                                .disabled(!menuBarEnabled)
+                        }
+
+                        Divider()
+
                         settingsGroupLabel("SHORTCUTS")
 
                         HStack(spacing: 10) {
@@ -143,6 +178,8 @@ struct GeneralPage: View {
                             Label("Show Popover", systemImage: "rectangle.on.rectangle")
                             Spacer()
                             PopoverHotKeyRecorder()
+                                .disabled(!menuBarEnabled || !popoverEnabled)
+                                .opacity(menuBarEnabled && popoverEnabled ? 1 : 0.5)
                         }
 
                         Divider()
@@ -245,6 +282,11 @@ struct GeneralPage: View {
             }
         }
         .onAppear { loginController.refresh() }
+        .onChange(of: menuBarEnabled) { _, enabled in
+            if !enabled {
+                popoverEnabled = false
+            }
+        }
         .onChange(of: anomalyNotificationsEnabled) { _, enabled in
             guard enabled else { return }
             Task {
@@ -253,6 +295,16 @@ struct GeneralPage: View {
                     anomalyNotificationsEnabled = false
                 }
             }
+        }
+    }
+
+    private var popoverDescription: String {
+        if !menuBarEnabled {
+            "Enable the menu bar first; the popover needs it as an anchor."
+        } else if popoverEnabled {
+            "Show the compact metrics panel from the menu bar or its shortcut."
+        } else {
+            "Menu bar clicks open the full Dashboard instead."
         }
     }
 

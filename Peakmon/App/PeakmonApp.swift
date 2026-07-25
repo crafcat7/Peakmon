@@ -117,6 +117,12 @@ struct PeakmonApp: App {
             processesStore: processesStore,
             historyIssuesStore: historyIssuesStore,
             runtime: runtime,
+            onShowDashboard: {
+                mainSelection = .dashboard
+                openWindow(id: "main")
+                ActivationPolicyController.shared.activateRegular()
+                MainWindowVisibility.shared.recompute()
+            },
             onShowHistory: { event in
                 historyIssuesStore.requestHistoryFocus(for: event)
                 mainSelection = .history

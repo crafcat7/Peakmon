@@ -300,7 +300,7 @@ final class DashboardHotKeyController {
 
     private func registerPopoverShortcut() {
         unregisterPopoverShortcut()
-        guard popoverAction != nil else { return }
+        guard popoverAction != nil, AppSurfacePreferences.popoverAvailable else { return }
         let shortcut = PopoverHotKey.current
         guard DashboardHotKey.isValid(
             keyCode: Int(shortcut.keyCode),

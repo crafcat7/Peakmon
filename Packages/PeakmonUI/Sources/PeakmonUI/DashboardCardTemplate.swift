@@ -69,19 +69,25 @@ public struct CardStat: Identifiable {
 /// own contents and stay equal-height with template-rendered
 /// neighbours).
 public enum DashboardCardMetrics {
+    /// Outer height of the six primary metric cards in the Popover.
+    /// The 136 pt tile still contains the full 80 pt stats + chart
+    /// body while recovering enough vertical room for five process
+    /// rows inside the fixed 760 pt window.
+    public static let cardMinimumHeight: CGFloat = 136
+
     /// Pinned height of the stats row. Calibrated for caption2 (12pt)
     /// + 2pt spacing + callout (~17pt) plus a 2pt baseline cushion;
     /// keeps the row's bottom edge stable when `minimumScaleFactor`
     /// triggers inside a `MetricStatLabel`.
     public static let statsRowHeight: CGFloat = 36
 
-    /// Pinned chart slot height. Matches the prior hard-coded
-    /// `.frame(height: 48)` on every sparkline.
-    public static let chartHeight: CGFloat = 48
+    /// Compact chart slot. The Popover is a quick glance surface;
+    /// detailed temporal inspection remains available in History.
+    public static let chartHeight: CGFloat = 36
 
     /// Spacing between stats row and chart slot. Matches the prior
     /// hand-written VStack spacing in `DashboardView`.
-    public static let interSlotSpacing: CGFloat = 10
+    public static let interSlotSpacing: CGFloat = 8
 
     /// Cap on visible stats in `.half` density. Two-stat compaction
     /// matches the Disk/Network half-width target use case; full
@@ -110,15 +116,16 @@ public enum DashboardCardMetrics {
 ///     the `body:` init. Used by Processes, where rows are not a
 ///     sparkline and the stats row is not meaningful.
 ///
-/// Both modes pin to `DashboardCardMetrics.contentHeight`, so every
-/// card on the dashboard has an identical outer height regardless
-/// of which init it uses.
+/// Both modes default to `DashboardCardMetrics.contentHeight`; compact
+/// summary cards may override the content and outer heights explicitly.
 public struct DashboardCardTemplate<Accessory: View, Body: View, CardOverlay: View>: View {
     @Environment(\.cardDensity) private var density
 
     private let title: String
     private let systemImage: String
     private let tint: Color
+    private let minimumHeight: CGFloat
+    private let contentHeight: CGFloat
     private let accessory: Accessory
     private let layout: Layout
     private let cardOverlay: CardOverlay
@@ -134,6 +141,8 @@ public struct DashboardCardTemplate<Accessory: View, Body: View, CardOverlay: Vi
         title: String,
         systemImage: String,
         tint: Color = .accentColor,
+        minimumHeight: CGFloat = DashboardCardMetrics.cardMinimumHeight,
+        contentHeight: CGFloat = DashboardCardMetrics.contentHeight,
         stats: [CardStat],
         @ViewBuilder accessory: () -> Accessory,
         @ViewBuilder chart: () -> Body,
@@ -142,6 +151,8 @@ public struct DashboardCardTemplate<Accessory: View, Body: View, CardOverlay: Vi
         self.title = title
         self.systemImage = systemImage
         self.tint = tint
+        self.minimumHeight = minimumHeight
+        self.contentHeight = contentHeight
         self.accessory = accessory()
         layout = .statsAndChart(stats: stats, chart: chart())
         cardOverlay = overlay()
@@ -157,6 +168,8 @@ public struct DashboardCardTemplate<Accessory: View, Body: View, CardOverlay: Vi
         title: String,
         systemImage: String,
         tint: Color = .accentColor,
+        minimumHeight: CGFloat = DashboardCardMetrics.cardMinimumHeight,
+        contentHeight: CGFloat = DashboardCardMetrics.contentHeight,
         @ViewBuilder accessory: () -> Accessory,
         @ViewBuilder body: () -> Body,
         @ViewBuilder overlay: () -> CardOverlay = { EmptyView() },
@@ -164,6 +177,8 @@ public struct DashboardCardTemplate<Accessory: View, Body: View, CardOverlay: Vi
         self.title = title
         self.systemImage = systemImage
         self.tint = tint
+        self.minimumHeight = minimumHeight
+        self.contentHeight = contentHeight
         self.accessory = accessory()
         layout = .freeform(body: body())
         cardOverlay = overlay()
@@ -174,6 +189,7 @@ public struct DashboardCardTemplate<Accessory: View, Body: View, CardOverlay: Vi
             title: title,
             systemImage: systemImage,
             tint: tint,
+            minimumHeight: minimumHeight,
             accessory: { accessory },
             content: { contentView },
         )
@@ -193,17 +209,16 @@ public struct DashboardCardTemplate<Accessory: View, Body: View, CardOverlay: Vi
             bodyContent
                 .frame(
                     maxWidth: .infinity,
-                    minHeight: DashboardCardMetrics.contentHeight,
-                    maxHeight: DashboardCardMetrics.contentHeight,
+                    minHeight: contentHeight,
+                    maxHeight: contentHeight,
                     alignment: .topLeading,
                 )
         }
     }
 
     /// Renders the user-declared stats, truncated by `halfStatsCap`
-    /// when laying out at half density. The row's height is pinned
-    /// even when empty (e.g. Memory's single-stat case) so single-
-    /// and triple-stat cards still align vertically.
+    /// when laying out at half density. The row's height is pinned so
+    /// cards with different stat counts still align vertically.
     @ViewBuilder
     private func statsRow(stats: [CardStat]) -> some View {
         let visible = density == .half

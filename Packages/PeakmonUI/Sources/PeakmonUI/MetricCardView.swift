@@ -14,6 +14,7 @@ public struct MetricCardView<Content: View, Accessory: View>: View {
     private let title: String
     private let systemImage: String
     private let tint: Color
+    private let minimumHeight: CGFloat
     private let accessory: Accessory
     private let content: Content
 
@@ -27,12 +28,14 @@ public struct MetricCardView<Content: View, Accessory: View>: View {
         title: String,
         systemImage: String,
         tint: Color = .accentColor,
+        minimumHeight: CGFloat = 160,
         @ViewBuilder accessory: () -> Accessory,
         @ViewBuilder content: () -> Content,
     ) {
         self.title = title
         self.systemImage = systemImage
         self.tint = tint
+        self.minimumHeight = minimumHeight
         self.accessory = accessory()
         self.content = content()
     }
@@ -45,12 +48,14 @@ extension MetricCardView where Accessory == EmptyView {
         title: String,
         systemImage: String,
         tint: Color = .accentColor,
+        minimumHeight: CGFloat = 160,
         @ViewBuilder content: () -> Content,
     ) {
         self.init(
             title: title,
             systemImage: systemImage,
             tint: tint,
+            minimumHeight: minimumHeight,
             accessory: { EmptyView() },
             content: content,
         )
@@ -73,20 +78,14 @@ extension MetricCardView {
             content
         }
         .padding(12)
-        .frame(minHeight: 160)
-        .background(cardFill, in: .rect(cornerRadius: 10))
+        .frame(minHeight: minimumHeight)
+        .peakmonGlassSurface(tint: tint, cornerRadius: 10, tintOpacity: 0.10)
         .overlay {
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(cardStroke, lineWidth: 0.5)
         }
         .contentShape(.rect(cornerRadius: 10))
-        .clipShape(.rect(cornerRadius: 10))
-    }
-
-    private var cardFill: Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.07)
-            : Color.black.opacity(0.035)
+        .clipShape(.rect(cornerRadius: 10, style: .continuous))
     }
 
     private var cardStroke: Color {

@@ -19,6 +19,11 @@ struct HistoryBucketRecord: Codable, Hashable, Sendable {
     let bucket: MetricHistoryBucket
 }
 
+struct HistoryBucketReadResult: Sendable {
+    let latestByKey: [HistoryBucketKey: MetricHistoryBucket]
+    let selectedBuckets: [MetricHistoryBucket]
+}
+
 enum HistoryRetention {
     static func duration(for range: HistoryRange, maximumRetentionDuration: TimeInterval) -> TimeInterval {
         min(range.duration, maximumRetentionDuration)
@@ -107,6 +112,16 @@ struct HistoryBucketAggregation {
         lastPrunedBucketsAt = nil
     }
 
+    /// Move the complete read cache to another actor without flattening,
+    /// sorting, and rebuilding tens of thousands of bucket records.
+    /// Swift dictionaries are copy-on-write, so resetting after the move
+    /// keeps startup restoration effectively O(1) beyond the SQLite scan.
+    mutating func takeBuckets() -> HistoryBucketMap {
+        let buckets = bucketedSamples
+        reset()
+        return buckets
+    }
+
     @discardableResult
     mutating func ingest(_ orderedSamples: [MetricSample]) -> Date? {
         guard let now = orderedSamples.last?.timestamp else { return nil }
@@ -127,12 +142,13 @@ struct HistoryBucketAggregation {
         range: HistoryRange,
         now: Date,
         maximumRetentionDuration: TimeInterval,
+        pruneInterval: TimeInterval = 0,
     ) -> [MetricHistoryBucket] {
         pruneIfNeeded(
             at: now,
             maximumRetentionDuration: maximumRetentionDuration,
-            interval: 0,
-            force: true,
+            interval: pruneInterval,
+            force: false,
         )
 
         guard let perRange = bucketedSamples[range] else { return [] }
@@ -156,6 +172,54 @@ struct HistoryBucketAggregation {
             }
             return $0.startDate < $1.startDate
         }
+    }
+
+    mutating func read(
+        range: HistoryRange,
+        selectedKeys: Set<HistoryBucketKey>,
+        now: Date,
+        maximumRetentionDuration: TimeInterval,
+        pruneInterval: TimeInterval = 0,
+    ) -> HistoryBucketReadResult {
+        pruneIfNeeded(
+            at: now,
+            maximumRetentionDuration: maximumRetentionDuration,
+            interval: pruneInterval,
+            force: false,
+        )
+
+        let perRange = bucketedSamples[range, default: [:]]
+        var latestByKey: [HistoryBucketKey: MetricHistoryBucket] = [:]
+        var selectedBuckets: [MetricHistoryBucket] = []
+
+        for (key, buckets) in perRange {
+            let retained = buckets.values.filter {
+                HistoryRetention.bucketOverlapsRetention(
+                    startDate: $0.startDate,
+                    range: range,
+                    at: now,
+                    maximumRetentionDuration: maximumRetentionDuration,
+                )
+            }
+            if let latest = retained.max(by: { $0.lastSampleDate < $1.lastSampleDate }) {
+                latestByKey[key] = latest
+            }
+            if selectedKeys.contains(key) {
+                selectedBuckets.append(contentsOf: retained)
+            }
+        }
+
+        selectedBuckets.sort {
+            if $0.startDate == $1.startDate {
+                if $0.kind == $1.kind { return $0.unit.rawValue < $1.unit.rawValue }
+                return $0.kind.rawValue < $1.kind.rawValue
+            }
+            return $0.startDate < $1.startDate
+        }
+        return HistoryBucketReadResult(
+            latestByKey: latestByKey,
+            selectedBuckets: selectedBuckets,
+        )
     }
 
     mutating func pruneIfNeeded(
@@ -191,6 +255,19 @@ struct HistoryBucketAggregation {
         dirtyBuckets = Self.emptyBuckets()
     }
 
+    mutating func clearDirtyBuckets(matching records: [HistoryBucketRecord]) {
+        for record in records {
+            let key = HistoryBucketKey(kind: record.bucket.kind, unit: record.bucket.unit)
+            let startDate = record.bucket.startDate
+            guard dirtyBuckets[record.range]?[key]?[startDate] == record.bucket else { continue }
+
+            dirtyBuckets[record.range]?[key]?[startDate] = nil
+            if dirtyBuckets[record.range]?[key]?.isEmpty == true {
+                dirtyBuckets[record.range]?[key] = nil
+            }
+        }
+    }
+
     mutating func mergeBuckets(_ buckets: HistoryBucketMap) {
         for range in HistoryRange.allCases {
             var perRange = bucketedSamples[range, default: [:]]
@@ -219,6 +296,15 @@ struct HistoryBucketAggregation {
                 }
                 .map { HistoryBucketRecord(range: range, bucket: $0) }
         }
+    }
+
+    static func buckets(from records: [HistoryBucketRecord]) -> HistoryBucketMap {
+        var buckets = emptyBuckets()
+        for record in records {
+            let key = HistoryBucketKey(kind: record.bucket.kind, unit: record.bucket.unit)
+            buckets[record.range, default: [:]][key, default: [:]][record.bucket.startDate] = record.bucket
+        }
+        return buckets
     }
 
     private mutating func ingestBucket(sample: MetricSample, range: HistoryRange) -> MetricHistoryBucket {

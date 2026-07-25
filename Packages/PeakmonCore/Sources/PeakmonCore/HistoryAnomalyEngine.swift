@@ -32,6 +32,7 @@ private struct HistoryAnomalyRule {
 }
 
 private struct ActiveAnomaly {
+    let id: UUID
     let kind: HistoryAnomalyKind
     let metricKind: MetricKind
     let unit: MetricUnit
@@ -42,6 +43,7 @@ private struct ActiveAnomaly {
     var peakValue: Double
     var lastSampleAt: Date
     var qualifyingSampleCount: Int
+    var processes: [HistoryAnomalyProcessSnapshot]
 }
 
 struct HistoryAnomalyEngine {
@@ -201,6 +203,7 @@ struct HistoryAnomalyEngine {
                         openEvents[rule.kind] = active
                     } else {
                         openEvents[rule.kind] = ActiveAnomaly(
+                            id: UUID(),
                             kind: rule.kind,
                             metricKind: sample.kind,
                             unit: sample.unit,
@@ -211,6 +214,7 @@ struct HistoryAnomalyEngine {
                             peakValue: sample.value,
                             lastSampleAt: sample.timestamp,
                             qualifyingSampleCount: 1,
+                            processes: [],
                         )
                     }
                 } else if let active = openEvents[rule.kind], active.lastSampleAt <= sample.timestamp {
@@ -257,6 +261,40 @@ struct HistoryAnomalyEngine {
         openEvents.removeAll(keepingCapacity: true)
     }
 
+    @discardableResult
+    mutating func attachProcesses(
+        _ processes: [HistoryAnomalyProcessSnapshot],
+        to eventID: UUID,
+    ) -> Bool {
+        guard !processes.isEmpty else { return false }
+
+        if let kind = openEvents.first(where: { $0.value.id == eventID })?.key,
+           var active = openEvents[kind]
+        {
+            guard active.processes.isEmpty else { return false }
+            active.processes = processes
+            openEvents[kind] = active
+            return true
+        }
+
+        guard let index = events.firstIndex(where: { $0.id == eventID }) else { return false }
+        let event = events[index]
+        guard event.processes.isEmpty else { return false }
+        events[index] = HistoryAnomalyEvent(
+            id: event.id,
+            kind: event.kind,
+            metricKind: event.metricKind,
+            unit: event.unit,
+            startDate: event.startDate,
+            endDate: event.endDate,
+            severity: event.severity,
+            reason: event.reason,
+            peakValue: event.peakValue,
+            processes: processes,
+        )
+        return true
+    }
+
     private mutating func finalize(rule: HistoryAnomalyRule, active: ActiveAnomaly) {
         guard isReportable(rule: rule, active: active, endDate: active.endedAt) else { return }
         mergeOrAppend(event(rule: rule, active: active, endDate: active.endedAt))
@@ -277,7 +315,7 @@ struct HistoryAnomalyEngine {
         endDate: Date,
     ) -> HistoryAnomalyEvent {
         HistoryAnomalyEvent(
-            id: UUID(),
+            id: active.id,
             kind: active.kind,
             metricKind: active.metricKind,
             unit: active.unit,
@@ -286,6 +324,7 @@ struct HistoryAnomalyEngine {
             severity: active.severity,
             reason: active.reason,
             peakValue: active.peakValue,
+            processes: active.processes,
         )
     }
 

@@ -111,6 +111,10 @@ public actor HistoryStore {
     }
 
     private var aggregation = HistoryBucketAggregation()
+    /// A separate actor instance owns SQLite and legacy migration. The
+    /// public store remains an in-memory source of truth, so a database
+    /// transaction never blocks chart reads or sample aggregation.
+    private let persistenceWorker: HistoryStore?
     private let databaseURL: URL?
     private let legacyPersistenceURL: URL?
     private let legacyLogURL: URL?
@@ -122,15 +126,37 @@ public actor HistoryStore {
     private var lastVacuumedDatabaseAt: Date?
     private var database: SQLiteConnection?
     private var didLoadPersistence = false
+    private var persistenceLoadTask: Task<HistoryBucketMap, Never>?
+    private var persistenceTask: Task<Void, Never>?
 
     public init(
         persistenceURL: URL? = nil,
         storagePolicy: HistoryStoragePolicy = .standard,
         retainedKinds: Set<MetricKind>? = nil,
     ) {
-        self.databaseURL = persistenceURL.map(Self.databaseURL(for:))
-        self.legacyPersistenceURL = persistenceURL.map(Self.legacySnapshotURL(for:))
-        self.legacyLogURL = persistenceURL.map { Self.legacySnapshotURL(for: $0).appendingPathExtension("log") }
+        self.persistenceWorker = persistenceURL.map {
+            HistoryStore(
+                persistenceWorkerURL: $0,
+                storagePolicy: storagePolicy,
+                retainedKinds: retainedKinds,
+            )
+        }
+        self.databaseURL = nil
+        self.legacyPersistenceURL = nil
+        self.legacyLogURL = nil
+        self.storagePolicy = storagePolicy
+        self.retainedKinds = retainedKinds
+    }
+
+    private init(
+        persistenceWorkerURL: URL,
+        storagePolicy: HistoryStoragePolicy,
+        retainedKinds: Set<MetricKind>?,
+    ) {
+        self.persistenceWorker = nil
+        self.databaseURL = Self.databaseURL(for: persistenceWorkerURL)
+        self.legacyPersistenceURL = Self.legacySnapshotURL(for: persistenceWorkerURL)
+        self.legacyLogURL = Self.legacySnapshotURL(for: persistenceWorkerURL).appendingPathExtension("log")
         self.storagePolicy = storagePolicy
         self.retainedKinds = retainedKinds
     }
@@ -161,22 +187,28 @@ public actor HistoryStore {
     /// Append sample batch into local history.
     ///
     /// Values that are NaN or infinite are ignored.
-    public func ingest(_ samples: [MetricSample]) {
-        ingestPrepared(
+    public func ingest(_ samples: [MetricSample]) async {
+        await ingestPrepared(
             samples
                 .filter { $0.value.isFinite }
                 .sorted { $0.timestamp < $1.timestamp },
         )
     }
 
+    /// Warm the SQLite-backed cache before a foreground History query.
+    /// Concurrent callers share the same restoration task.
+    public func prepare() async {
+        await loadPersistenceIfNeeded()
+    }
+
     /// Append samples that have already been filtered to finite values and
     /// sorted by timestamp.
-    func ingestPrepared(_ orderedSamples: [MetricSample]) {
-        ensurePersistenceLoaded()
+    func ingestPrepared(_ orderedSamples: [MetricSample]) async {
+        await loadPersistenceIfNeeded()
 
         guard let now = aggregation.ingest(orderedSamples) else { return }
         pruneBucketsIfNeeded(at: now, force: false)
-        schedulePersistence(at: now)
+        await schedulePersistence()
     }
 
     /// Return buckets for a given query range.
@@ -191,8 +223,8 @@ public actor HistoryStore {
         unit: MetricUnit? = nil,
         range: HistoryRange,
         now: Date = .now,
-    ) -> [MetricHistoryBucket] {
-        ensurePersistenceLoaded()
+    ) async -> [MetricHistoryBucket] {
+        await loadPersistenceIfNeeded()
 
         return aggregation.buckets(
             for: kind,
@@ -200,26 +232,156 @@ public actor HistoryStore {
             range: range,
             now: now,
             maximumRetentionDuration: storagePolicy.maximumRetentionDuration,
+            pruneInterval: storagePolicy.inMemoryPruneInterval,
+        )
+    }
+
+    func read(
+        range: HistoryRange,
+        selectedKeys: Set<HistoryBucketKey>,
+        now: Date = .now,
+    ) async -> HistoryBucketReadResult {
+        await loadPersistenceIfNeeded()
+        return aggregation.read(
+            range: range,
+            selectedKeys: selectedKeys,
+            now: now,
+            maximumRetentionDuration: storagePolicy.maximumRetentionDuration,
+            pruneInterval: storagePolicy.inMemoryPruneInterval,
         )
     }
 
     /// Clears all in-memory buckets for deterministic tests and
     /// controlled startup behavior.
-    public func reset() {
-        ensurePersistenceLoaded()
+    public func reset() async {
+        await loadPersistenceIfNeeded()
+        persistenceTask?.cancel()
+        persistenceTask = nil
 
         aggregation.reset()
         lastPersistedAt = nil
         lastPrunedDatabaseAt = nil
         lastCheckpointedDatabaseAt = nil
         lastVacuumedDatabaseAt = nil
-        removePersistedFile()
+        if let persistenceWorker {
+            await persistenceWorker.resetPersistenceBackend()
+        } else {
+            removePersistedFile()
+        }
     }
 
     /// Persist any pending bucket changes immediately.
-    public func flush() {
+    public func flush() async {
+        await loadPersistenceIfNeeded()
+        persistenceTask?.cancel()
+        persistenceTask = nil
+        await persistPendingBuckets(at: .now, forceMaintenance: true)
+    }
+
+    private func loadPersistenceIfNeeded() async {
+        guard !didLoadPersistence else { return }
+
+        guard let persistenceWorker else {
+            ensurePersistenceLoaded()
+            didLoadPersistence = true
+            return
+        }
+
+        let task: Task<HistoryBucketMap, Never>
+        if let persistenceLoadTask {
+            task = persistenceLoadTask
+        } else {
+            task = Task.detached(priority: .utility) {
+                await persistenceWorker.takePersistedBuckets()
+            }
+            persistenceLoadTask = task
+        }
+
+        let buckets = await task.value
+        guard !didLoadPersistence else { return }
+        aggregation.replaceBuckets(buckets)
+        didLoadPersistence = true
+        persistenceLoadTask = nil
+    }
+
+    private func schedulePersistence() async {
+        guard persistenceWorker != nil, aggregation.hasDirtyBuckets() else { return }
+        if storagePolicy.saveInterval == 0 {
+            await persistPendingBuckets(at: .now, forceMaintenance: false)
+            return
+        }
+        guard persistenceTask == nil else { return }
+
+        let delay = Duration.milliseconds(max(1, Int((storagePolicy.saveInterval * 1_000).rounded())))
+        persistenceTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return
+            }
+            await self?.runScheduledPersistence()
+        }
+    }
+
+    private func runScheduledPersistence() async {
+        persistenceTask = nil
+        await persistPendingBuckets(at: .now, forceMaintenance: false)
+        if aggregation.hasDirtyBuckets() {
+            await schedulePersistence()
+        }
+    }
+
+    private func persistPendingBuckets(at now: Date, forceMaintenance: Bool) async {
+        guard let persistenceWorker else { return }
+        pruneBucketsIfNeeded(at: now, force: forceMaintenance)
+        let records = aggregation.dirtyRecords()
+        let succeeded = await persistenceWorker.persistExternalRecords(
+            records,
+            at: now,
+            forceMaintenance: forceMaintenance,
+        )
+        guard succeeded else { return }
+        aggregation.clearDirtyBuckets(matching: records)
+        lastPersistedAt = now
+    }
+
+    private func takePersistedBuckets() -> HistoryBucketMap {
         ensurePersistenceLoaded()
-        persistIfNeeded(at: .now, force: true)
+        // The persistence actor does not retain a second read cache after
+        // startup restoration; subsequent buckets arrive as explicit writes.
+        return aggregation.takeBuckets()
+    }
+
+    private func persistExternalRecords(
+        _ records: [HistoryBucketRecord],
+        at now: Date,
+        forceMaintenance: Bool,
+    ) -> Bool {
+        ensurePersistenceLoaded()
+        guard database != nil else { return false }
+        guard !records.isEmpty else {
+            if forceMaintenance {
+                maintainDatabaseAfterForcedFlush(at: now)
+            }
+            return true
+        }
+        do {
+            try persist(records, updatedAt: now, forceMaintenance: forceMaintenance)
+            lastPersistedAt = now
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func resetPersistenceBackend() {
+        ensurePersistenceLoaded()
+        aggregation.reset()
+        lastPersistedAt = nil
+        lastPrunedDatabaseAt = nil
+        lastCheckpointedDatabaseAt = nil
+        lastVacuumedDatabaseAt = nil
+        removePersistedFile()
     }
 
     private func ensurePersistenceLoaded() {
@@ -249,11 +411,6 @@ public actor HistoryStore {
             interval: storagePolicy.inMemoryPruneInterval,
             force: force,
         )
-    }
-
-    private func schedulePersistence(at _: Date) {
-        guard database != nil else { return }
-        persistIfNeeded(at: Date(), force: false)
     }
 
     private func persistIfNeeded(at now: Date, force: Bool) {

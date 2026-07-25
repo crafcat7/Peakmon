@@ -210,7 +210,11 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
         button.title = ""
         button.image = image
         button.imagePosition = .imageOnly
-        statusItem.length = max(24, ceil(image.size.width) + 8)
+        // Let AppKit apply the status-bar spacing for the running macOS
+        // release. A fixed image-width adjustment bypasses the system
+        // content insets and makes the item sit too close to its
+        // neighbours on macOS 26 and later.
+        statusItem.length = NSStatusItem.variableLength
     }
 
     private func menuBarSegments() -> [MenuBarSegment] {
@@ -261,7 +265,6 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
         }
         .font(.system(size: 11, weight: .medium).monospacedDigit())
         .foregroundStyle(palette.foreground)
-        .padding(.horizontal, 2)
         .frame(height: 22)
         .fixedSize()
 

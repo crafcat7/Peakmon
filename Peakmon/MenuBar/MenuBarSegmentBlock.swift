@@ -330,7 +330,7 @@ struct MenuBarSegmentBlock: View {
             Text(count == 0 ? "OK" : "\(count)")
                 .lineLimit(1)
         }
-        .frame(width: 38, alignment: .leading)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func fallbackKind(primary: MetricKind, fallback: MetricKind) -> MetricKind {

@@ -106,7 +106,6 @@ private struct MenuBarLabel: View {
         }
         .font(.system(size: 11, weight: .medium).monospacedDigit())
         .foregroundStyle(palette.foreground)
-        .padding(.horizontal, 2)
         .frame(height: 22)
         .fixedSize()
 
@@ -348,10 +347,8 @@ final class StatusBarForeground: ObservableObject {
     private var desktopFingerprint: String = ""
     private var wallpaperDecision: WallpaperTextDecision?
     private var desktopPollTask: Task<Void, Never>?
-    private let probeItem = NSStatusBar.system.statusItem(withLength: 0)
 
     private init() {
-        Self.configureTemplateProbe(probeItem.button)
         desktopFingerprint = Self.currentDesktopFingerprint()
 
         DistributedNotificationCenter.default().addObserver(
@@ -414,10 +411,7 @@ final class StatusBarForeground: ObservableObject {
     }
 
     func palette(statusButton: NSButton? = nil) -> StatusBarPalette {
-        let statusAppearanceKey = Self.statusAppearanceKey(
-            statusButton,
-            fallbackButton: probeItem.button,
-        )
+        let statusAppearanceKey = Self.statusAppearanceKey(statusButton)
         if let cachedPalette,
            cachedGeneration == generation,
            cachedStatusAppearanceKey == statusAppearanceKey
@@ -482,13 +476,10 @@ final class StatusBarForeground: ObservableObject {
     }
 
     private func computeUsesLightText(statusButton: NSButton?) -> Bool {
-        if let usesLightText = Self.statusIconUsesLightText(statusButton)
-            ?? Self.statusIconUsesLightText(probeItem.button)
-        {
+        if let usesLightText = Self.statusIconUsesLightText(statusButton) {
             return usesLightText
         }
-        if let usesLightText = Self.computeUsesLightText(probeButton: statusButton)
-            ?? Self.computeUsesLightText(probeButton: probeItem.button)
+        if let usesLightText = Self.computeUsesLightText(button: statusButton)
             ?? Self.computeUsesLightText(appearance: NSApp.effectiveAppearance)
         {
             return usesLightText
@@ -516,9 +507,9 @@ final class StatusBarForeground: ObservableObject {
         return usesLightText
     }
 
-    private static func computeUsesLightText(probeButton: NSButton?) -> Bool? {
-        guard let probeButton else { return nil }
-        return computeUsesLightText(appearance: probeButton.effectiveAppearance)
+    private static func computeUsesLightText(button: NSButton?) -> Bool? {
+        guard let button else { return nil }
+        return computeUsesLightText(appearance: button.effectiveAppearance)
     }
 
     private static func computeUsesLightText(appearance: NSAppearance) -> Bool? {
@@ -535,20 +526,15 @@ final class StatusBarForeground: ObservableObject {
         }
     }
 
-    private static func statusAppearanceKey(
-        _ button: NSButton?,
-        fallbackButton: NSButton?,
-    ) -> String {
-        let resolvedButton = button ?? fallbackButton
-        let appearance = resolvedButton?.effectiveAppearance ?? NSApp.effectiveAppearance
+    private static func statusAppearanceKey(_ button: NSButton?) -> String {
+        let appearance = button?.effectiveAppearance ?? NSApp.effectiveAppearance
         let match = appearance.bestMatch(
             from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight],
         )?.rawValue ?? "unknown"
-        let screenName = resolvedButton?.window?.screen?.localizedName
+        let screenName = button?.window?.screen?.localizedName
             ?? NSScreen.main?.localizedName
             ?? "no-screen"
         let tintKey = statusIconTintKey(button)
-            ?? statusIconTintKey(fallbackButton)
             ?? "no-tint"
         return "\(screenName)|\(match)|\(tintKey)"
     }
@@ -598,18 +584,6 @@ final class StatusBarForeground: ObservableObject {
             resolved = color.usingColorSpace(NSColorSpace.deviceRGB)
         }
         return resolved
-    }
-
-    private static func configureTemplateProbe(_ button: NSButton?) {
-        guard let button else { return }
-        let image = NSImage(size: NSSize(width: 10, height: 10))
-        image.lockFocus()
-        NSColor.black.setFill()
-        NSBezierPath(ovalIn: NSRect(x: 1, y: 1, width: 8, height: 8)).fill()
-        image.unlockFocus()
-        image.isTemplate = true
-        button.image = image
-        button.imagePosition = .imageOnly
     }
 
     private static func computeWallpaperUsesLightText() -> Bool? {

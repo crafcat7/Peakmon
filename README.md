@@ -43,7 +43,7 @@ brew install crafcat7/cellar/peakmon
 
 **Dashboard** — unified window with per-metric cards (CPU, Memory, GPU, Power, Disk, Network). Each card has headline numbers, sparkline charts, and expanded detail sections. Open via menu bar icon or global hotkey `⌃⌥⌘D`.
 
-**Customization** — toggle cards on/off, reorder by drag, pick per-card accent colors, choose which metrics appear in the menu bar.
+**Customization** — enable or disable the menu bar and popover, toggle and reorder dashboard cards, pick per-card accent colors, and choose which metrics appear in the menu bar.
 
 ## Data sources
 

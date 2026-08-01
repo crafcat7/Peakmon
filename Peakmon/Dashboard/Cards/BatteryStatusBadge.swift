@@ -36,7 +36,7 @@ struct BatteryStatusBadge: View {
         HStack(spacing: 4) {
             Image(systemName: source.systemImage)
                 .font(.system(size: 10, weight: .semibold))
-            Text(source.displayLabel)
+            Text(LocalizedStringKey(source.displayLabel))
                 .font(.system(size: 10, weight: .semibold))
                 .fixedSize()
         }

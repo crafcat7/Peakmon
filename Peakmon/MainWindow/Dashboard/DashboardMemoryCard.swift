@@ -82,11 +82,17 @@ struct DashboardMemoryCard: View {
             }
             .lineLimit(1)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 3) {
                 Text(String(format: "%.0f%%", pressure))
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(pressureTint)
-                Text("Pressure · \(pressureLabel)")
+                Text("Pressure")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("·")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(LocalizedStringKey(pressureLabel))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -118,7 +124,7 @@ struct DashboardMemoryCard: View {
     private func breakdownRow(label: String, value: Double, color: Color) -> some View {
         HStack(spacing: 10) {
             Circle().fill(color).frame(width: 8, height: 8)
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption.weight(.medium))
                 .frame(width: 92, alignment: .leading)
             Text(DashboardFormatting.bytesShort(value))

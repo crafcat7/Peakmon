@@ -67,7 +67,7 @@ struct MainWindowTopBar: View {
             HStack(spacing: 6) {
                 Image(systemName: tab.systemImage)
                     .font(.system(size: 12, weight: .semibold))
-                Text(tab.title)
+                Text(LocalizedStringKey(tab.title))
                     .font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(isSelected ? Color.white : Color.primary.opacity(0.7))
@@ -87,7 +87,7 @@ struct MainWindowTopBar: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(tab.title)
+        .accessibilityLabel(Text(LocalizedStringKey(tab.title)))
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }

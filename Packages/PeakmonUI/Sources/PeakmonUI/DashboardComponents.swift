@@ -46,7 +46,7 @@ public struct MetricChipView: View {
             } else {
                 Circle().fill(color).frame(width: 6, height: 6)
             }
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(value)
@@ -88,7 +88,7 @@ public struct FooterStatView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack(spacing: 4) {
@@ -191,7 +191,7 @@ public struct LabeledBarRow: View {
 
     public var body: some View {
         HStack(spacing: 10) {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption.weight(.medium))
                 .frame(width: labelWidth, alignment: .leading)
             ProportionalBarView(

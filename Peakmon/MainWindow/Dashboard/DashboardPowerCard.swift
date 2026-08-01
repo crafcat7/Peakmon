@@ -128,7 +128,18 @@ struct DashboardPowerCard: View {
 
     private func statBlock(title: String, value: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title)
+            Text(LocalizedStringKey(title))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.callout.monospacedDigit().weight(.medium))
+                .foregroundStyle(tint)
+        }
+    }
+
+    private func statBlock(title: String, value: LocalizedStringKey, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(LocalizedStringKey(title))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(value)
@@ -177,7 +188,7 @@ struct DashboardPowerCard: View {
         return DashboardFormatting.batteryTemperatureColor(temperature)
     }
 
-    private var sourceLabel: String {
+    private var sourceLabel: LocalizedStringKey {
         switch isOnBattery {
         case true?: "Battery"
         case false?: "AC"

@@ -158,7 +158,7 @@ struct DashboardSystemBanner: View {
                 Image(systemName: icon)
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(tint)
-                Text(label.uppercased())
+                Text(LocalizedStringKey(label))
                     .font(.system(size: 9, weight: .bold))
                     .tracking(0.45)
                     .foregroundStyle(.secondary)
@@ -226,13 +226,25 @@ struct DashboardSystemBanner: View {
                     .foregroundStyle(healthTint)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(latestEvent == nil ? "All systems normal" : latestEvent?.kind.title ?? "Recent issue")
+                    Text(LocalizedStringKey(latestEvent == nil ? "All systems normal" : latestEvent?.kind.title ?? "Recent issue"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text(latestEvent == nil ? "No anomalies in the last hour" : healthDetail)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    if latestEvent == nil {
+                        Text("No anomalies in the last hour")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else if issuesStore.recentEvents.count > 1 {
+                        Text("\(issuesStore.recentEvents.count) recent issues")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Text(latestEvent?.reason ?? "")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
 
                 Image(systemName: "chevron.right")
@@ -250,14 +262,6 @@ struct DashboardSystemBanner: View {
         }
         .buttonStyle(.plain)
         .help("View health history")
-    }
-
-    private var healthDetail: String {
-        guard let latestEvent else { return "" }
-        if issuesStore.recentEvents.count > 1 {
-            return "\(issuesStore.recentEvents.count) recent issues"
-        }
-        return latestEvent.reason
     }
 
     /// SN shown full or masked to the last four characters — enough

@@ -236,7 +236,7 @@ private struct HistoryMetricPicker: View {
 
                 Picker("Range", selection: $range) {
                     ForEach(HistoryRange.allCases, id: \.self) { item in
-                        Text(item.displayName).tag(item)
+                        Text(LocalizedStringKey(item.displayName)).tag(item)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -308,7 +308,7 @@ private struct HistoryMetricPicker: View {
                 )
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(definition.title)
+                Text(LocalizedStringKey(definition.title))
                     .font(.caption.weight(isSelected ? .semibold : .medium))
                     .foregroundStyle(hasData ? .secondary : .tertiary)
                     .lineLimit(1)
@@ -380,7 +380,7 @@ private struct HistoryMetricDetailPanel: View {
                     .frame(width: 34, height: 34)
                     .background(definition.tint.color.opacity(0.15), in: .rect(cornerRadius: 8))
 
-                Text(definition.title)
+                Text(LocalizedStringKey(definition.title))
                     .font(.title3.weight(.semibold))
                     .lineLimit(1)
 
@@ -501,7 +501,7 @@ private struct HistoryMetricHero: View {
         color: Color = .primary,
     ) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(formatMetricValue(value, unit: definition.unit))
@@ -540,7 +540,7 @@ private struct HistorySamplingDiagnosticsStrip: View {
 
     private func item(label: String, value: String) -> some View {
         HStack(spacing: 5) {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .foregroundStyle(.secondary)
             Text(value)
                 .foregroundStyle(.primary)

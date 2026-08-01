@@ -24,6 +24,7 @@ struct DashboardView: View {
     @Environment(HistoryIssuesStore.self) private var issuesStore
     @Environment(\.cardSettings) private var cardSettings
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(AppLanguage.storageKey) private var languageRawValue = AppLanguage.default.rawValue
 
     /// `true` only while the popover window is on-screen. Used to gate
     /// every `store.*` read so the popover stops subscribing to the
@@ -72,6 +73,7 @@ struct DashboardView: View {
                 PopoverWindowVisibilityProbe(isVisible: $isVisible)
             }
         }
+        .environment(\.locale, AppLanguage(rawValue: languageRawValue)?.locale ?? AppLanguage.default.locale)
         .onDisappear {
             disarmPopoverDemand()
             isVisible = false
@@ -286,7 +288,7 @@ struct DashboardView: View {
                 .font(.headline)
             Spacer()
             let warming = !store.hasHistory(for: .cpuTotal)
-            Text(warming ? "Warming up…" : "Updated now")
+            Text(LocalizedStringKey(warming ? "Warming up…" : "Updated now"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -297,9 +299,13 @@ struct DashboardView: View {
                     Image(systemName: issuesStore.recentEvents.isEmpty
                         ? "checkmark.circle.fill"
                         : "exclamationmark.triangle.fill")
-                    Text(issuesStore.recentEvents.isEmpty
-                        ? "All clear"
-                        : "\(issuesStore.recentEvents.count) issue\(issuesStore.recentEvents.count == 1 ? "" : "s")")
+                    if issuesStore.recentEvents.isEmpty {
+                        Text("All clear")
+                    } else if issuesStore.recentEvents.count == 1 {
+                        Text("1 issue")
+                    } else {
+                        Text("\(issuesStore.recentEvents.count) issues")
+                    }
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(popoverHealthTint)

@@ -108,6 +108,7 @@ private struct MenuBarLabel: View {
         .foregroundStyle(palette.foreground)
         .frame(height: 22)
         .fixedSize()
+        .environment(\.locale, AppLanguage.current.locale)
 
         let renderer = ImageRenderer(content: composed)
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2

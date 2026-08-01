@@ -125,7 +125,7 @@ struct MenuBarSegmentRow: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 20)
 
-                    Text(segment.title)
+                    Text(LocalizedStringKey(segment.title))
                         .font(.system(size: 13))
                         .foregroundStyle(.primary)
 
@@ -173,7 +173,7 @@ struct MenuBarSegmentList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
@@ -186,7 +186,7 @@ struct MenuBarSegmentList: View {
     private var container: some View {
         Group {
             if items.isEmpty, let hint = emptyHint {
-                Text(hint)
+                Text(LocalizedStringKey(hint))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)

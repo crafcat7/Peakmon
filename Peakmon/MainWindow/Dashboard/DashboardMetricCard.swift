@@ -96,10 +96,11 @@ struct DashboardSectionLabel: View {
     let title: String
 
     var body: some View {
-        Text(title.uppercased())
+        Text(LocalizedStringKey(title))
             .font(.system(size: 10, weight: .bold))
             .tracking(0.5)
             .foregroundStyle(.secondary)
+            .textCase(.uppercase)
     }
 }
 
@@ -214,9 +215,10 @@ struct DashboardMetricCard<Headline: View, Detail: View, Footer: View>: View {
                         .stroke(tint.opacity(0.20), lineWidth: 0.5)
                 }
 
-            Text(title.uppercased())
+            Text(LocalizedStringKey(title))
                 .font(.system(size: 10, weight: .bold))
                 .tracking(0.55)
+                .textCase(.uppercase)
 
             Spacer()
         }
@@ -318,7 +320,7 @@ private struct DashboardRateBalanceBlock: View {
             Circle()
                 .fill(color)
                 .frame(width: 6, height: 6)
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(value)

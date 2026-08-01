@@ -104,7 +104,7 @@ struct ProcessDetailSheet: View {
                         .font(.title2.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    Text(headerSubtitle)
+                    headerSubtitleView
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -133,13 +133,13 @@ struct ProcessDetailSheet: View {
         .background(.background.secondary)
     }
 
-    /// "12 processes · Focused PID 1234" or, for single-child
-    /// groups, just "PID 1234".
-    private var headerSubtitle: String {
+    @ViewBuilder
+    private var headerSubtitleView: some View {
         if group.children.count == 1 {
-            return "PID \(focusedPID)"
+            Text("PID \(focusedPID)")
+        } else {
+            Text("\(group.children.count) processes · Focused PID \(focusedPID)")
         }
-        return "\(group.children.count) processes · Focused PID \(focusedPID)"
     }
 
     @ViewBuilder
@@ -190,7 +190,7 @@ struct ProcessDetailSheet: View {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(tint)
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
@@ -213,7 +213,7 @@ struct ProcessDetailSheet: View {
             Image(systemName: systemImage)
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(tint)
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
@@ -443,7 +443,7 @@ struct ProcessDetailSheet: View {
                 Circle()
                     .fill(runStateColor(t.runState))
                     .frame(width: 6, height: 6)
-                Text(t.runStateLabel)
+                Text(LocalizedStringKey(t.runStateLabel))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.primary)
             }
@@ -472,7 +472,7 @@ struct ProcessDetailSheet: View {
         HStack(spacing: 8) {
             Image(systemName: "info.circle")
                 .foregroundStyle(.tertiary)
-            Text(text)
+            Text(LocalizedStringKey(text))
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -493,6 +493,7 @@ struct ProcessDetailSheet: View {
 
     private func formatStart(_ d: Date) -> String {
         let f = DateFormatter()
+        f.locale = AppLanguage.current.locale
         if Calendar.current.isDateInToday(d) {
             f.dateStyle = .none
             f.timeStyle = .short

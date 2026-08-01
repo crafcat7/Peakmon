@@ -88,7 +88,7 @@ struct MemoryCard: View {
                 Circle()
                     .fill(pressureStateTint)
                     .frame(width: 8, height: 8)
-                Text(pressureLabel)
+                Text(LocalizedStringKey(pressureLabel))
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(pressureValueTint)
             }

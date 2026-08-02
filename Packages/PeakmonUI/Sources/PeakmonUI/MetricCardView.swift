@@ -69,7 +69,7 @@ extension MetricCardView {
                 Image(systemName: systemImage)
                     .foregroundStyle(tint)
                     .imageScale(.medium)
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -109,7 +109,7 @@ public struct MetricStatLabel: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)

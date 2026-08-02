@@ -72,6 +72,7 @@ struct GeneralPage: View {
     @AppStorage(HistoryIssueNotificationService.enabledKey) private var anomalyNotificationsEnabled = false
     @AppStorage(AppSurfacePreferences.menuBarEnabledKey) private var menuBarEnabled = true
     @AppStorage(AppSurfacePreferences.popoverEnabledKey) private var popoverEnabled = true
+    @AppStorage(AppLanguage.storageKey) private var languageRawValue = AppLanguage.default.rawValue
     @State private var loginController = LaunchAtLoginController()
 
     private var version: String {
@@ -162,6 +163,23 @@ struct GeneralPage: View {
                                 .labelsHidden()
                                 .controlSize(.small)
                                 .disabled(!menuBarEnabled)
+                        }
+
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Language")
+                                Text("Choose the language used by Peakmon.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("Language", selection: $languageRawValue) {
+                                ForEach(AppLanguage.allCases) { language in
+                                    Text(language.displayName).tag(language.rawValue)
+                                }
+                            }
+                            .labelsHidden()
+                            .fixedSize()
                         }
 
                         Divider()
@@ -298,7 +316,7 @@ struct GeneralPage: View {
         }
     }
 
-    private var popoverDescription: String {
+    private var popoverDescription: LocalizedStringKey {
         if !menuBarEnabled {
             "Enable the menu bar first; the popover needs it as an anchor."
         } else if popoverEnabled {
@@ -313,7 +331,7 @@ struct GeneralPage: View {
     /// they need to act in System Settings → Login Items; the
     /// normal "what this toggle does" footnote is omitted since
     /// the toggle label is self-explanatory.
-    private var loginFootnote: String? {
+    private var loginFootnote: LocalizedStringKey? {
         if loginController.requiresApproval {
             "Approval required in System Settings → Login Items."
         } else {
@@ -322,7 +340,7 @@ struct GeneralPage: View {
     }
 
     private func settingsGroupLabel(_ title: String) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.tertiary)
             .tracking(0.5)

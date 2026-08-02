@@ -48,9 +48,9 @@ struct SettingsSurface: View {
                 }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(selection.title)
+                Text(LocalizedStringKey(selection.title))
                     .font(.headline)
-                Text(selection.subtitle)
+                Text(LocalizedStringKey(selection.subtitle))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -92,7 +92,7 @@ struct SettingsSurface: View {
             HStack(spacing: 5) {
                 Image(systemName: category.systemImage)
                     .font(.system(size: 11, weight: .medium))
-                Text(category.title)
+                Text(LocalizedStringKey(category.title))
                     .font(.system(size: 12, weight: .medium))
             }
             .foregroundStyle(isSelected ? Color.primary : Color.secondary)
@@ -112,7 +112,7 @@ struct SettingsSurface: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(category.title)
+        .accessibilityLabel(Text(LocalizedStringKey(category.title)))
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 

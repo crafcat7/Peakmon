@@ -338,7 +338,7 @@ private struct PerCoreBarChart: View {
     @ViewBuilder
     private func bandHeader(_ label: String, count: Int) -> some View {
         HStack(spacing: 4) {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text("·")

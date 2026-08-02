@@ -62,7 +62,7 @@ struct ChartSeriesLine: View {
     var body: some View {
         HStack(spacing: 10) {
             Toggle(isOn: $enabled) {
-                Text(series.title)
+                Text(LocalizedStringKey(series.title))
                     .font(.callout)
             }
             .toggleStyle(.checkbox)
@@ -105,7 +105,7 @@ struct CardTintRow: View {
                     .foregroundStyle(tint)
                     .frame(width: 18)
             }
-            Text(hideIcon ? "Card tint" : slot.title)
+            Text(LocalizedStringKey(hideIcon ? "Card tint" : slot.title))
             Spacer()
             if tint.hexString.uppercased() != slot.defaultHex.uppercased() {
                 Button("Reset") { _tint.reset() }
@@ -139,7 +139,7 @@ struct ChartSeriesToggle: View {
                 Circle()
                     .fill(tint)
                     .frame(width: 8, height: 8)
-                Text(series.title)
+                Text(LocalizedStringKey(series.title))
                     .font(.callout)
             }
         }

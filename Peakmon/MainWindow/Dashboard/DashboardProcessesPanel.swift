@@ -80,9 +80,10 @@ struct DashboardProcessesPanel: View {
                 .foregroundStyle(tint)
                 .frame(width: 20, height: 20)
                 .background(tint.opacity(0.13), in: .rect(cornerRadius: 5))
-            Text("PROCESSES")
+            Text("Processes")
                 .font(.system(size: 10, weight: .bold))
                 .tracking(0.55)
+                .textCase(.uppercase)
             Spacer()
             Text("\(groupCount) apps · \(processCount) processes · sorted by \(sortKey == .cpu ? "CPU%" : "Memory")")
                 .font(.caption.monospacedDigit())
@@ -117,9 +118,9 @@ struct DashboardProcessesPanel: View {
 
     private var columnHeader: some View {
         HStack(spacing: 12) {
-            Text("APPLICATION")
+            Text("Application")
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("PIDS")
+            Text("PIDs")
                 .frame(width: 110, alignment: .trailing)
             sortableHeader(label: "CPU%", key: .cpu, width: 220)
             sortableHeader(label: "MEM", key: .memory, width: 100)
@@ -147,14 +148,14 @@ struct DashboardProcessesPanel: View {
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.primary)
                 }
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .foregroundStyle(sortKey == key ? .primary : .tertiary)
             }
             .frame(width: width, alignment: .trailing)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .help("Sort by \(label)")
+        .help(Text("Sort by \(label)"))
     }
 
     private func row(_ g: ProcessGroup, maxCPU: Double) -> some View {

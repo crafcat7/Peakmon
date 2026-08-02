@@ -38,7 +38,7 @@ struct ProcessesCard: View {
             minimumHeight: 128,
             contentHeight: 74,
             accessory: {
-                Text(sortLabel)
+                Text(LocalizedStringKey(sortLabel))
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             },

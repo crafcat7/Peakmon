@@ -77,7 +77,7 @@ private struct HistoryChartHoverOverlay: View {
                     Circle()
                         .fill(item.color)
                         .frame(width: 7, height: 7)
-                    Text(item.label)
+                    Text(LocalizedStringKey(item.label))
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                     Spacer(minLength: 8)

@@ -44,7 +44,7 @@ struct HistoryEventPanel: View {
 
             Spacer(minLength: 12)
 
-            Text(supportsAnomalies ? "No anomalies in this range" : "Not monitored for anomalies")
+            Text(LocalizedStringKey(supportsAnomalies ? "No anomalies in this range" : "Not monitored for anomalies"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -116,11 +116,11 @@ private struct HistoryEventRow: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 12) {
                     HStack(spacing: 8) {
-                        Text(event.kind.title)
+                        Text(LocalizedStringKey(event.kind.title))
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                             .truncationMode(.tail)
-                        Text(event.severity.title)
+                        Text(LocalizedStringKey(event.severity.title))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(event.severity.tint)
                             .padding(.horizontal, 6)
@@ -131,7 +131,7 @@ private struct HistoryEventRow: View {
                     Spacer(minLength: 16)
 
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(peakValueText)
+                        Text(LocalizedStringKey(peakValueText))
                             .font(.callout.monospacedDigit().weight(.medium))
                             .lineLimit(1)
                         Text(timeRange)

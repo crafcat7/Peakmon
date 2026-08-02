@@ -54,8 +54,8 @@ struct DashboardDiskCard: View {
 
     private var throughputChips: some View {
         HStack(spacing: 10) {
-            MetricChipView(label: "read", value: DashboardFormatting.rateShort(read), color: .blue, arrow: "arrow.down")
-            MetricChipView(label: "write", value: DashboardFormatting.rateShort(write), color: .orange, arrow: "arrow.up")
+            MetricChipView(label: "read", value: DashboardFormatting.rateShort(read), color: .blue, arrow: "arrow.up")
+            MetricChipView(label: "write", value: DashboardFormatting.rateShort(write), color: .orange, arrow: "arrow.down")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

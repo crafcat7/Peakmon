@@ -49,7 +49,12 @@ struct PeakmonApp: App {
 
     @AppStorage("silentLaunch") private var silentLaunch = false
     @AppStorage("samplingIntervalSeconds") private var samplingInterval: Double = 1.0
+    @AppStorage(AppLanguage.storageKey) private var languageRawValue = AppLanguage.default.rawValue
     @CardVisibilityStorage(.processes) private var showProcesses
+
+    private var language: AppLanguage {
+        AppLanguage(rawValue: languageRawValue) ?? .default
+    }
 
     @SceneBuilder
     private var appScenes: some Scene {
@@ -61,6 +66,7 @@ struct PeakmonApp: App {
                     .environment(processesStore)
                     .environment(historyIssuesStore)
                     .environment(runtime)
+                    .environment(\.locale, language.locale)
             }
         }
         .windowResizability(.contentMinSize)

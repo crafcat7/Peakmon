@@ -64,8 +64,8 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.imagePosition = .imageOnly
             button.imageScaling = .scaleProportionallyDown
-            button.toolTip = "Peakmon"
-            button.setAccessibilityLabel("Peakmon")
+            button.toolTip = AppLanguage.current.localizedString(for: "Peakmon")
+            button.setAccessibilityLabel(AppLanguage.current.localizedString(for: "Peakmon"))
         }
     }
 
@@ -157,6 +157,11 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
         menuBarEnabled = AppSurfacePreferences.menuBarEnabled
         popoverEnabled = AppSurfacePreferences.popoverEnabled
         statusItem.isVisible = menuBarEnabled
+        if let button = statusItem.button {
+            let appName = AppLanguage.current.localizedString(for: "Peakmon")
+            button.toolTip = appName
+            button.setAccessibilityLabel(appName)
+        }
 
         guard menuBarEnabled, popoverEnabled else {
             if popover.isShown {
@@ -267,6 +272,7 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
         .foregroundStyle(palette.foreground)
         .frame(height: 22)
         .fixedSize()
+        .environment(\.locale, AppLanguage.current.locale)
 
         let renderer = ImageRenderer(content: composed)
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2

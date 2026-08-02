@@ -132,7 +132,7 @@ struct SettingsCardTile<Content: View>: View {
                     .frame(width: 24, height: 24)
                     .background(tint.opacity(0.13), in: .rect(cornerRadius: 6))
 
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.subheadline.weight(.semibold))
 
                 Spacer()
@@ -199,7 +199,7 @@ struct SettingsSection<Content: View>: View {
                             in: .rect(cornerRadius: 6),
                         )
                 }
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.caption.weight(.semibold))
 
                 Spacer()
@@ -214,7 +214,7 @@ struct SettingsSection<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let footer {
-                Text(footer)
+                Text(LocalizedStringKey(footer))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 14)

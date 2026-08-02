@@ -141,7 +141,7 @@ private struct DisplayCardThumbnail: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(slot.title)
+                Text(LocalizedStringKey(slot.title))
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                 if !isVisible {

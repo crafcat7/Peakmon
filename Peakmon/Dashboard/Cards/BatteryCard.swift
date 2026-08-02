@@ -168,9 +168,10 @@ struct BatteryCard: View {
         minimumWidth: CGFloat = 96,
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label.uppercased())
+            Text(LocalizedStringKey(label))
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
+                .textCase(.uppercase)
             Text(value)
                 .font(.callout.monospacedDigit().weight(.medium))
                 .foregroundStyle(tint)

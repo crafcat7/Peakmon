@@ -39,13 +39,15 @@
 //       - `.miniBarChartCombined(MetricKind, MetricKind, tint:)` two
 //         histories summed into one chart (NET in+out, DSK r+w)
 //
-//  All sizes live in `SegmentMetrics`. Every template renders into a
-//  fixed-width box so the rasterised menu-bar image keeps a constant
-//  width regardless of metric values — this is the whole point of the
-//  refactor: number/rate jitter no longer reflows the status bar.
+//  Size budgets live in `SegmentMetrics`; percentage values use a hidden
+//  three-digit reference view so their intrinsic column stays fixed while
+//  the rasterised menu-bar image remains stable across metric values — this
+//  is the whole point of the refactor: number/rate jitter no longer reflows
+//  the status bar.
 //
 
 import PeakmonCore
+import PeakmonUI
 import SwiftUI
 
 // MARK: - Sizing constants
@@ -56,14 +58,6 @@ import SwiftUI
 enum SegmentMetrics {
     /// Number of recent bars rendered for every menu-bar mini chart.
     static let miniChartBarCount: Int = 18
-    /// Min width of the horizontal leading label ("CPU", "MEM", "NET",
-    /// "DSK", "BAT", "GPU") rendered at 11pt medium. `MEM` is the
-    /// widest 3-letter abbreviation we ship and overflows a strict
-    /// 26pt slot — the block widens slightly for it.
-    static let horizontalLabelMinWidth: CGFloat = 26
-    /// Slot width for a single percent value at 11pt monospaced.
-    /// Fits "100%" with a hair of trailing slack.
-    static let percentValueWidth: CGFloat = 30
     /// Slot width for a watts value at 11pt monospaced. Fits "999W"
     /// and "9.9W" — single decimal under 10W, integer thereafter.
     static let wattsValueWidth: CGFloat = 34
@@ -251,14 +245,12 @@ struct MenuBarSegmentBlock: View {
     private func label(_ template: LabelTemplate) -> some View {
         switch template {
         case .horizontal:
-            // `M` is wider than `C`/`G`, so we let the label claim
-            // its natural width via `fixedSize` and only enforce a
-            // minimum. Without `fixedSize` plus `lineLimit(1)`, `MEM`
-            // would wrap inside a strict 26pt slot at 11pt medium.
+            // Let each static abbreviation claim its natural width. The
+            // fixed-size label is stable for a given segment and avoids
+            // reserving extra width for narrower labels such as `CPU`.
             Text(segment.shortName)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .frame(minWidth: SegmentMetrics.horizontalLabelMinWidth, alignment: .leading)
         case .compactHorizontal:
             Text(segment.shortName)
                 .lineLimit(1)
@@ -311,8 +303,7 @@ struct MenuBarSegmentBlock: View {
     @ViewBuilder
     private func percentView(kind: MetricKind) -> some View {
         let v = store.latest(for: kind)?.value ?? 0
-        Text("\(Int(v.rounded()))%")
-            .frame(width: SegmentMetrics.percentValueWidth, alignment: .trailing)
+        MenuBarPercentValue(text: MenuBarPercentFormatting.string(for: v))
     }
 
     @ViewBuilder
@@ -342,15 +333,12 @@ struct MenuBarSegmentBlock: View {
     private func percentWithIndicatorView(kind: MetricKind, indicatorKind: IndicatorKind) -> some View {
         let v = store.latest(for: kind)?.value ?? 0
         HStack(spacing: 1) {
-            Text("\(Int(v.rounded()))%")
+            MenuBarPercentValue(text: MenuBarPercentFormatting.string(for: v))
             indicatorView(indicatorKind)
                 .font(.system(size: 8, weight: .bold))
                 .frame(width: SegmentMetrics.indicatorWidth, alignment: .leading)
         }
-        .frame(
-            width: SegmentMetrics.percentValueWidth + SegmentMetrics.indicatorWidth,
-            alignment: .trailing,
-        )
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder

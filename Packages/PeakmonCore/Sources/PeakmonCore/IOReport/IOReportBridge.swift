@@ -212,5 +212,12 @@ extension IOReportBridge {
         public let channel: String
         public let unit: String
         public let value: Int64
+
+        public init(group: String, channel: String, unit: String, value: Int64) {
+            self.group = group
+            self.channel = channel
+            self.unit = unit
+            self.value = value
+        }
     }
 }

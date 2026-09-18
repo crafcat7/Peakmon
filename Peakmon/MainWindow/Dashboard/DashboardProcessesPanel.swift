@@ -123,6 +123,7 @@ struct DashboardProcessesPanel: View {
             Text("PIDs")
                 .frame(width: 110, alignment: .trailing)
             sortableHeader(label: "CPU%", key: .cpu, width: 220)
+                .help("Per-process CPU usage; 100% equals one logical core.")
             sortableHeader(label: "MEM", key: .memory, width: 100)
         }
         .font(.caption2.weight(.semibold))

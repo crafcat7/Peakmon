@@ -4,6 +4,9 @@
     "" : {
 
     },
+    "—" : {
+
+    },
     "·" : {
 
     },
@@ -49,6 +52,27 @@
         }
       }
     },
+    "%lld processes · Focused PID %d" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld processes · Focused PID %2$d"
+          }
+        }
+      }
+    },
+    "%lld processes · Focused PID %lld" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld 个进程 · 当前进程 ID %2$lld"
+          }
+        }
+      }
+    },
     "%lld recent issues" : {
       "localizations" : {
         "zh-Hans" : {
@@ -58,9 +82,6 @@
           }
         }
       }
-    },
-    "%lld%%" : {
-
     },
     "%lld°C" : {
 
@@ -146,6 +167,9 @@
         }
       }
     },
+    "AC" : {
+
+    },
     "All cards hidden" : {
       "localizations" : {
         "zh-Hans" : {
@@ -208,6 +232,17 @@
         }
       }
     },
+    "App + cache" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用 + 缓存"
+          }
+        }
+      }
+    },
     "App Controls" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -250,6 +285,17 @@
         }
       }
     },
+    "Arguments unavailable (cross-user process)" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "参数不可用（跨用户进程）"
+          }
+        }
+      }
+    },
     "Avg %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -260,8 +306,18 @@
         }
       }
     },
-    "Battery" : {
+    "Backlight" : {
       "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背光"
+          }
+        }
+      }
+    },
+    "Battery" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -293,6 +349,16 @@
         }
       }
     },
+    "Built-in display backlight supply only; excludes display engines and external monitors." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅表示内建显示器背光供电，不包含显示引擎和外接显示器。"
+          }
+        }
+      }
+    },
     "by CPU" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -311,6 +377,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按 RAM"
+          }
+        }
+      }
+    },
+    "Capacity-based estimate; may differ from macOS Battery Health." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基于电池容量估算，可能与 macOS 的电池健康度不同。"
           }
         }
       }
@@ -411,6 +487,17 @@
         }
       }
     },
+    "Clusters" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集群"
+          }
+        }
+      }
+    },
     "Collecting process data…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -494,6 +581,16 @@
         }
       }
     },
+    "CPU energy-model power averaged across the current sampling window." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前采样窗口内的 CPU 能耗模型平均功率。"
+          }
+        }
+      }
+    },
     "CPU graph" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -501,6 +598,27 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "CPU 图表"
+          }
+        }
+      }
+    },
+    "CPU supply" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CPU 供电"
+          }
+        }
+      }
+    },
+    "CPU supply power averaged across the current sampling window." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前采样窗口内的 CPU 供电平均功率。"
           }
         }
       }
@@ -544,6 +662,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "严重"
+          }
+        }
+      }
+    },
+    "Cycles" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "循环次数"
           }
         }
       }
@@ -646,6 +775,27 @@
         }
       }
     },
+    "DRAM supply" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DRAM 供电"
+          }
+        }
+      }
+    },
+    "DRAM supply power; excludes the memory controller and fabric." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DRAM 供电功率，不包含内存控制器和互连。"
+          }
+        }
+      }
+    },
     "Enable the menu bar first; the popover needs it as an anchor." : {
       "localizations" : {
         "zh-Hans" : {
@@ -673,6 +823,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "风扇"
+          }
+        }
+      }
+    },
+    "Free" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可用"
           }
         }
       }
@@ -709,6 +870,26 @@
         }
       }
     },
+    "GPU cluster and shared-logic supply power. These hardware readings have a different scope and sampling window from the GPU energy model below." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPU 集群与共享逻辑的供电功率。这些硬件读数与下方 GPU 能耗模型的测量范围和采样窗口不同。"
+          }
+        }
+      }
+    },
+    "GPU energy-model power; its measurement scope differs from the GPU supply rails." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPU 能耗模型功率，其测量范围与 GPU 供电轨不同。"
+          }
+        }
+      }
+    },
     "GPU graph" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -738,6 +919,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "GPU 温度偏高"
+          }
+        }
+      }
+    },
+    "halted" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暂停"
           }
         }
       }
@@ -794,6 +986,20 @@
           }
         }
       }
+    },
+    "in" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "入"
+          }
+        }
+      }
+    },
+    "Internal and external display-engine energy-model power." : {
+
     },
     "Language" : {
       "localizations" : {
@@ -869,6 +1075,17 @@
         }
       }
     },
+    "Loading…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载…"
+          }
+        }
+      }
+    },
     "Low" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -891,6 +1108,17 @@
       }
     },
     "MEM" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内存"
+          }
+        }
+      }
+    },
+    "memory" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -944,6 +1172,16 @@
         }
       }
     },
+    "Memory, controller and fabric energy-model power." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内存、控制器及互连的能耗模型功率。"
+          }
+        }
+      }
+    },
     "Menu Bar" : {
       "localizations" : {
         "zh-Hans" : {
@@ -960,6 +1198,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "点击菜单栏将改为打开完整仪表盘。"
+          }
+        }
+      }
+    },
+    "Model power" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型功率"
           }
         }
       }
@@ -1070,6 +1319,17 @@
         }
       }
     },
+    "No thread info" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有线程信息"
+          }
+        }
+      }
+    },
     "Normal" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1142,6 +1402,28 @@
         }
       }
     },
+    "out" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "出"
+          }
+        }
+      }
+    },
+    "Path unavailable (cross-user or kernel process)" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "路径不可用（跨用户或内核进程）"
+          }
+        }
+      }
+    },
     "Peak %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1162,6 +1444,16 @@
         }
       }
     },
+    "Per-process CPU usage; 100% equals one logical core." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每进程 CPU 使用率；100% 等于一个逻辑核心。"
+          }
+        }
+      }
+    },
     "PID" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1171,6 +1463,9 @@
           }
         }
       }
+    },
+    "PID %d" : {
+
     },
     "PID %d — %@" : {
       "localizations" : {
@@ -1184,6 +1479,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "进程 ID %1$d — %2$@"
+          }
+        }
+      }
+    },
+    "PID %lld" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进程 ID %1$lld"
           }
         }
       }
@@ -1282,6 +1588,7 @@
       }
     },
     "Pressure · %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1348,6 +1655,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "范围"
+          }
+        }
+      }
+    },
+    "read" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取"
           }
         }
       }
@@ -1486,6 +1804,17 @@
         }
       }
     },
+    "running" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行中"
+          }
+        }
+      }
+    },
     "Sampled every 2 seconds via libproc." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1555,6 +1884,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置分区"
+          }
+        }
+      }
+    },
+    "Shared" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共享逻辑"
           }
         }
       }
@@ -1640,6 +1980,17 @@
         }
       }
     },
+    "SoC package" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SoC 封装"
+          }
+        }
+      }
+    },
     "Sort by" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1692,6 +2043,17 @@
         }
       }
     },
+    "stopped" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已停止"
+          }
+        }
+      }
+    },
     "Storage" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1699,6 +2061,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "存储"
+          }
+        }
+      }
+    },
+    "Supply power" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "供电功率"
           }
         }
       }
@@ -1714,100 +2087,23 @@
         }
       }
     },
+    "Swap on disk" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "磁盘交换空间"
+          }
+        }
+      }
+    },
     "SYS ms" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "系统毫秒"
-          }
-        }
-      }
-    },
-    "System" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "系统"
-          }
-        }
-      }
-    },
-    "App + cache" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应用 + 缓存"
-          }
-        }
-      }
-    },
-    "Cycles" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "循环次数"
-          }
-        }
-      }
-    },
-    "Free" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可用"
-          }
-        }
-      }
-    },
-    "in" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "入"
-          }
-        }
-      }
-    },
-    "memory" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "内存"
-          }
-        }
-      }
-    },
-    "out" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "出"
-          }
-        }
-      }
-    },
-    "read" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "读取"
           }
         }
       }
@@ -1823,24 +2119,13 @@
         }
       }
     },
-    "user" : {
+    "System" : {
       "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用户"
-          }
-        }
-      }
-    },
-    "write" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "写入"
+            "value" : "系统"
           }
         }
       }
@@ -1876,6 +2161,16 @@
         }
       }
     },
+    "These readings have different measurement scopes and do not add up to whole-system power." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些读数的测量范围不同，不能相加作为整机功率。"
+          }
+        }
+      }
+    },
     "TID" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1904,6 +2199,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "总计"
+          }
+        }
+      }
+    },
+    "uninterruptible" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不可中断"
           }
         }
       }
@@ -1972,122 +2278,23 @@
         }
       }
     },
+    "user" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户"
+          }
+        }
+      }
+    },
     "USER ms" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "用户毫秒"
-          }
-        }
-      }
-    },
-    "%lld processes · Focused PID %lld" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld 个进程 · 当前进程 ID %2$lld"
-          }
-        }
-      }
-    },
-    "PID %lld" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "进程 ID %1$lld"
-          }
-        }
-      }
-    },
-    "Arguments unavailable (cross-user process)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "参数不可用（跨用户进程）"
-          }
-        }
-      }
-    },
-    "Loading…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在加载…"
-          }
-        }
-      }
-    },
-    "No thread info" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有线程信息"
-          }
-        }
-      }
-    },
-    "Path unavailable (cross-user or kernel process)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "路径不可用（跨用户或内核进程）"
-          }
-        }
-      }
-    },
-    "running" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "运行中"
-          }
-        }
-      }
-    },
-    "stopped" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已停止"
-          }
-        }
-      }
-    },
-    "waiting" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "等待中"
-          }
-        }
-      }
-    },
-    "uninterruptible" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不可中断"
-          }
-        }
-      }
-    },
-    "halted" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已暂停"
           }
         }
       }
@@ -2133,6 +2340,17 @@
         }
       }
     },
+    "waiting" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待中"
+          }
+        }
+      }
+    },
     "Warming up…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2162,6 +2380,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "有线"
+          }
+        }
+      }
+    },
+    "write" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "写入"
           }
         }
       }

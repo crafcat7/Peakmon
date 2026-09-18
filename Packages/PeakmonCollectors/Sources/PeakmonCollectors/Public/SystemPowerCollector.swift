@@ -2,21 +2,18 @@
 //  SystemPowerCollector.swift
 //  PeakmonCollectors
 //
-//  Surfaces **whole-machine** power draw — i.e. the same number
-//  Activity Monitor's "Energy" tab and Apple's spec sheets quote —
-//  by reading SMC keys via `SMCBridge`. This complements
+//  Surfaces the SMC system-rate reading as whole-machine power. This is
+//  an undocumented hardware counter; it is not Activity Monitor's
+//  dimensionless Energy Impact score. It complements
 //  `PowerCollector`, which reports SoC-internal CPU/GPU rails from
 //  IOReport but does NOT include the display panel, Wi-Fi/BT radios,
-//  Thunderbolt PHYs, SSD, fans, or AC adapter conversion losses.
+//  Thunderbolt PHYs, SSD, or fans.
 //
 //  ## Aggregation strategy
 //
-//  Read `PSTR` (System Total Rate) directly. Every Apple Silicon Mac
-//  we've tested (M1/M2/M3/M4 across MacBook Air/Pro, Mac mini, Mac
-//  Studio) exposes this key, and on Intel Macs it has been present
-//  since at least 2013. If `PSTR` is missing the collector emits
-//  nothing and the dashboard's existing `powerPackage` (IOReport
-//  SoC subtotal) remains the headline.
+//  Read `PSTR` (System Total Rate) directly. If it is missing or a read
+//  fails, explicitly invalidate the current value so a previous sample
+//  cannot remain on screen indefinitely.
 //
 //  We deliberately do NOT synthesise from `PDTR` (Adapter Delivery)
 //  + `BATP` (Battery Power): PDTR includes adapter→battery charging
@@ -43,6 +40,13 @@ public final class SystemPowerCollector: MetricCollector {
         await state.sample()
     }
 
+    static func makeSample(value: Double?, timestamp: Date) -> MetricSample {
+        guard let value, value.isFinite, value >= 0 else {
+            return .unavailable(kind: .powerSystem, unit: .watts, timestamp: timestamp)
+        }
+        return MetricSample(kind: .powerSystem, unit: .watts, value: value, timestamp: timestamp)
+    }
+
     private actor State {
         private let bridge: SMCBridge? = SMCBridge.shared
         private var prepared = false
@@ -53,21 +57,15 @@ public final class SystemPowerCollector: MetricCollector {
                 prepared = true
                 strategy = decideStrategy()
             }
-            guard let bridge else { return [] }
+            let now = Date.now
+            guard let bridge else {
+                return [SystemPowerCollector.makeSample(value: nil, timestamp: now)]
+            }
 
             guard strategy == .systemTotal,
                   let value = try? bridge.readDouble(.systemTotal)
-            else { return [] }
-            let watts = max(0, value)
-
-            return [
-                MetricSample(
-                    kind: .powerSystem,
-                    unit: .watts,
-                    value: watts,
-                    timestamp: Date.now,
-                ),
-            ]
+            else { return [SystemPowerCollector.makeSample(value: nil, timestamp: now)] }
+            return [SystemPowerCollector.makeSample(value: value, timestamp: now)]
         }
 
         private func decideStrategy() -> Strategy {
@@ -77,6 +75,7 @@ public final class SystemPowerCollector: MetricCollector {
             }
             return .unknown
         }
+
     }
 
     private enum Strategy {

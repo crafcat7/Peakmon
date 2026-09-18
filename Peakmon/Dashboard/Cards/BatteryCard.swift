@@ -101,6 +101,7 @@ struct BatteryCard: View {
                         tint: Self.healthTint(health: health, base: tint),
                         minimumWidth: 0,
                     )
+                    .help("Capacity-based estimate; may differ from macOS Battery Health.")
                 }
                 if let cycles {
                     compactFact(
@@ -143,6 +144,7 @@ struct BatteryCard: View {
                             value: String(format: "%.0f%%", health),
                             tint: Self.healthTint(health: health, base: tint),
                         )
+                        .help("Capacity-based estimate; may differ from macOS Battery Health.")
                         compactDivider
                     }
                     if let cycles {

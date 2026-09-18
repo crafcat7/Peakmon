@@ -190,16 +190,16 @@ struct DashboardView: View {
     }
 
     /// Extra per-slot gating beyond the user's visibility flag.
-    /// Battery needs an actual battery sample. Power needs at least
-    /// one telemetry tick from the IOReport collector — when the
-    /// libIOReport dylib is missing or the user is on a host that
-    /// does not expose the Energy Model group, the collector emits
-    /// nothing and we hide the card entirely instead of showing
-    /// "0.0 W" rows forever.
+    /// Battery needs an actual battery sample. Power remains useful
+    /// when any headline or CPU/GPU reading is available, even if
+    /// the other sources cannot report on this machine.
     private func hasData(_ slot: CardTintSlot) -> Bool {
         switch slot {
         case .battery: store.latest(for: .batteryLevel) != nil
-        case .power: store.latest(for: .powerPackage) != nil
+        case .power:
+            [MetricKind.powerSystem, .powerPackage, .powerCPU, .powerCPUSupply, .powerGPU].contains {
+                store.latest(for: $0) != nil
+            }
         default: true
         }
     }

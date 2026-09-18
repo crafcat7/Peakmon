@@ -321,14 +321,18 @@ public enum HistoryMetricDefinition: String, CaseIterable, Hashable, Sendable {
         case .cpu:
             [HistoryMetricSeriesDefinition(label: "CPU", kind: .cpuTotal, unit: .percent, tint: tint)]
         case .memory:
-            [HistoryMetricSeriesDefinition(label: "Pressure", kind: .memoryPressure, unit: .percent, tint: tint)]
+            [HistoryMetricSeriesDefinition(
+                label: "Used",
+                kind: .memoryUsedPercent,
+                unit: .percent,
+                tint: tint,
+            )]
         case .power:
             [HistoryMetricSeriesDefinition(
                 label: "System",
                 kind: .powerSystem,
                 unit: .watts,
                 tint: tint,
-                fallbackKinds: [.powerPackage],
             )]
         case .gpu:
             [HistoryMetricSeriesDefinition(label: "GPU", kind: .gpuUtilization, unit: .percent, tint: tint)]

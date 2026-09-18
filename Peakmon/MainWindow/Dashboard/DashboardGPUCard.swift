@@ -32,17 +32,17 @@ struct DashboardGPUCard: View {
         let value = store.latest(for: .thermalGPU)?.value ?? 0
         return value > 0 ? value : nil
     }
-    private var gpuPower: Double? {
-        let value = store.latest(for: .powerGPU)?.value ?? 0
-        return value > 0 ? value : nil
-    }
+    private var gpuPower: Double? { store.latest(for: .powerGPU)?.value }
     private var gpuMemInUse: Double? {
         let value = store.latest(for: .gpuMemoryInUse)?.value ?? 0
         return value > 0 ? value : nil
     }
-    private var gpuCorePower: Double { store.value(for: .powerGPUCore) }
-    private var gpuCSPower: Double { store.value(for: .powerGPUCommandStreamer) }
-    private var gpuSRAMPower: Double { store.value(for: .powerGPUSRAM) }
+    private var gpuCorePower: Double? { store.latest(for: .powerGPUCore)?.value }
+    private var gpuCSPower: Double? { store.latest(for: .powerGPUCommandStreamer)?.value }
+    private var gpuSRAMPower: Double? { store.latest(for: .powerGPUSRAM)?.value }
+    private var gpuClustersPower: Double? { store.latest(for: .powerGPUClusters)?.value }
+    private var gpuSharedPower: Double? { store.latest(for: .powerGPUShared)?.value }
+    private var hasSupplyRails: Bool { gpuClustersPower != nil || gpuSharedPower != nil }
 
     var body: some View {
         DashboardMetricCard(
@@ -55,6 +55,8 @@ struct DashboardGPUCard: View {
             detail: {
                 if hasGPUSubRails {
                     gpuSubRails
+                } else if hasSupplyRails {
+                    gpuSupplyRails
                 }
             },
             footer: { tripletFooter },
@@ -85,36 +87,35 @@ struct DashboardGPUCard: View {
     // MARK: - Power rails
 
     /// Keep the Core / command-streamer / SRAM data visible while
-    /// omitting the redundant "Power rails" heading. Zero-valued
-    /// channels remain useful because they make unavailable or idle
-    /// sub-rails explicit instead of changing the card's structure.
+    /// omitting the redundant "Power rails" heading. Valid zero-valued
+    /// channels remain visible; unavailable channels use a dash.
     private var hasGPUSubRails: Bool {
-        gpuCorePower > 0 || gpuCSPower > 0 || gpuSRAMPower > 0
+        gpuCorePower != nil || gpuCSPower != nil || gpuSRAMPower != nil
     }
 
     private var gpuSubRails: some View {
-        let maxSub = max(0.01, [gpuCorePower, gpuCSPower, gpuSRAMPower].max() ?? 0.01)
+        let maxSub = max(0.01, [gpuCorePower, gpuCSPower, gpuSRAMPower].compactMap { $0 }.max() ?? 0.01)
         return VStack(alignment: .leading, spacing: 6) {
             LabeledBarRow(
                 label: "Core",
-                value: DashboardFormatting.wattsRail(gpuCorePower),
-                fraction: gpuCorePower / maxSub,
+                value: gpuCorePower.map(DashboardFormatting.wattsRail) ?? "—",
+                fraction: (gpuCorePower ?? 0) / maxSub,
                 color: .yellow,
                 labelWidth: 50,
                 valueWidth: 60,
             )
             LabeledBarRow(
                 label: "CS",
-                value: DashboardFormatting.wattsRail(gpuCSPower),
-                fraction: gpuCSPower / maxSub,
+                value: gpuCSPower.map(DashboardFormatting.wattsRail) ?? "—",
+                fraction: (gpuCSPower ?? 0) / maxSub,
                 color: .yellow.opacity(0.7),
                 labelWidth: 50,
                 valueWidth: 60,
             )
             LabeledBarRow(
                 label: "SRAM",
-                value: DashboardFormatting.wattsRail(gpuSRAMPower),
-                fraction: gpuSRAMPower / maxSub,
+                value: gpuSRAMPower.map(DashboardFormatting.wattsRail) ?? "—",
+                fraction: (gpuSRAMPower ?? 0) / maxSub,
                 color: .yellow.opacity(0.5),
                 labelWidth: 50,
                 valueWidth: 60,
@@ -125,11 +126,36 @@ struct DashboardGPUCard: View {
 
     // MARK: - Footer
 
+    /// SMC supply rails have a different scope from the IOReport
+    /// Core / CS / SRAM model. Keep their labels and history distinct.
+    private var gpuSupplyRails: some View {
+        let maximum = max(0.01, [gpuClustersPower, gpuSharedPower].compactMap { $0 }.max() ?? 0.01)
+        return VStack(alignment: .leading, spacing: 6) {
+            DashboardSectionLabel(title: "Supply power")
+            LabeledBarRow(
+                label: "Clusters",
+                value: gpuClustersPower.map(DashboardFormatting.wattsRail) ?? "—",
+                fraction: (gpuClustersPower ?? 0) / maximum,
+                color: .yellow,
+                labelWidth: 70,
+                valueWidth: 60,
+            )
+            LabeledBarRow(
+                label: "Shared",
+                value: gpuSharedPower.map(DashboardFormatting.wattsRail) ?? "—",
+                fraction: (gpuSharedPower ?? 0) / maximum,
+                color: .yellow.opacity(0.7),
+                labelWidth: 70,
+                valueWidth: 60,
+            )
+        }
+        .padding(.top, dashboardDetailTopPadding)
+        .help("GPU cluster and shared-logic supply power. These hardware readings have a different scope and sampling window from the GPU energy model below.")
+    }
+
     private var tripletFooter: some View {
         HStack(alignment: .top, spacing: 24) {
-            if let gpuPower {
-                FooterStatView(title: "Power", value: String(format: "%.1f W", gpuPower), color: .yellow)
-            }
+            FooterStatView(title: !hasGPUSubRails && hasSupplyRails ? "Model power" : "Power", value: gpuPower.map { String(format: "%.1f W", $0) } ?? "—", color: .yellow)
 
             Spacer()
 

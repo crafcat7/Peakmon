@@ -144,7 +144,7 @@ struct HistoryRecorderTests {
         let recorder = HistoryRecorder()
         let now = Date(timeIntervalSince1970: 470_000)
         await recorder.ingest([
-            MetricSample(kind: .powerPackage, unit: .watts, value: 17, timestamp: now),
+            MetricSample(kind: .powerSystem, unit: .watts, value: 17, timestamp: now),
             MetricSample(kind: .cpuTotal, unit: .percent, value: 92, timestamp: now),
             MetricSample(kind: .cpuTotal, unit: .percent, value: 92, timestamp: now.addingTimeInterval(6)),
         ])
@@ -168,7 +168,7 @@ struct HistoryRecorderTests {
         #expect(power.latest == 17)
         #expect(powerSummary.latest == 17)
         #expect(power.primarySeries?.definition.kind == .powerSystem)
-        #expect(power.primarySeries?.buckets.first?.kind == .powerPackage)
+        #expect(power.primarySeries?.buckets.first?.kind == .powerSystem)
         #expect(cpuDiagnostics.sampleCount == 2)
         #expect(abs(cpuDiagnostics.coverageFraction - (2.0 / 3_600.0)) < 0.0001)
         #expect(cpuDiagnostics.longestGap == 5)
@@ -325,16 +325,21 @@ struct HistoryRecorderTests {
             (.memoryWired, .bytes, 2_000_000_000),
             (.memoryCompressed, .bytes, 1_000_000_000),
             (.memorySwapUsed, .bytes, 512_000_000),
-            (.memoryPressure, .percent, 58),
+            (.memoryUsedPercent, .percent, 58),
             (.memoryPressureLevel, .count, 1),
             (.batteryTemperature, .celsius, 34),
             (.gpuUtilization, .percent, 80),
             (.powerSystem, .watts, 24),
             (.powerPackage, .watts, 18),
             (.powerCPU, .watts, 6),
+            (.powerCPUSupply, .watts, 6.5),
             (.powerGPU, .watts, 7),
             (.powerDRAM, .watts, 3),
             (.powerDisplay, .watts, 2),
+            (.powerDRAMSupply, .watts, 4),
+            (.powerDisplayBacklight, .watts, 1),
+            (.powerGPUClusters, .watts, 5),
+            (.powerGPUShared, .watts, 0.5),
             (.diskReadRate, .bytesPerSecond, 4096),
             (.diskWriteRate, .bytesPerSecond, 2048),
             (.netInRate, .bytesPerSecond, 8192),

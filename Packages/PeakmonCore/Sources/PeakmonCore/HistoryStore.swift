@@ -186,11 +186,11 @@ public actor HistoryStore {
 
     /// Append sample batch into local history.
     ///
-    /// Values that are NaN or infinite are ignored.
+    /// Unavailable samples and values that are NaN or infinite are ignored.
     public func ingest(_ samples: [MetricSample]) async {
         await ingestPrepared(
             samples
-                .filter { $0.value.isFinite }
+                .filter { $0.isAvailable && $0.value.isFinite }
                 .sorted { $0.timestamp < $1.timestamp },
         )
     }

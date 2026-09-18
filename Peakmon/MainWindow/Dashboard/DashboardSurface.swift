@@ -29,6 +29,7 @@ struct DashboardSurface: View {
     /// Becoming visible rebuilds from the current (still-fresh)
     /// snapshot since the scheduler kept running.
     @State private var visibility = MainWindowVisibility.shared
+    @State private var measuredSystemBannerHeight: CGFloat = Layout.systemBannerHeight
 
     private enum Layout {
         static let columnSpacing: CGFloat = 16
@@ -60,8 +61,10 @@ struct DashboardSurface: View {
         static let bentoBreakpoint: CGFloat = 1_320
         static let threeColumnBreakpoint: CGFloat = 1_000
 
-        /// Approximate fixed chrome used when sizing the process
-        /// viewport. The live table consumes any remaining vertical
+        /// Initial banner estimate and fixed process-panel chrome.
+        /// The banner's measured height replaces its estimate when
+        /// facts wrap, so the process viewport uses the actual space.
+        /// The live table consumes any remaining vertical
         /// room in a tall window instead of leaving a dead band below
         /// the dashboard. Compact windows retain a useful minimum and
         /// continue to scroll as before.
@@ -139,7 +142,7 @@ struct DashboardSurface: View {
             }
         }
 
-        static func processScrollHeight(viewportHeight: CGFloat, metricsWidth: CGFloat) -> CGFloat {
+        static func processScrollHeight(viewportHeight: CGFloat, metricsWidth: CGFloat, systemBannerHeight: CGFloat) -> CGFloat {
             let fixedHeight = topPadding
                 + bottomPadding
                 + systemBannerHeight
@@ -196,6 +199,11 @@ struct DashboardSurface: View {
                 LazyVStack(alignment: .center, spacing: Layout.rowSpacing) {
                     DashboardSystemBanner(onShowHistory: onShowHistory)
                         .frame(width: contentWidth)
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { height in
+                            measuredSystemBannerHeight = height
+                        }
                     dashboardGrid(
                         contentWidth: contentWidth,
                         viewportHeight: proxy.size.height,
@@ -224,6 +232,7 @@ struct DashboardSurface: View {
         let processScrollHeight = Layout.processScrollHeight(
             viewportHeight: viewportHeight,
             metricsWidth: contentWidth,
+            systemBannerHeight: measuredSystemBannerHeight,
         )
 
         LazyVStack(alignment: .center, spacing: Layout.rowSpacing) {

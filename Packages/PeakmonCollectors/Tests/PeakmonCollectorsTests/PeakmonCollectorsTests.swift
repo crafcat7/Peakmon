@@ -86,13 +86,13 @@ struct CPUCollectorTests {
 
 @Suite("MemoryCollector")
 struct MemoryCollectorTests {
-    @Test func emitsUsedAndPressureSamples() async throws {
+    @Test func emitsUsedUtilizationAndKernelPressureSamples() async throws {
         let collector = MemoryCollector()
         #expect(collector.identifier == "memory.host")
 
         let samples = try await collector.collect()
         let kinds = Set(samples.map(\.kind))
-        #expect(kinds.isSuperset(of: [.memoryUsed, .memoryPressure]))
+        #expect(kinds.isSuperset(of: [.memoryUsed, .memoryUsedPercent]))
 
         let used = samples.first(where: { $0.kind == .memoryUsed })
         #expect(used?.unit == .bytes)
@@ -118,9 +118,10 @@ struct MemoryCollectorTests {
             #expect([1, 2, 4, 8].contains(Int(pressureLevel.value)))
         }
 
-        let pressure = samples.first(where: { $0.kind == .memoryPressure })
-        #expect(pressure?.unit == .percent)
-        if let value = pressure?.value {
+        let usedPercent = samples.first(where: { $0.kind == .memoryUsedPercent })
+        #expect(usedPercent?.unit == .percent)
+        #expect(usedPercent?.kind.rawValue == "memory.pressure")
+        if let value = usedPercent?.value {
             #expect(value > 0)
             #expect(value <= 100)
         }

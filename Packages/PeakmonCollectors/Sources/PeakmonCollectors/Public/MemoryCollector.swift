@@ -2,10 +2,10 @@
 //  MemoryCollector.swift
 //  PeakmonCollectors
 //
-//  Reports memory used / pressure plus the three depth metrics the
+//  Reports memory used / utilization plus the three depth metrics the
 //  Activity Monitor "Memory" tab surfaces: wired (kernel-pinned),
 //  compressed (live pages held in the compressor), and swap-used
-//  (bytes paged out to the swap files). Used + pressure come from
+//  (bytes paged out to the swap files). Used + utilization come from
 //  `host_statistics64(HOST_VM_INFO64)`; swap comes from
 //  `sysctl(CTL_VM, VM_SWAPUSAGE)` which returns an `xsw_usage`
 //  struct populated by the kernel. The discrete VM-pressure level
@@ -35,14 +35,14 @@ public final class MemoryCollector: MetricCollector {
         let compressedBytes = Double(stats.compressor_page_count) * pageSize
         let activeBytes = Double(stats.active_count) * pageSize
         let usedBytes = activeBytes + wiredBytes + compressedBytes
-        let pressure = totalBytes > 0 ? (usedBytes / totalBytes) * 100.0 : 0
+        let usedPercent = totalBytes > 0 ? (usedBytes / totalBytes) * 100.0 : 0
         let swapBytes = Self.readSwapUsedBytes()
         let pressureLevel = Self.readPressureLevel()
         let now = Date.now
 
         var samples: [MetricSample] = [
             MetricSample(kind: .memoryUsed, unit: .bytes, value: usedBytes, timestamp: now),
-            MetricSample(kind: .memoryPressure, unit: .percent, value: pressure, timestamp: now),
+            MetricSample(kind: .memoryUsedPercent, unit: .percent, value: usedPercent, timestamp: now),
             MetricSample(kind: .memoryWired, unit: .bytes, value: wiredBytes, timestamp: now),
             MetricSample(
                 kind: .memoryCompressed,

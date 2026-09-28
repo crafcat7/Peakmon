@@ -296,6 +296,16 @@
         }
       }
     },
+    "Automatically check for updates" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检查更新"
+          }
+        }
+      }
+    },
     "Avg %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -348,6 +358,9 @@
           }
         }
       }
+    },
+    "brew upgrade crafcat7/cellar/peakmon" : {
+
     },
     "Built-in display backlight supply only; excludes display engines and external monitors." : {
       "localizations" : {
@@ -441,6 +454,27 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "图表序列"
+          }
+        }
+      }
+    },
+    "Check for Updates…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查更新…"
+          }
+        }
+      }
+    },
+    "Checking for Updates…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查更新…"
           }
         }
       }
@@ -556,6 +590,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制路径"
+          }
+        }
+      }
+    },
+    "Could not retrieve the latest release from GitHub. Please try again later." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法从 GitHub 获取最新发布信息，请稍后重试。"
           }
         }
       }
@@ -998,6 +1043,16 @@
         }
       }
     },
+    "Installed with Homebrew. Update with:" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 Homebrew 安装，请使用以下命令更新："
+          }
+        }
+      }
+    },
     "Internal and external display-engine energy-model power." : {
 
     },
@@ -1007,6 +1062,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语言"
+          }
+        }
+      }
+    },
+    "Later" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "稍后"
           }
         }
       }
@@ -1309,6 +1375,17 @@
         }
       }
     },
+    "No newer release is available. Current version: %@." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有更新的发布版本。当前版本：%@。"
+          }
+        }
+      }
+    },
     "No samples" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1440,6 +1517,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Peakmon"
+          }
+        }
+      }
+    },
+    "Peakmon %@ is available. Open its release page to download the update." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peakmon %@ 已发布，可前往发布页面下载更新。"
           }
         }
       }
@@ -2203,6 +2291,17 @@
         }
       }
     },
+    "Unable to check for updates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法检查更新"
+          }
+        }
+      }
+    },
     "uninterruptible" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2214,6 +2313,16 @@
         }
       }
     },
+    "Update available" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有可用更新"
+          }
+        }
+      }
+    },
     "Updated now" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2221,6 +2330,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "刚刚更新"
+          }
+        }
+      }
+    },
+    "Updates are disabled in development builds." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开发版本不检查更新。"
           }
         }
       }
@@ -2309,12 +2428,33 @@
         }
       }
     },
+    "Version %@ is available" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本 %@ 已可用"
+          }
+        }
+      }
+    },
     "View health history" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看健康历史"
+          }
+        }
+      }
+    },
+    "View Release" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看最新发布"
           }
         }
       }
@@ -2402,6 +2542,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "写入"
+          }
+        }
+      }
+    },
+    "You're up to date" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前已是最新版本"
           }
         }
       }

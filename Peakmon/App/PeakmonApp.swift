@@ -98,6 +98,7 @@ struct PeakmonApp: App {
     private func bootstrap() {
         ActivationPolicyController.shared.install()
         ActivationPolicyController.shared.refresh()
+        AppUpdateController.shared.start()
         MainWindowVisibility.shared.install()
 
         installHistoryFlushObserver()

@@ -48,6 +48,7 @@ struct DashboardSystemBanner: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             wideStatusRail
+            twoColumnStatusRail
             compactStatusRail
         }
         .padding(.horizontal, 16)
@@ -96,6 +97,22 @@ struct DashboardSystemBanner: View {
         }
     }
 
+    /// At medium widths center health against both rows of device information.
+    /// Natural sizing lets ViewThatFits fall back before either column crowds.
+    private var twoColumnStatusRail: some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                identityBlock
+                statusFacts
+            }
+            .fixedSize(horizontal: true, vertical: false)
+
+            Spacer(minLength: 0)
+            healthStatus
+                .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
     /// At narrower widths move the facts to their own wrapping row.
     /// Every layout keeps the same information; width only changes
     /// how many facts fit on each line.
@@ -114,15 +131,19 @@ struct DashboardSystemBanner: View {
                 }
             }
 
-            SystemBannerFactsLayout(horizontalSpacing: 24, verticalSpacing: 10) {
-                statusFact(icon: "cpu", label: "Chip", value: compactChipName, tint: .blue, wrapsValue: true)
-                statusFact(icon: "memorychip", label: "Memory", value: formatRAM(info.memoryBytes), tint: .purple, wrapsValue: true)
-                statusFact(icon: "internaldrive", label: "Storage", value: formatDisk(info.diskBytes), tint: .green, wrapsValue: true)
-                statusFact(icon: "applelogo", label: "System", value: info.osVersion, tint: .orange, wrapsValue: true)
-                statusFact(icon: "clock.arrow.circlepath", label: "Uptime", value: uptime, tint: .pink, wrapsValue: true)
-            }
+            statusFacts
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var statusFacts: some View {
+        SystemBannerFactsLayout(horizontalSpacing: 24, verticalSpacing: 10) {
+            statusFact(icon: "cpu", label: "Chip", value: compactChipName, tint: .blue, wrapsValue: true)
+            statusFact(icon: "memorychip", label: "Memory", value: formatRAM(info.memoryBytes), tint: .purple, wrapsValue: true)
+            statusFact(icon: "internaldrive", label: "Storage", value: formatDisk(info.diskBytes), tint: .green, wrapsValue: true)
+            statusFact(icon: "applelogo", label: "System", value: info.osVersion, tint: .orange, wrapsValue: true)
+            statusFact(icon: "clock.arrow.circlepath", label: "Uptime", value: uptime, tint: .pink, wrapsValue: true)
+        }
     }
 
     private var identityBlock: some View {

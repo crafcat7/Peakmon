@@ -69,6 +69,12 @@ struct MainWindowTopBar: View {
                     .font(.system(size: 12, weight: .semibold))
                 Text(LocalizedStringKey(tab.title))
                     .font(.system(size: 13, weight: .semibold))
+                if tab == .settings, AppUpdateController.shared.availableVersion != nil {
+                    Circle()
+                        .fill(isSelected ? .white : .purple)
+                        .frame(width: 5, height: 5)
+                        .accessibilityLabel("Update available")
+                }
             }
             .foregroundStyle(isSelected ? Color.white : Color.primary.opacity(0.7))
             .padding(.horizontal, 14)

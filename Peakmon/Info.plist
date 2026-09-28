@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>SUFeedURL</key>
+    <string>https://github.com/crafcat7/Peakmon/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>bZ95GLA2vpf9Lx0XssczUPZ4pPw6du0bntKSO7s2liw=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
+    <key>SUAllowsAutomaticUpdates</key>
+    <false/>
+    <key>SUEnableSystemProfiling</key>
+    <false/>
+    <key>SUVerifyUpdateBeforeExtraction</key>
+    <true/>
+    <key>SURequireSignedFeed</key>
+    <true/>
+    <key>SUSignedFeedFailureExpirationInterval</key>
+    <integer>0</integer>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
+</dict>
+</plist>

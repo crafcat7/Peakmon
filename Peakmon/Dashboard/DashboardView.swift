@@ -338,6 +338,16 @@ struct DashboardView: View {
 
             Spacer(minLength: 12)
 
+            if AppUpdateController.shared.availableVersion != nil {
+                Button {
+                    AppUpdateController.shared.checkForUpdates()
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                }
+                .accessibilityLabel("Check for Updates…")
+                .help("Check for Updates…")
+            }
+
             Button {
                 NSApplication.shared.terminate(nil)
             } label: {

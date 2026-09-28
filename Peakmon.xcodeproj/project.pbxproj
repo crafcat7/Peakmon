@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A10000000000000000000003 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000002 /* Sparkle */; };
 		PK01CCCCCCCCCCCCCCCCCCCC /* PeakmonCore in Frameworks */ = {isa = PBXBuildFile; productRef = PK01BBBBBBBBBBBBBBBBBBBB /* PeakmonCore */; };
 		PK02CCCCCCCCCCCCCCCCCCCC /* PeakmonCollectors in Frameworks */ = {isa = PBXBuildFile; productRef = PK02BBBBBBBBBBBBBBBBBBBB /* PeakmonCollectors */; };
 		PK05CCCCCCCCCCCCCCCCCCCC /* PeakmonUI in Frameworks */ = {isa = PBXBuildFile; productRef = PK05BBBBBBBBBBBBBBBBBBBB /* PeakmonUI */; };
@@ -16,9 +17,22 @@
 		A6061C262FB9F1D700BC977E /* Peakmon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Peakmon.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A10000000000000000000004 /* Exceptions for "Peakmon" folder in "Peakmon" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A6061C252FB9F1D700BC977E /* Peakmon */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A6061C282FB9F1D700BC977E /* Peakmon */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A10000000000000000000004 /* Exceptions for "Peakmon" folder in "Peakmon" target */,
+			);
 			path = Peakmon;
 			sourceTree = "<group>";
 		};
@@ -32,6 +46,7 @@
 				PK01CCCCCCCCCCCCCCCCCCCC /* PeakmonCore in Frameworks */,
 				PK02CCCCCCCCCCCCCCCCCCCC /* PeakmonCollectors in Frameworks */,
 				PK05CCCCCCCCCCCCCCCCCCCC /* PeakmonUI in Frameworks */,
+				A10000000000000000000003 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,6 +92,7 @@
 				PK01BBBBBBBBBBBBBBBBBBBB /* PeakmonCore */,
 				PK02BBBBBBBBBBBBBBBBBBBB /* PeakmonCollectors */,
 				PK05BBBBBBBBBBBBBBBBBBBB /* PeakmonUI */,
+				A10000000000000000000002 /* Sparkle */,
 			);
 			productName = Peakmon;
 			productReference = A6061C262FB9F1D700BC977E /* Peakmon.app */;
@@ -110,6 +126,7 @@
 				PK01AAAAAAAAAAAAAAAAAAAA /* XCLocalSwiftPackageReference "Packages/PeakmonCore" */,
 				PK02AAAAAAAAAAAAAAAAAAAA /* XCLocalSwiftPackageReference "Packages/PeakmonCollectors" */,
 				PK05AAAAAAAAAAAAAAAAAAAA /* XCLocalSwiftPackageReference "Packages/PeakmonUI" */,
+				A10000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A6061C272FB9F1D700BC977E /* Products */;
@@ -267,6 +284,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Peakmon/Peakmon.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -277,6 +295,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Peakmon/Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -301,6 +320,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Peakmon/Peakmon.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -311,6 +331,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Peakmon/Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -368,7 +389,23 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		A10000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		A10000000000000000000002 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
 		PK01BBBBBBBBBBBBBBBBBBBB /* PeakmonCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PeakmonCore;

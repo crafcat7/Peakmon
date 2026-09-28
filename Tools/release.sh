@@ -109,10 +109,16 @@ ZIP_SIZE_MB="$(awk -v b="$ZIP_SIZE" 'BEGIN{printf "%.2f", b/1024/1024}')"
 
 SHA256="$(shasum -a 256 "$ZIP_PATH" | awk '{print $1}')"
 
+# Optionally prepare Sparkle metadata for a concrete GitHub release tag.
+if [ -n "${RELEASE_TAG:-}" ]; then
+    "$PROJECT_ROOT/Tools/generate_appcast.sh" "$RELEASE_TAG"
+fi
+
 # ----------------------------------------------------------------------
 # Report
 # ----------------------------------------------------------------------
 
+REPORT_TAG="${RELEASE_TAG:-<TAG>}"
 cat <<EOF
 
 ──────────────────────────────────────────────────────────────────────
@@ -128,9 +134,9 @@ cat <<EOF
 
 Next steps:
   git push origin main
-  git push origin v<TAG>
-  gh release create v<TAG> \\
-      --title "Peakmon v<TAG>" \\
+  git push origin "$REPORT_TAG"
+  gh release create "$REPORT_TAG" --draft \\
+      --title "Peakmon <VERSION>" \\
       --notes-file <release-notes.md> \\
-      "$ZIP_PATH"
+      "$ZIP_PATH"${RELEASE_TAG:+ "$BUILD_DIR/appcast.xml"}
 EOF

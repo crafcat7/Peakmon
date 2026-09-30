@@ -35,7 +35,7 @@
 //       - `.miniBarChart(MetricKind, tint:, autoscale:)` a single
 //         metric history
 //       - `.miniBarChartWithFallback(...)` primary history with a
-//         secondary metric used when the primary has no positive data
+//         secondary metric used when the primary has no current reading
 //       - `.miniBarChartCombined(MetricKind, MetricKind, tint:)` two
 //         histories summed into one chart (NET in+out, DSK r+w)
 //
@@ -154,7 +154,7 @@ enum SignatureInput: Equatable {
     /// resolution. Used by `.miniBarChart` for non-rate metrics.
     case history(MetricKind)
     /// History where the primary metric is preferred but a fallback
-    /// metric renders when the primary has no positive samples.
+    /// metric renders when the primary has no current reading.
     case historyWithFallback(primary: MetricKind, fallback: MetricKind)
     /// Rate-style 18-sample history hashed through `bucketRate`
     /// per sample. Used by `.miniBarChart` for rate metrics and
@@ -194,7 +194,7 @@ extension ValueTemplate {
         case let .miniBarChart(kind, _, _):
             if Self.isRateKind(kind) {
                 [.rateHistory(kind)]
-            } else if kind == .memoryPressure {
+            } else if kind == .memoryUsedPercent {
                 [.history(kind), .percent(.memoryPressureLevel)]
             } else {
                 [.history(kind)]
@@ -277,10 +277,10 @@ struct MenuBarSegmentBlock: View {
                 maxValue: autoscale ? nil : 100,
             )
         case let .miniBarChartWithFallback(primary, fallback, tintRole, autoscale):
-            let kind = fallbackKind(primary: primary, fallback: fallback)
+            let kind = Self.fallbackKind(store: store, primary: primary, fallback: fallback)
             chartView(
-                samples: store.historySuffix(for: kind, limit: SegmentMetrics.miniChartBarCount),
-                tint: effectiveTint(for: kind, base: resolveTint(tintRole)),
+                samples: kind.map { store.historySuffix(for: $0, limit: SegmentMetrics.miniChartBarCount) } ?? [],
+                tint: kind.map { effectiveTint(for: $0, base: resolveTint(tintRole)) } ?? resolveTint(tintRole),
                 maxValue: autoscale ? nil : 100,
             )
         case let .miniBarChartCombined(kindA, kindB, tintRole):
@@ -292,7 +292,7 @@ struct MenuBarSegmentBlock: View {
         case let .watts(kind):
             wattsView(kind: kind)
         case let .wattsWithFallback(primary, fallback):
-            wattsView(kind: fallbackKind(primary: primary, fallback: fallback))
+            wattsView(kind: Self.fallbackKind(store: store, primary: primary, fallback: fallback))
         case .issueStatus:
             issueStatusView
         }
@@ -307,9 +307,9 @@ struct MenuBarSegmentBlock: View {
     }
 
     @ViewBuilder
-    private func wattsView(kind: MetricKind) -> some View {
-        let v = store.latest(for: kind)?.value ?? 0
-        Text(Self.shortWatts(v))
+    private func wattsView(kind: MetricKind?) -> some View {
+        let value = kind.flatMap { store.latest(for: $0)?.value }
+        Text(value.map(Self.shortWatts) ?? "—")
             .frame(width: SegmentMetrics.wattsValueWidth, alignment: .trailing)
     }
 
@@ -324,9 +324,13 @@ struct MenuBarSegmentBlock: View {
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    private func fallbackKind(primary: MetricKind, fallback: MetricKind) -> MetricKind {
-        let primaryValue = store.latest(for: primary)?.value ?? 0
-        return primaryValue > 0 ? primary : fallback
+    /// Shared by rendering and its cache signature. A measured zero
+    /// remains valid; retained history alone cannot select a source.
+    @MainActor
+    static func fallbackKind(store: MetricsStore, primary: MetricKind, fallback: MetricKind) -> MetricKind? {
+        if store.latest(for: primary) != nil { return primary }
+        if store.latest(for: fallback) != nil { return fallback }
+        return nil
     }
 
     @ViewBuilder
@@ -517,14 +521,14 @@ extension MenuBarSegment {
                 title: "Memory %",
                 systemImage: "memorychip",
                 shortName: "MEM",
-                template: (.horizontal, .percent(.memoryPressure)),
+                template: (.horizontal, .percent(.memoryUsedPercent)),
             )
         case .memoryGraph:
             SegmentDescriptor(
                 title: "Memory graph",
                 systemImage: "memorychip",
                 shortName: "MEM",
-                template: (.verticalGlyphs, .miniBarChart(.memoryPressure, tintRole: .memory, autoscale: false)),
+                template: (.verticalGlyphs, .miniBarChart(.memoryUsedPercent, tintRole: .memory, autoscale: false)),
             )
         case .networkRate:
             SegmentDescriptor(
@@ -598,7 +602,7 @@ extension MenuBarSegment {
                 title: "Power W",
                 systemImage: "bolt.fill",
                 shortName: "PWR",
-                template: (.horizontal, .wattsWithFallback(primary: .powerSystem, fallback: .powerPackage)),
+                template: (.horizontal, .watts(.powerSystem)),
             )
         case .powerGraph:
             SegmentDescriptor(
@@ -607,12 +611,7 @@ extension MenuBarSegment {
                 shortName: "PWR",
                 template: (
                     .verticalGlyphs,
-                    .miniBarChartWithFallback(
-                        primary: .powerSystem,
-                        fallback: .powerPackage,
-                        tintRole: .power,
-                        autoscale: true,
-                    ),
+                    .miniBarChart(.powerSystem, tintRole: .power, autoscale: true),
                 ),
             )
         case .recentIssues:

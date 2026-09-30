@@ -17,7 +17,7 @@ struct MemoryCard: View {
 
     private var tint: Color { cardSettings.tint(.memory) }
     private var used: Double { store.value(for: .memoryUsed) }
-    private var pressure: Double { store.value(for: .memoryPressure) }
+    private var usedPercent: Double { store.value(for: .memoryUsedPercent) }
 
     /// Discrete kernel VM-pressure level (1 normal / 2 warning /
     /// 4 urgent / 8 critical). Nil while the collector has not yet
@@ -37,7 +37,7 @@ struct MemoryCard: View {
         }
     }
 
-    private var pressureValueTint: Color {
+    private var usedValueTint: Color {
         pressureLevel == nil || pressureLevel == 1 ? .primary : pressureStateTint
     }
 
@@ -56,11 +56,11 @@ struct MemoryCard: View {
             systemImage: "memorychip",
             tint: tint,
             accessory: {
-                Text("\(pressure, specifier: "%.0f")%")
+                Text("\(usedPercent, specifier: "%.0f")%")
                     .font(.title3.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(pressureValueTint)
-                    .contentTransition(.numericText(value: pressure))
-                    .animation(.smooth, value: pressure)
+                    .foregroundStyle(usedValueTint)
+                    .contentTransition(.numericText(value: usedPercent))
+                    .animation(.smooth, value: usedPercent)
             },
             body: {
                 memoryStatus
@@ -90,7 +90,7 @@ struct MemoryCard: View {
                     .frame(width: 8, height: 8)
                 Text(LocalizedStringKey(pressureLabel))
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(pressureValueTint)
+                    .foregroundStyle(usedValueTint)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)

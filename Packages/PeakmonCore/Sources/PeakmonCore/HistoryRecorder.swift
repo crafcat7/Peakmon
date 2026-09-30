@@ -24,9 +24,14 @@ public actor HistoryRecorder {
         .powerSystem,
         .powerPackage,
         .powerCPU,
+        .powerCPUSupply,
         .powerGPU,
         .powerDRAM,
         .powerDisplay,
+        .powerDRAMSupply,
+        .powerDisplayBacklight,
+        .powerGPUClusters,
+        .powerGPUShared,
         .diskReadRate,
         .diskWriteRate,
         .netInRate,
@@ -62,7 +67,7 @@ public actor HistoryRecorder {
         _ sample: MetricSample,
         recordedKinds: Set<MetricKind> = HistoryRecorder.defaultRecordedKinds,
     ) -> Bool {
-        recordedKinds.contains(sample.kind) && sample.value.isFinite
+        sample.isAvailable && recordedKinds.contains(sample.kind) && sample.value.isFinite
     }
 
     /// Restore persisted buckets ahead of the first foreground query.
@@ -78,13 +83,15 @@ public actor HistoryRecorder {
 
     /// Ingest samples that have already been filtered to recorded metric
     /// kinds, finite numeric values, and ascending timestamp order.
+    /// Unavailable markers are ignored even when passed directly here.
     ///
     /// This keeps the scheduler -> history hot path from allocating and
     /// sorting the same batch in multiple layers.
     public func ingestPrepared(_ ordered: [MetricSample]) async {
-        guard !ordered.isEmpty else { return }
-        await store.ingestPrepared(ordered)
-        anomalyEngine.ingest(ordered)
+        let available = ordered.contains { !$0.isAvailable } ? ordered.filter(\.isAvailable) : ordered
+        guard !available.isEmpty else { return }
+        await store.ingestPrepared(available)
+        anomalyEngine.ingest(available)
     }
 
     /// Return buckets for history charts.

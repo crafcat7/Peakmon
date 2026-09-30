@@ -5,16 +5,14 @@
 //  Memory panel for the unified dashboard, mirroring
 //  `DashboardCPUCard`:
 //
-//    Headline — dominant used-bytes number + pressure state.
-//    Detail   — bytes breakdown (wired + compressed + swap + other)
-//               that always sums to the headline `used`.
-//    Footer   — kernel pressure label (Normal / Warning / Urgent /
-//               Critical) + swap.
+//    Headline — used bytes and used percentage, followed by the
+//               discrete kernel pressure state.
+//    Detail   — physical-memory composition that sums to `used`,
+//               with disk-backed swap shown separately.
 //
-//  Percent tracks pressure, not utilisation: unified memory caches
-//  aggressively so "used" sits near 100 % in steady state, whereas
-//  pressure is what tells the user to worry — the same metric
-//  Activity Monitor's bottom-strip bar uses.
+//  Used percentage and kernel pressure are different signals. The
+//  percentage describes occupancy; the pressure state tells the user
+//  whether the kernel is struggling to satisfy memory demand.
 //
 
 import PeakmonCore
@@ -28,7 +26,7 @@ struct DashboardMemoryCard: View {
     private var tint: Color { cardSettings.tint(.memory) }
 
     private var used: Double { store.value(for: .memoryUsed) }
-    private var pressure: Double { store.value(for: .memoryPressure) }
+    private var usedPercent: Double { store.value(for: .memoryUsedPercent) }
     private var wired: Double { store.value(for: .memoryWired) }
     private var compressed: Double { store.value(for: .memoryCompressed) }
     private var swap: Double { store.value(for: .memorySwapUsed) }
@@ -83,10 +81,10 @@ struct DashboardMemoryCard: View {
             .lineLimit(1)
 
             HStack(spacing: 3) {
-                Text(String(format: "%.0f%%", pressure))
+                Text(String(format: "%.0f%%", usedPercent))
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(pressureTint)
-                Text("Pressure")
+                Text("Used")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text("·")
@@ -101,9 +99,8 @@ struct DashboardMemoryCard: View {
 
     // MARK: - Detail
 
-    /// Breakdown row: wired + compressed + swap + "other" sums to
-    /// the headline `used`. Larger than the chip row so the detail
-    /// adds information rather than re-printing the same numbers.
+    /// Physical-memory composition. Swap is disk-backed and therefore
+    /// stays outside the values that sum to the `used` headline.
     private var byteBreakdown: some View {
         VStack(alignment: .leading, spacing: 6) {
             DashboardSectionLabel(title: "Composition")
@@ -111,11 +108,12 @@ struct DashboardMemoryCard: View {
             VStack(spacing: 5) {
                 breakdownRow(label: "Wired", value: wired, color: .indigo)
                 breakdownRow(label: "Compressed", value: compressed, color: .purple)
-                if swap > 0 {
-                    breakdownRow(label: "Swap", value: swap, color: .orange)
-                }
-                let other = max(0, used - wired - compressed - swap)
+                let other = max(0, used - wired - compressed)
                 breakdownRow(label: "App + cache", value: other, color: tint)
+            }
+            if swap > 0 {
+                breakdownRow(label: "Swap on disk", value: swap, color: .orange)
+                    .padding(.top, 3)
             }
         }
         .padding(.top, dashboardDetailTopPadding)

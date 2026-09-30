@@ -72,6 +72,12 @@ struct DemandGatedCollector<Wrapped: MetricCollector>: MetricCollector {
     }
 }
 
+extension DemandGatedCollector: ResettableMetricCollector where Wrapped: ResettableMetricCollector {
+    func reset() async {
+        await collector.reset()
+    }
+}
+
 struct CollectorDemandState: Sendable {
     let isActive: Bool
     let activationEpoch: UInt64

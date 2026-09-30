@@ -3,10 +3,12 @@
 # Tools/release.sh — Build, ad-hoc sign and package Peakmon for release.
 #
 # Output: build/release/Peakmon.app.zip + SHA-256 printed to stdout.
+# Set RELEASE_TAG to also generate the signed Sparkle appcast.xml.
 #
 # Usage:
 #   Tools/release.sh                       # use current dir as project root
 #   PROJECT_ROOT=/path/to/Peakmon ./release.sh
+#   RELEASE_TAG=20260930 ./Tools/release.sh
 #
 # Required tools: xcodebuild, codesign, ditto, shasum (all ship with macOS).
 #
@@ -50,6 +52,14 @@ require shasum
 cd "$PROJECT_ROOT"
 [ -d "$PROJECT_FILE" ] || { err "$PROJECT_FILE not found in $PROJECT_ROOT"; exit 1; }
 
+if [ -n "${RELEASE_TAG:-}" ]; then
+    [[ "$RELEASE_TAG" =~ ^[A-Za-z0-9._-]+$ ]] || { err "invalid release tag: $RELEASE_TAG"; exit 1; }
+    for tool in generate_keys generate_appcast sign_update; do
+        tool_path="${SPARKLE_TOOLS_DIR:-$PROJECT_ROOT/build/sparkle-tools}/bin/$tool"
+        [ -x "$tool_path" ] || { err "missing Sparkle tool: $tool_path"; exit 1; }
+    done
+fi
+
 log "project root : $PROJECT_ROOT"
 log "scheme       : $SCHEME ($CONFIGURATION)"
 log "output dir   : $BUILD_DIR"
@@ -92,6 +102,8 @@ codesign --verify --deep --strict --verbose=2 "$APP_PATH" 2>&1 | sed 's/^/  /'
 # Capture identifier + signature kind for the report.
 APP_ID="$(codesign -dvv "$APP_PATH" 2>&1 | awk -F= '/^Identifier=/{print $2}')"
 APP_SIG="$(codesign -dvv "$APP_PATH" 2>&1 | awk -F= '/^Signature=/{print $2}')"
+APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
+APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Contents/Info.plist")"
 
 # ----------------------------------------------------------------------
 # 4) Package with ditto (preserves resource forks + xattrs)
@@ -109,10 +121,20 @@ ZIP_SIZE_MB="$(awk -v b="$ZIP_SIZE" 'BEGIN{printf "%.2f", b/1024/1024}')"
 
 SHA256="$(shasum -a 256 "$ZIP_PATH" | awk '{print $1}')"
 
+# Optionally prepare Sparkle metadata for a concrete GitHub release tag.
+if [ -n "${RELEASE_TAG:-}" ]; then
+    "$PROJECT_ROOT/Tools/generate_appcast.sh" "$RELEASE_TAG"
+fi
+
 # ----------------------------------------------------------------------
 # Report
 # ----------------------------------------------------------------------
 
+REPORT_TAG="${RELEASE_TAG:-<TAG>}"
+REPORT_FEED_ARGUMENT=""
+if [ -n "${RELEASE_TAG:-}" ]; then
+    REPORT_FEED_ARGUMENT=" \"$BUILD_DIR/appcast.xml\""
+fi
 cat <<EOF
 
 ──────────────────────────────────────────────────────────────────────
@@ -120,6 +142,8 @@ cat <<EOF
 ──────────────────────────────────────────────────────────────────────
  App bundle    : $APP_PATH
  App ID        : ${APP_ID:-(unknown)}
+ Version       : $APP_VERSION
+ Build         : $APP_BUILD
  Signature     : ${APP_SIG:-(unknown)}
  Archive       : $ZIP_PATH
  Size          : ${ZIP_SIZE_MB} MB
@@ -127,10 +151,10 @@ cat <<EOF
 ──────────────────────────────────────────────────────────────────────
 
 Next steps:
-  git push origin main
-  git push origin v<TAG>
-  gh release create v<TAG> \\
-      --title "Peakmon v<TAG>" \\
-      --notes-file <release-notes.md> \\
-      "$ZIP_PATH"
+  git push origin HEAD
+  git push origin "$REPORT_TAG"
+  gh release create "$REPORT_TAG" --draft \\
+      --title "Peakmon $APP_VERSION" \\
+      --notes-file "$PROJECT_ROOT/RELEASE_NOTES_v$APP_VERSION.md" \\
+      "$ZIP_PATH"$REPORT_FEED_ARGUMENT
 EOF

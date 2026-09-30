@@ -21,6 +21,7 @@ final class ActivationPolicyController {
     static let shared = ActivationPolicyController()
 
     private var observers: [NSObjectProtocol] = []
+    private var updateSessionActive = false
 
     private init() {}
 
@@ -59,6 +60,11 @@ final class ActivationPolicyController {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func setUpdateSessionActive(_ active: Bool) {
+        updateSessionActive = active
+        refresh()
+    }
+
     /// Inspect the current window list and pick the right policy.
     func refresh() {
         let hasUserWindow = NSApp.windows.contains { window in
@@ -74,7 +80,7 @@ final class ActivationPolicyController {
             return window.styleMask.contains(.titled)
         }
 
-        let desired: NSApplication.ActivationPolicy = hasUserWindow ? .regular : .accessory
+        let desired: NSApplication.ActivationPolicy = hasUserWindow || updateSessionActive ? .regular : .accessory
         if NSApp.activationPolicy() != desired {
             NSApp.setActivationPolicy(desired)
         }

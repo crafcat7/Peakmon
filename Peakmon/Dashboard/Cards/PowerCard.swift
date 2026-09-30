@@ -19,10 +19,26 @@ struct PowerCard: View {
     @ChartSeriesEnabled(.powerGPU) private var powerGPUEnabled
 
     private var tint: Color { cardSettings.tint(.power) }
-    private var powerCPU: Double { store.value(for: .powerCPU) }
-    private var powerGPU: Double { store.value(for: .powerGPU) }
-    private var powerPackage: Double { store.value(for: .powerPackage) }
-    private var powerSystemSample: MetricSample? { store.latest(for: .powerSystem) }
+    private let liveMaximumAge: TimeInterval = 8
+    private var cpuSample: MetricSample? {
+        store.latest(for: .powerCPU, maximumAge: liveMaximumAge)
+            ?? store.latest(for: .powerCPUSupply, maximumAge: liveMaximumAge)
+    }
+    private var powerCPU: Double? { cpuSample?.value }
+    private var cpuLabel: String { cpuSample?.kind == .powerCPUSupply ? "CPU supply" : "CPU" }
+    private var powerGPU: Double? { store.latest(for: .powerGPU, maximumAge: liveMaximumAge)?.value }
+    private var headlineSample: MetricSample? {
+        store.latest(for: .powerSystem, maximumAge: liveMaximumAge)
+            ?? store.latest(for: .powerPackage, maximumAge: liveMaximumAge)
+    }
+    private var totalWatts: Double? { headlineSample?.value }
+    private var headlineScope: String? {
+        switch headlineSample?.kind {
+        case .powerSystem: "System"
+        case .powerPackage: "SoC package"
+        default: nil
+        }
+    }
 
     var body: some View {
         DashboardCardTemplate(
@@ -30,16 +46,22 @@ struct PowerCard: View {
             systemImage: "bolt.fill",
             tint: tint,
             stats: [
-                CardStat(label: "CPU", value: DashboardFormatting.watts(powerCPU), tint: .blue),
-                CardStat(label: "GPU", value: DashboardFormatting.watts(powerGPU), tint: .indigo),
+                CardStat(label: cpuLabel, value: powerCPU.map(DashboardFormatting.watts) ?? "—", tint: .blue),
+                CardStat(label: "GPU", value: powerGPU.map(DashboardFormatting.watts) ?? "—", tint: .indigo),
             ],
             accessory: {
-                let headlineWatts = powerSystemSample?.value ?? powerPackage
-                Text(DashboardFormatting.watts(headlineWatts))
-                    .font(.title3.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .contentTransition(.numericText(value: headlineWatts))
-                    .animation(.smooth, value: headlineWatts)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(totalWatts.map(DashboardFormatting.watts) ?? "—")
+                        .font(.title3.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .contentTransition(.numericText(value: totalWatts ?? 0))
+                        .animation(.smooth, value: totalWatts)
+                    if let headlineScope {
+                        Text(LocalizedStringKey(headlineScope))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             },
             chart: {
                 MetricSparklineView(
@@ -57,9 +79,10 @@ struct PowerCard: View {
     private var sparklineSeries: [SparklineSeries] {
         var lines: [SparklineSeries] = []
         if powerCPUEnabled {
+            let kind = cpuSample?.kind ?? .powerCPU
             lines.append(SparklineSeries(
                 id: ChartSeries.powerCPU.rawValue,
-                samples: store.history(for: .powerCPU),
+                samples: store.history(for: kind),
                 color: ChartSeries.powerCPU.storedTint,
             ))
         }
@@ -71,9 +94,10 @@ struct PowerCard: View {
             ))
         }
         if lines.isEmpty {
+            let kind = cpuSample?.kind ?? .powerCPU
             lines.append(SparklineSeries(
                 id: "power.cpu",
-                samples: store.history(for: .powerCPU),
+                samples: store.history(for: kind),
                 color: tint,
             ))
         }

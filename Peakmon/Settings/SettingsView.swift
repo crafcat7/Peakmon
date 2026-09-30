@@ -275,6 +275,8 @@ struct GeneralPage: View {
 
                         Spacer(minLength: 6)
 
+                        AppUpdateSettings()
+
                         VStack(spacing: 8) {
                             Link(destination: URL(string: "https://github.com/crafcat7/Peakmon")!) {
                                 Label("GitHub", systemImage: "link")

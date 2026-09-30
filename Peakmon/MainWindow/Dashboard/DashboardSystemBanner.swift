@@ -48,6 +48,7 @@ struct DashboardSystemBanner: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             wideStatusRail
+            twoColumnStatusRail
             compactStatusRail
         }
         .padding(.horizontal, 16)
@@ -92,26 +93,56 @@ struct DashboardSystemBanner: View {
 
             Spacer(minLength: 16)
             healthStatus
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 
-    /// The narrower form keeps the same visual language but limits
-    /// the secondary facts so the health action remains reachable.
+    /// At medium widths center health against both rows of device information.
+    /// Natural sizing lets ViewThatFits fall back before either column crowds.
+    private var twoColumnStatusRail: some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                identityBlock
+                statusFacts
+            }
+            .fixedSize(horizontal: true, vertical: false)
+
+            Spacer(minLength: 0)
+            healthStatus
+                .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    /// At narrower widths move the facts to their own wrapping row.
+    /// Every layout keeps the same information; width only changes
+    /// how many facts fit on each line.
     private var compactStatusRail: some View {
-        HStack(alignment: .center, spacing: 12) {
-            identityBlock
-
-            Spacer(minLength: 8)
-
+        VStack(alignment: .leading, spacing: 10) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
-                    compactFact(icon: "memorychip", value: formatRAM(info.memoryBytes), tint: .purple)
-                    compactFact(icon: "clock.arrow.circlepath", value: uptime, tint: .pink)
+                    identityBlock
+                    Spacer(minLength: 8)
+                    healthStatus
+                        .fixedSize(horizontal: true, vertical: false)
                 }
-                compactFact(icon: "clock.arrow.circlepath", value: uptime, tint: .pink)
+                VStack(alignment: .leading, spacing: 8) {
+                    identityBlock
+                    healthStatus
+                }
             }
 
-            healthStatus
+            statusFacts
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var statusFacts: some View {
+        SystemBannerFactsLayout(horizontalSpacing: 24, verticalSpacing: 10) {
+            statusFact(icon: "cpu", label: "Chip", value: compactChipName, tint: .blue, wrapsValue: true)
+            statusFact(icon: "memorychip", label: "Memory", value: formatRAM(info.memoryBytes), tint: .purple, wrapsValue: true)
+            statusFact(icon: "internaldrive", label: "Storage", value: formatDisk(info.diskBytes), tint: .green, wrapsValue: true)
+            statusFact(icon: "applelogo", label: "System", value: info.osVersion, tint: .orange, wrapsValue: true)
+            statusFact(icon: "clock.arrow.circlepath", label: "Uptime", value: uptime, tint: .pink, wrapsValue: true)
         }
     }
 
@@ -152,7 +183,7 @@ struct DashboardSystemBanner: View {
             .padding(.horizontal, 12)
     }
 
-    private func statusFact(icon: String, label: String, value: String, tint: Color) -> some View {
+    private func statusFact(icon: String, label: String, value: String, tint: Color, wrapsValue: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 4) {
                 Image(systemName: icon)
@@ -166,21 +197,10 @@ struct DashboardSystemBanner: View {
 
             Text(value)
                 .font(.caption.monospacedDigit().weight(.semibold))
-                .lineLimit(1)
+                .lineLimit(wrapsValue ? nil : 1)
         }
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private func compactFact(icon: String, value: String, tint: Color) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(tint)
-            Text(value)
-                .font(.caption.monospacedDigit().weight(.medium))
-                .lineLimit(1)
-        }
-        .fixedSize(horizontal: true, vertical: false)
+        .fixedSize(horizontal: !wrapsValue, vertical: true)
+        .help(value)
     }
 
     private var compactChipName: String {
@@ -327,5 +347,55 @@ struct DashboardSystemBanner: View {
             return img
         }
         return nil
+    }
+}
+
+/// Packs facts at their natural widths and adds rows when needed.
+/// Unlike dropping facts in a ViewThatFits fallback, this preserves
+/// every value even in a narrow window or with longer translations.
+private struct SystemBannerFactsLayout: Layout {
+    let horizontalSpacing: CGFloat
+    let verticalSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width.flatMap { $0.isFinite ? max(0, $0) : nil }
+        let frames = arrangedFrames(width: width, subviews: subviews)
+        return CGSize(
+            width: width ?? frames.map(\.maxX).max() ?? 0,
+            height: frames.map(\.maxY).max() ?? 0,
+        )
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let frames = arrangedFrames(width: bounds.width, subviews: subviews)
+        for (subview, frame) in zip(subviews, frames) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(frame.size),
+            )
+        }
+    }
+
+    private func arrangedFrames(width: CGFloat?, subviews: Subviews) -> [CGRect] {
+        let availableWidth = max(0, width ?? .greatestFiniteMagnitude)
+        var frames: [CGRect] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let idealSize = subview.sizeThatFits(.unspecified)
+            let size = subview.sizeThatFits(ProposedViewSize(width: min(idealSize.width, availableWidth), height: nil))
+            if x > 0, x + size.width > availableWidth {
+                x = 0
+                y += rowHeight + verticalSpacing
+                rowHeight = 0
+            }
+            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
+            x += size.width + horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return frames
     }
 }

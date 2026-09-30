@@ -2,9 +2,9 @@
 //  BatteryCollector.swift
 //  PeakmonCollectors
 //
-//  Reports battery level (% of design capacity), power-source state,
+//  Reports battery level (% of current full capacity), power-source state,
 //  and — when an AppleSmartBattery IOService is present — cycle count,
-//  health (AppleRawMaxCapacity / DesignCapacity, in %), battery
+//  health (nominal or full charge capacity / design capacity, in %), battery
 //  temperature (°C), and estimated time remaining (seconds,
 //  charge-direction implicit by power source).
 //
@@ -44,26 +44,28 @@ public final class BatteryCollector: MetricCollector {
             guard let description = IOPSGetPowerSourceDescription(snapshot, source)?
                 .takeUnretainedValue() as? [String: Any] else { continue }
 
-            let type = description[kIOPSTypeKey] as? String
-            guard type == kIOPSInternalBatteryType else { continue }
-
-            guard let current = description[kIOPSCurrentCapacityKey] as? Int,
-                  let max = description[kIOPSMaxCapacityKey] as? Int,
-                  max > 0 else { continue }
-
-            let percent = Double(current) / Double(max) * 100.0
-            let powerSource = Self.derivePowerSource(from: description)
-
-            return [
-                MetricSample(kind: .batteryLevel, unit: .percent, value: percent),
-                MetricSample(
-                    kind: .batteryPowerSource,
-                    unit: .count,
-                    value: powerSource.metricValue,
-                ),
-            ]
+            let samples = Self.powerSourceSamples(from: description)
+            if !samples.isEmpty { return samples }
         }
         return []
+    }
+
+    static func powerSourceSamples(from description: [String: Any]) -> [MetricSample] {
+        guard description[kIOPSTypeKey] as? String == kIOPSInternalBatteryType,
+              description[kIOPSIsPresentKey] as? Bool != false,
+              let current = integerValue(for: kIOPSCurrentCapacityKey, in: description),
+              let maximum = integerValue(for: kIOPSMaxCapacityKey, in: description),
+              maximum > 0, current >= 0, current <= maximum else { return [] }
+
+        let percent = Double(current) / Double(maximum) * 100.0
+        return [
+            MetricSample(kind: .batteryLevel, unit: .percent, value: percent),
+            MetricSample(
+                kind: .batteryPowerSource,
+                unit: .count,
+                value: derivePowerSource(from: description).metricValue,
+            ),
+        ]
     }
 
     private static func derivePowerSource(
@@ -104,31 +106,7 @@ public final class BatteryCollector: MetricCollector {
             ))
         }
 
-        // Health: matches macOS Settings → Battery (within rounding).
-        // System Settings uses NominalChargeCapacity / DesignCapacity,
-        // a smoothed/calibrated estimate that includes Apple's
-        // age/temperature compensation. AppleRawMaxCapacity is the
-        // unfiltered cell-side number (coconutBattery / Stats use
-        // that one); it typically reads a few percent lower. We
-        // intentionally pick the system value so the dashboard
-        // agrees with the user-visible Settings panel.
-        if let nominal = dict["NominalChargeCapacity"] as? Int,
-           let design = dict["DesignCapacity"] as? Int,
-           design > 0, nominal > 0 {
-            let health = min(Double(nominal) / Double(design) * 100.0, 100.0)
-            out.append(MetricSample(
-                kind: .batteryHealth,
-                unit: .percent,
-                value: health,
-            ))
-        } else if let raw = dict["AppleRawMaxCapacity"] as? Int,
-                  let design = dict["DesignCapacity"] as? Int,
-                  design > 0 {
-            // Fallback for hosts where NominalChargeCapacity is
-            // absent (older T2 / Intel chassis). Slightly under-
-            // reports vs. System Settings but is still a usable
-            // wear indicator.
-            let health = min(Double(raw) / Double(design) * 100.0, 100.0)
+        if let health = Self.batteryHealth(from: dict) {
             out.append(MetricSample(
                 kind: .batteryHealth,
                 unit: .percent,
@@ -136,8 +114,16 @@ public final class BatteryCollector: MetricCollector {
             ))
         }
 
-        if let rawTemperature = Self.integerValue(for: "Temperature", in: dict),
-           let celsius = Self.smartBatteryCelsius(from: rawTemperature) {
+        var smcTemperatures: [String: Double] = [:]
+        if let smc = SMCBridge.shared {
+            for key in ["TB1T", "TB2T", "TB0T"] {
+                smcTemperatures[key] = try? smc.readDouble(SMCKey(key))
+            }
+        }
+        if let celsius = Self.batteryCelsius(
+            smcTemperatures: smcTemperatures,
+            rawTemperature: Self.integerValue(for: "Temperature", in: dict),
+        ) {
             out.append(MetricSample(
                 kind: .batteryTemperature,
                 unit: .celsius,
@@ -164,6 +150,50 @@ public final class BatteryCollector: MetricCollector {
         return out
     }
 
+    static func batteryHealth(from properties: [String: Any]) -> Double? {
+        let batteryData = properties["BatteryData"] as? [String: Any] ?? [:]
+        func positiveCapacity(_ key: String) -> Int? {
+            for dictionary in [properties, batteryData] {
+                if let value = integerValue(for: key, in: dictionary), value > 0 {
+                    return value
+                }
+            }
+            return nil
+        }
+
+        // Newer macOS versions expose these mAh fields in BatteryData.
+        // Keep nominal capacity preferred, but this estimate can differ
+        // from the system's separately calibrated maximum-capacity value.
+        // MaxCapacity is deliberately excluded: it can be a percentage.
+        guard let design = positiveCapacity("DesignCapacity"),
+              let capacity = positiveCapacity("NominalChargeCapacity")
+                  ?? positiveCapacity("AppleRawMaxCapacity")
+                  ?? positiveCapacity("FullChargeCapacity") else { return nil }
+        let health = Double(capacity) / Double(design) * 100.0
+        guard health.isFinite, health > 0 else { return nil }
+        return min(health, 100.0)
+    }
+
+    static func batteryCelsius(
+        smcTemperatures: [String: Double],
+        rawTemperature: Int?,
+    ) -> Double? {
+        func validSMCTemperature(_ key: String) -> Double? {
+            guard let value = smcTemperatures[key], value.isFinite,
+                  value > 0, value < 100 else { return nil }
+            return value
+        }
+
+        // SMC thermistors already report Celsius. Zero is commonly an
+        // unsupported sensor, so only average valid pack thermistors.
+        let thermistors = ["TB1T", "TB2T"].compactMap(validSMCTemperature)
+        if !thermistors.isEmpty {
+            return thermistors.reduce(0, +) / Double(thermistors.count)
+        }
+        if let temperature = validSMCTemperature("TB0T") { return temperature }
+        return rawTemperature.flatMap(smartBatteryCelsius)
+    }
+
     static func smartBatteryCelsius(from rawValue: Int) -> Double? {
         guard rawValue > 0 else { return nil }
 
@@ -173,8 +203,9 @@ public final class BatteryCollector: MetricCollector {
     }
 
     private static func integerValue(for key: String, in dict: [String: Any]) -> Int? {
-        if let value = dict[key] as? Int { return value }
-        if let value = dict[key] as? NSNumber { return value.intValue }
-        return nil
+        guard let number = dict[key] as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite else { return nil }
+        return Int(exactly: number.doubleValue)
     }
 }

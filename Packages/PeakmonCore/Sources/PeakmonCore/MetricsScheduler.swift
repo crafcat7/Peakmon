@@ -54,17 +54,31 @@ public actor MetricsScheduler {
         guard newValue != interval else { return }
         interval = newValue
         guard task != nil else { return }
-        task?.cancel()
+        let previousTask = task
+        previousTask?.cancel()
         task = nil
-        spawnLoop()
+        spawnLoop(after: previousTask, resettingCollectors: true)
     }
 
-    private func spawnLoop() {
+    private func spawnLoop(
+        after predecessor: Task<Void, Never>? = nil,
+        resettingCollectors: Bool = false,
+    ) {
         let collectors = collectors
         let interval = interval
         let store = store
         let sampleSink = sampleSink
         task = Task.detached(priority: .utility) {
+            await predecessor?.value
+            guard !Task.isCancelled else { return }
+            if resettingCollectors {
+                for collector in collectors {
+                    if let resettable = collector as? any ResettableMetricCollector {
+                        await resettable.reset()
+                    }
+                }
+            }
+            guard !Task.isCancelled else { return }
             await Self.runLoop(
                 collectors: collectors,
                 interval: interval,
@@ -80,7 +94,9 @@ public actor MetricsScheduler {
         store: MetricsStore,
         sampleSink: (@Sendable ([MetricSample]) async -> Void)?,
     ) async {
+        let clock = ContinuousClock()
         while !Task.isCancelled {
+            let deadline = clock.now.advanced(by: interval)
             await withTaskGroup(of: [MetricSample].self) { group in
                 for collector in collectors {
                     group.addTask {
@@ -91,13 +107,13 @@ public actor MetricsScheduler {
                 for await samples in group {
                     batch.append(contentsOf: samples)
                 }
-                if !batch.isEmpty {
+                if !Task.isCancelled, !batch.isEmpty {
                     await store.ingest(batch)
                     await sampleSink?(batch)
                 }
             }
             do {
-                try await Task.sleep(for: interval)
+                try await clock.sleep(until: deadline)
             } catch {
                 return // cancelled
             }

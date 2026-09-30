@@ -200,10 +200,10 @@ struct MenuBarLabelSignature: Equatable {
                         ),
                     )
                 case let .historyWithFallback(primary, fallback):
-                    let kind = (store.latest(for: primary)?.value ?? 0) > 0 ? primary : fallback
+                    let kind = MenuBarSegmentBlock.fallbackKind(store: store, primary: primary, fallback: fallback)
                     historyHashes.append(
                         Self.hashHistory(
-                            store.historySuffix(for: kind, limit: SegmentMetrics.miniChartBarCount),
+                            kind.map { store.historySuffix(for: $0, limit: SegmentMetrics.miniChartBarCount) } ?? [],
                             step: 1,
                         ),
                     )
@@ -218,8 +218,8 @@ struct MenuBarLabelSignature: Equatable {
                 case let .watts(kind):
                     latests.append(Self.bucketWatts(store.latest(for: kind)?.value))
                 case let .wattsWithFallback(primary, fallback):
-                    let kind = (store.latest(for: primary)?.value ?? 0) > 0 ? primary : fallback
-                    latests.append(Self.bucketWatts(store.latest(for: kind)?.value))
+                    let kind = MenuBarSegmentBlock.fallbackKind(store: store, primary: primary, fallback: fallback)
+                    latests.append(Self.bucketWatts(kind.flatMap { store.latest(for: $0)?.value }))
                 case .issueStatus:
                     latests.append(contentsOf: historyIssuesStore?.menuBarSignatureValues ?? [0, 0])
                 }
@@ -284,9 +284,11 @@ struct MenuBarLabelSignature: Equatable {
     ///   - >=10W -> 1W steps    (" 12W", "999W")
     /// Mirrors `shortWatts`'s formatter rounding (`%.1f` → half-even,
     /// `%.0f` → half-even) closely enough that visible label
-    /// boundaries also cross signature boundaries.
+    /// boundaries also cross signature boundaries. Missing readings
+    /// use a distinct sentinel so a measured zero can redraw as a dash.
     private static func bucketWatts(_ value: Double?) -> Double {
-        guard let value, value > 0 else { return 0 }
+        guard let value else { return -1 }
+        guard value > 0 else { return 0 }
         if value < 10 { return (value * 10).rounded() / 10 }
         return value.rounded() + 10_000
     }

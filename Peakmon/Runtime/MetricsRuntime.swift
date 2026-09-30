@@ -168,7 +168,6 @@ final class MetricsRuntime {
             collectors: [
                 DemandGatedCollector(demand: .gpu, collector: GPUCollector(), gate: collectorDemandGate),
                 DemandGatedCollector(demand: .power, collector: PowerCollector(), gate: collectorDemandGate),
-                DemandGatedCollector(demand: .power, collector: SystemPowerCollector(), gate: collectorDemandGate),
                 DemandGatedCollector(demand: .thermal, collector: ThermalCollector(), gate: collectorDemandGate),
                 DemandGatedCollector(demand: .fan, collector: FanCollector(), gate: collectorDemandGate),
             ],

@@ -73,6 +73,20 @@ struct MetricsSchedulerTests {
         }
     }
 
+    private struct ResettableStubCollector: ResettableMetricCollector {
+        let identifier = "resettable-stub"
+        let tracker: SchedulerResetTracker
+
+        func collect() async throws -> [MetricSample] {
+            let value = await tracker.didCollect()
+            return [MetricSample(kind: .cpuTotal, unit: .percent, value: Double(value))]
+        }
+
+        func reset() async {
+            await tracker.didReset()
+        }
+    }
+
     @Test func startProducesSamples() async throws {
         let store = await MetricsStore()
         let scheduler = MetricsScheduler(
@@ -107,6 +121,40 @@ struct MetricsSchedulerTests {
         let sinkLatest = await sink.latest()
         #expect(latest?.value == 55)
         #expect(sinkLatest?.value == 55)
+    }
+
+    @Test func cadenceChangeResetsDeltaCollectorsBeforeNewWindow() async throws {
+        let store = await MetricsStore()
+        let tracker = SchedulerResetTracker()
+        let scheduler = MetricsScheduler(
+            store: store,
+            collectors: [ResettableStubCollector(tracker: tracker)],
+            interval: .milliseconds(20),
+        )
+        await scheduler.start()
+        try await Task.sleep(for: .milliseconds(50))
+        await scheduler.updateInterval(.milliseconds(30))
+        try await Task.sleep(for: .milliseconds(80))
+        await scheduler.stop()
+
+        let resetCount = await tracker.resetCount
+        let collectCount = await tracker.collectCount
+        #expect(resetCount == 1)
+        #expect(collectCount >= 2)
+    }
+}
+
+private actor SchedulerResetTracker {
+    private(set) var collectCount = 0
+    private(set) var resetCount = 0
+
+    func didCollect() -> Int {
+        collectCount += 1
+        return collectCount
+    }
+
+    func didReset() {
+        resetCount += 1
     }
 }
 

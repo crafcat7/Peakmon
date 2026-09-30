@@ -6,9 +6,9 @@
 //  the footer on laptops, separated by the shared footer divider
 //  so the main Power body stays focused on watts.
 //
-//    Summary   — dominant total package watts.
-//    Detail    — per-rail decomposition (CPU + GPU + DRAM + Display)
-//                as horizontal bars.
+//    Summary   — whole-system or SoC-package watts, with scope labeled.
+//    Detail    — available Energy Model or SMC supply rails, with each
+//                fallback scope labeled instead of combining sources.
 //    Footer    — battery level / source / health / cycles on the
 //                left, with battery temperature anchored bottom-right.
 //
@@ -22,17 +22,38 @@ struct DashboardPowerCard: View {
     @Environment(\.cardSettings) private var cardSettings
 
     private var tint: Color { cardSettings.tint(.power) }
+    private let liveMaximumAge: TimeInterval = 8
 
-    private var powerCPU: Double { store.value(for: .powerCPU) }
-    private var powerGPU: Double { store.value(for: .powerGPU) }
-    private var powerDRAM: Double { store.value(for: .powerDRAM) }
-    private var powerDisplay: Double { store.value(for: .powerDisplay) }
-    /// Prefer kernel-reported system watts (includes losses); fall
-    /// back to package watts. Same fallback as the popover PowerCard
-    /// so the two views agree on the headline.
-    private var totalWatts: Double {
-        let system = store.latest(for: .powerSystem)?.value ?? 0
-        return system > 0 ? system : store.value(for: .powerPackage)
+    private var cpuSample: MetricSample? {
+        store.latest(for: .powerCPU, maximumAge: liveMaximumAge)
+            ?? store.latest(for: .powerCPUSupply, maximumAge: liveMaximumAge)
+    }
+    private var powerCPU: Double? { cpuSample?.value }
+    private var cpuLabel: String { cpuSample?.kind == .powerCPUSupply ? "CPU supply" : "CPU" }
+    private var powerGPU: Double? { store.latest(for: .powerGPU, maximumAge: liveMaximumAge)?.value }
+    private var memorySample: MetricSample? {
+        store.latest(for: .powerDRAM, maximumAge: liveMaximumAge)
+            ?? store.latest(for: .powerDRAMSupply, maximumAge: liveMaximumAge)
+    }
+    private var displaySample: MetricSample? {
+        store.latest(for: .powerDisplay, maximumAge: liveMaximumAge)
+            ?? store.latest(for: .powerDisplayBacklight, maximumAge: liveMaximumAge)
+    }
+    private var powerDRAM: Double? { memorySample?.value }
+    private var powerDisplay: Double? { displaySample?.value }
+    private var memoryLabel: String { memorySample?.kind == .powerDRAMSupply ? "DRAM supply" : "DRAM" }
+    private var displayLabel: String { displaySample?.kind == .powerDisplayBacklight ? "Backlight" : "Display" }
+    private var headlineSample: MetricSample? {
+        store.latest(for: .powerSystem, maximumAge: liveMaximumAge)
+            ?? store.latest(for: .powerPackage, maximumAge: liveMaximumAge)
+    }
+    private var totalWatts: Double? { headlineSample?.value }
+    private var headlineScope: String? {
+        switch headlineSample?.kind {
+        case .powerSystem: "System"
+        case .powerPackage: "SoC package"
+        default: nil
+        }
     }
 
     // Battery is optional — desktops surface none and IOPMU returns
@@ -69,13 +90,19 @@ struct DashboardPowerCard: View {
     private var summary: some View {
         VStack(alignment: .leading, spacing: dashboardSummarySpacing) {
             HStack(alignment: .firstTextBaseline, spacing: dashboardHeadlineUnitSpacing) {
-                Text(String(format: "%.1f", totalWatts))
+                Text(totalWatts.map { String(format: "%.1f", $0) } ?? "—")
                     .font(.system(size: dashboardHeadlineNumberSize, weight: .bold, design: .rounded).monospacedDigit())
-                Text("W")
-                    .font(.subheadline.weight(.semibold))
+                if totalWatts != nil {
+                    Text("W")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if let headlineScope {
+                Text(LocalizedStringKey(headlineScope))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
         }
     }
 
@@ -89,17 +116,28 @@ struct DashboardPowerCard: View {
     }
 
     private var railBreakdown: some View {
-        let maxRail = max(0.5, [powerCPU, powerGPU, powerDRAM, powerDisplay].max() ?? 0.5)
+        let maxRail = max(0.5, [powerCPU, powerGPU, powerDRAM, powerDisplay].compactMap { $0 }.max() ?? 0.5)
         return VStack(alignment: .leading, spacing: 5) {
             DashboardSectionLabel(title: "Rails")
 
             VStack(spacing: 4) {
-                LabeledBarRow(label: "CPU", value: DashboardFormatting.wattsRail(powerCPU), fraction: powerCPU / maxRail, color: .blue)
-                LabeledBarRow(label: "GPU", value: DashboardFormatting.wattsRail(powerGPU), fraction: powerGPU / maxRail, color: .indigo)
-                LabeledBarRow(label: "DRAM", value: DashboardFormatting.wattsRail(powerDRAM), fraction: powerDRAM / maxRail, color: .pink)
-                LabeledBarRow(label: "Display", value: DashboardFormatting.wattsRail(powerDisplay), fraction: powerDisplay / maxRail, color: .teal)
+                LabeledBarRow(label: cpuLabel, value: powerCPU.map(DashboardFormatting.wattsRail) ?? "—", fraction: (powerCPU ?? 0) / maxRail, color: .blue, labelWidth: 80)
+                    .help(cpuSample?.kind == .powerCPUSupply
+                          ? "CPU supply power averaged across the current sampling window."
+                          : "CPU energy-model power averaged across the current sampling window.")
+                LabeledBarRow(label: "GPU", value: powerGPU.map(DashboardFormatting.wattsRail) ?? "—", fraction: (powerGPU ?? 0) / maxRail, color: .indigo, labelWidth: 80)
+                    .help("GPU energy-model power; its measurement scope differs from the GPU supply rails.")
+                LabeledBarRow(label: memoryLabel, value: powerDRAM.map(DashboardFormatting.wattsRail) ?? "—", fraction: (powerDRAM ?? 0) / maxRail, color: .pink, labelWidth: 80)
+                    .help(memorySample?.kind == .powerDRAMSupply
+                          ? "DRAM supply power; excludes the memory controller and fabric."
+                          : "Memory, controller and fabric energy-model power.")
+                LabeledBarRow(label: displayLabel, value: powerDisplay.map(DashboardFormatting.wattsRail) ?? "—", fraction: (powerDisplay ?? 0) / maxRail, color: .teal, labelWidth: 80)
+                    .help(displaySample?.kind == .powerDisplayBacklight
+                          ? "Built-in display backlight supply only; excludes display engines and external monitors."
+                          : "Internal and external display-engine energy-model power.")
             }
         }
+        .help("These readings have different measurement scopes and do not add up to whole-system power.")
     }
 
     // Level / source / health / cycles — the state and lifetime facts
@@ -116,6 +154,7 @@ struct DashboardPowerCard: View {
                           tint: isOnBattery == true ? .yellow : .green)
                 statBlock(title: "Health", value: batteryHealth.map { String(format: "%.0f%%", $0) } ?? "—",
                           tint: healthTint)
+                    .help("Capacity-based estimate; may differ from macOS Battery Health.")
                 statBlock(title: "Cycles", value: batteryCycleCount.map { String($0) } ?? "—",
                           tint: .secondary)
             }

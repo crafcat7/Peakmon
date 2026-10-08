@@ -17,6 +17,7 @@
 //  Pill ↔ selection mapping:
 //    • Dashboard ⇒ .dashboard
 //    • History   ⇒ .history
+//    • Frame Rate ⇒ .frameRate
 //    • Settings  ⇒ .settings(remembered), remembered = last sub-
 //      category picked, defaulting to `.general`.
 //
@@ -75,6 +76,7 @@ struct MainWindowView: View {
                 switch selection {
                 case .dashboard: .dashboard
                 case .history: .history
+                case .frameRate: .frameRate
                 case .settings: .settings
                 }
             },
@@ -85,6 +87,8 @@ struct MainWindowView: View {
                         selection = .dashboard
                     case .history:
                         selection = .history
+                    case .frameRate:
+                        selection = .frameRate
                     case .settings:
                         selection = .settings(lastSettingsCategory)
                     }
@@ -131,6 +135,9 @@ struct MainWindowView: View {
                     selectedDefinition: $historyMetric,
                 )
                     .transition(.opacity)
+            case .frameRate:
+                FrameRateSurface()
+                    .transition(.opacity)
             case .settings:
                 SettingsSurface(selection: settingsCategoryBinding)
                     .transition(.opacity)
@@ -146,6 +153,7 @@ struct MainWindowView: View {
         switch selection {
         case .dashboard: .dashboard
         case .history: .history
+        case .frameRate: .frameRate
         case .settings: .settings
         }
     }

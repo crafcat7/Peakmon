@@ -14,8 +14,22 @@ import PeakmonUI
 import SwiftUI
 
 private final class PeakmonApplicationDelegate: NSObject, NSApplicationDelegate {
+    var prepareForTermination: (@MainActor () async -> Void)?
+    private var preparingToTerminate = false
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !preparingToTerminate else { return .terminateLater }
+        guard let prepareForTermination else { return .terminateNow }
+        preparingToTerminate = true
+        Task {
+            await prepareForTermination()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }
 
@@ -33,6 +47,7 @@ struct PeakmonApp: App {
     )
     @State private var processesStore = ProcessesStore()
     @State private var historyIssuesStore = HistoryIssuesStore()
+    @State private var frameRateObservationStore = FrameRateObservationStore()
     @State private var runtime = MetricsRuntime()
     @State private var menuBarStatusController: MenuBarStatusItemController?
     @State private var historyFlushObserver: NSObjectProtocol?
@@ -65,6 +80,7 @@ struct PeakmonApp: App {
                     .environment(store)
                     .environment(processesStore)
                     .environment(historyIssuesStore)
+                    .environment(frameRateObservationStore)
                     .environment(runtime)
                     .environment(\.locale, language.locale)
             }
@@ -96,6 +112,10 @@ struct PeakmonApp: App {
     }
 
     private func bootstrap() {
+        let observationStore = frameRateObservationStore
+        appDelegate.prepareForTermination = {
+            await observationStore.stopAndWait()
+        }
         ActivationPolicyController.shared.install()
         ActivationPolicyController.shared.refresh()
         AppUpdateController.shared.start()

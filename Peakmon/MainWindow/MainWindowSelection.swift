@@ -8,7 +8,7 @@
 //
 //  Navigation shape (2026-05-26 rev 3):
 //    • Top-level: a centered floating pill in the toolbar — Dashboard
-//      / History / Settings.
+//      / History / Frame Rate / Settings.
 //    • Inside Settings: a smaller segmented control switches three
 //      sub-pages (General / Display / About), kept separate (not
 //      merged) and relocated from the old sidebar to a sub-toolbar.
@@ -26,11 +26,13 @@ import SwiftUI
 /// - `.dashboard`: full-width KPI grid; default landing for ⌘, and
 ///   the popover's "Open Window" footer.
 /// - `.history`: local diagnostics timeline and anomaly review.
+/// - `.frameRate`: a bounded observation of desktop or application frames.
 /// - `.settings(category)`: classic sidebar+detail settings layout,
 ///   one detail page per `SettingsCategory`.
 enum MainWindowSelection: Hashable {
     case dashboard
     case history
+    case frameRate
     case settings(SettingsCategory)
 
     /// Page opened when ⌘, or the popover's "Open Window" footer
@@ -44,6 +46,7 @@ enum MainWindowSelection: Hashable {
         switch self {
         case .dashboard: "Dashboard"
         case .history: "History"
+        case .frameRate: "Frame Rate"
         case .settings(let category): category.title
         }
     }
@@ -54,6 +57,7 @@ enum MainWindowSelection: Hashable {
         switch self {
         case .dashboard: "gauge.with.dots.needle.67percent"
         case .history: "chart.xyaxis.line"
+        case .frameRate: "film"
         case .settings(let category): category.systemImage
         }
     }
@@ -63,6 +67,7 @@ enum MainWindowSelection: Hashable {
         switch self {
         case .dashboard: .accentColor
         case .history: .purple
+        case .frameRate: .indigo
         case .settings(let category): category.tint
         }
     }
@@ -70,11 +75,12 @@ enum MainWindowSelection: Hashable {
 
 /// Top-level navigation slot in the unified main window. Exists as a
 /// separate type from `MainWindowSelection` because the top pill only
-/// needs to know "Dashboard or Settings"; which settings sub-page is
+/// needs to know the page; which settings sub-page is
 /// active is local to the Settings surface.
 enum MainWindowTab: Hashable, CaseIterable, Identifiable {
     case dashboard
     case history
+    case frameRate
     case settings
 
     var id: Self { self }
@@ -84,6 +90,7 @@ enum MainWindowTab: Hashable, CaseIterable, Identifiable {
         switch self {
         case .dashboard: "Dashboard"
         case .history: "History"
+        case .frameRate: "Frame Rate"
         case .settings: "Settings"
         }
     }
@@ -95,6 +102,7 @@ enum MainWindowTab: Hashable, CaseIterable, Identifiable {
         switch self {
         case .dashboard: "gauge.with.dots.needle.67percent"
         case .history: "chart.xyaxis.line"
+        case .frameRate: "film"
         case .settings: "slider.horizontal.3"
         }
     }

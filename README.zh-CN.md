@@ -43,6 +43,8 @@ brew install crafcat7/cellar/peakmon
 
 **仪表盘** — 统一窗口，包含 CPU、Memory、GPU、Power、Disk、Network 等卡片。每张卡有大数字、sparkline 图表和展开详情。支持全局快捷键 `⌃⌥⌘D`。
 
+**帧率** — 位于历史之后的独立页面，用于进行 60 秒桌面或单应用观察。支持开始、停止、添加标记和查看已记录的趋势。切页或隐藏窗口后继续采集；结果保留至更改目标或开始新观察。
+
 **自定义** — 独立开关菜单栏与弹窗，开关或拖拽排序仪表盘卡片，自定义配色，并选择菜单栏显示哪些指标。
 
 ## 数据来源
@@ -53,6 +55,8 @@ brew install crafcat7/cellar/peakmon
 |------|------|
 | CPU / 内存 | `host_statistics64` (Darwin) |
 | GPU 利用率 | IOAccelerator `PerformanceStatistics` (IOKit) |
+| 桌面帧率 | IOReport 显示协处理器 `swap` 计数器（Apple Silicon，取决于系统是否提供） |
+| 应用帧率 | macOS 27+ `metalperftrace` 聚合 Metal 呈现统计 |
 | 功耗（分轨） | IOReport "Energy Model" (libIOReport, dlopen) |
 | 温度 | SMC keys `Tp0X` / `Tg0D` |
 | 风扇转速 | SMC key `F0Ac` |
@@ -60,6 +64,10 @@ brew install crafcat7/cellar/peakmon
 | 磁盘 | IOKit `IOBlockStorageDriver` |
 | 网络 | `getifaddrs` (Darwin) |
 | 进程 | `proc_pidinfo` (libproc) |
+
+**桌面观察** 为一次观察固定一个可用显示计数器，优先选择内建显示器；只有外接显示器时，需要显示活动来识别来源。不会把多个显示器的帧数相加。该读数反映桌面呈现活动，与屏幕配置刷新率不同；显示配置变化会结束观察。
+
+**应用观察** 需要 macOS 27 或更高版本，以及可读取的 Metal 呈现来源。通过进程实例识别所选应用及可归属的辅助进程；存在多个图层时，需要选择一个来源。数据保留原始记录窗口，可能延迟数秒到达。可选帧间隔来自实测的平均上屏间隔，不从 FPS 推算。不支持的应用或缺测显示不可用状态，不记作零值，也不修改 HUD 或逐帧追踪设置。当前观察结果保存在内存中，与历史页面独立。
 
 ## 系统要求
 
@@ -85,10 +93,10 @@ swift test --package-path Packages/PeakmonCore
 ## 仓库结构
 
 ```
-Peakmon/                   # 应用主体（菜单栏 + 仪表盘 + 设置）
+Peakmon/                   # 应用主体（菜单栏 + 仪表盘 + 历史 + 帧率 + 设置）
 Packages/
   PeakmonCore/             # MetricKind, MetricsStore, MetricsScheduler, SMC/IOReport 桥
-  PeakmonCollectors/       # 10 个 collector（CPU, GPU, Memory, Power, Thermal, Fan, Battery, Disk, Network, Processes）
+  PeakmonCollectors/       # 系统指标与桌面/Metal 帧率采集器
   PeakmonUI/               # 共享视图（sparkline, card 模板, DashboardComponents）
 ```
 

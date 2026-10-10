@@ -25,7 +25,7 @@ It currently supports real-time CPU, GPU, Memory, Battery, Disk, Network, and Pr
 
 ## Download
 
-**[https://github.com/crafcat7/Peakmon/releases](https://github.com/crafcat7/Peakmon/releases)**
+**[Download the latest release](https://github.com/crafcat7/Peakmon/releases/latest)**
 
 Download the latest `Peakmon.app.zip`, unzip, drop into `/Applications`. Right-click → Open on first launch to bypass Gatekeeper.
 

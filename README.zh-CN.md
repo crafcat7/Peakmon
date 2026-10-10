@@ -25,7 +25,7 @@ Peakmon 是一个原生 macOS 菜单栏系统监视器，用于在菜单栏和�
 
 ## 下载
 
-**[https://github.com/crafcat7/Peakmon/releases](https://github.com/crafcat7/Peakmon/releases)**
+**[下载最新版本](https://github.com/crafcat7/Peakmon/releases/latest)**
 
 下载最新 `Peakmon.app.zip`，解压后拖到 `/Applications`。首次启动右键 → 打开放行。
 

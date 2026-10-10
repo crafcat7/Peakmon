@@ -47,7 +47,9 @@ public final class IOReportBridge {
     }
 
     // C function pointers resolved once at init.
-    private typealias FnCopyGroup = @convention(c) (CFString, CFString?) -> CFMutableDictionary?
+    private typealias FnCopyGroup = @convention(c) (
+        CFString, CFString?, UInt64, UInt64, UInt64
+    ) -> Unmanaged<CFMutableDictionary>?
     private typealias FnCreateSub = @convention(c) (
         UnsafeRawPointer?,
         CFMutableDictionary?,
@@ -70,22 +72,22 @@ public final class IOReportBridge {
     private let getName: FnChannelString
     private let getUnit: FnChannelString
     private let simpleVal: FnSimpleVal
+    private let library: IOReportLibraryHandle
 
     // Subscription state — retained for the lifetime of the bridge.
-    private let subscription: AnyObject
-    private let subscribedChannels: CFMutableDictionary
+    private var subscription: AnyObject?
+    private var subscribedChannels: CFMutableDictionary?
     private let groupName: String
 
     /// Resolve symbols, copy the channel list for `group`, and create a
     /// long-lived subscription. Throws `BridgeError` on any failure.
-    public init(group: String) throws {
+    public init(group: String, subGroup: String? = nil) throws {
         let path = "/usr/lib/libIOReport.dylib"
-        guard let handle = dlopen(path, RTLD_LAZY) else {
-            throw BridgeError.dylibMissing(path: path)
-        }
+        let library = try IOReportLibraryHandle(path: path)
+        self.library = library
 
         func resolve<T>(_ name: String, _ type: T.Type) throws -> T {
-            guard let raw = dlsym(handle, name) else {
+            guard let raw = dlsym(library.raw, name) else {
                 throw BridgeError.symbolMissing(name: name)
             }
             return unsafeBitCast(raw, to: type)
@@ -117,12 +119,14 @@ public final class IOReportBridge {
         )
 
         self.groupName = group
-        guard let channels = copyGroup(group as CFString, nil) else {
+        guard let rawChannels = copyGroup(group as CFString, subGroup.map { $0 as CFString }, 0, 0, 0) else {
             throw BridgeError.groupEmpty(group: group)
         }
+        let channels = rawChannels.takeRetainedValue()
 
         var out: Unmanaged<CFMutableDictionary>?
         guard let sub = createSub(nil, channels, &out, 0, nil) else {
+            out?.release()
             throw BridgeError.subscribeFailed(group: group)
         }
         self.subscription = sub.takeRetainedValue()
@@ -135,6 +139,12 @@ public final class IOReportBridge {
         self.subscribedChannels = subscribed
     }
 
+    deinit {
+        // Subscription cleanup must run while its library is still loaded.
+        subscribedChannels = nil
+        subscription = nil
+    }
+
     /// Capture an instantaneous counter snapshot. Cheap (~1 ms) — call
     /// at the scheduler's normal cadence.
     public func snapshot() throws -> Snapshot {
@@ -143,6 +153,7 @@ public final class IOReportBridge {
         }
         return Snapshot(
             dictionary: raw.takeRetainedValue(),
+            library: library,
             createDelta: createDelta,
             getGroup: getGroup,
             getName: getName,
@@ -162,6 +173,9 @@ extension IOReportBridge {
     /// list of per-channel integer values.
     public struct Snapshot {
         fileprivate let dictionary: CFDictionary
+        // Snapshots can outlive their originating bridge. Their bound
+        // function pointers remain valid until the last snapshot is released.
+        fileprivate let library: IOReportLibraryHandle
         fileprivate let createDelta: (CFDictionary, CFDictionary, CFTypeRef?)
             -> Unmanaged<CFDictionary>?
         fileprivate let getGroup: (CFDictionary) -> Unmanaged<CFString>?
@@ -219,5 +233,22 @@ extension IOReportBridge {
             self.unit = unit
             self.value = value
         }
+    }
+}
+
+/// Balances each dlopen even when bridge initialization throws. Sharing
+/// this owner with snapshots prevents dlclose before their last operation.
+fileprivate final class IOReportLibraryHandle {
+    let raw: UnsafeMutableRawPointer
+
+    init(path: String) throws {
+        guard let handle = dlopen(path, RTLD_LAZY) else {
+            throw IOReportBridge.BridgeError.dylibMissing(path: path)
+        }
+        raw = handle
+    }
+
+    deinit {
+        dlclose(raw)
     }
 }

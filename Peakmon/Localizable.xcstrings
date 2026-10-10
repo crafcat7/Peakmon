@@ -146,12 +146,46 @@
         }
       }
     },
+    "60-second observation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60-second observation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60 秒观测"
+          }
+        }
+      }
+    },
     "A focused, native macOS system monitor for your menu bar." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "专注于菜单栏的原生 macOS 系统监视器。"
+          }
+        }
+      }
+    },
+    "A new observation replaces these results." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A new observation replaces these results."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新观测将替换本次结果。"
           }
         }
       }
@@ -169,6 +203,23 @@
     },
     "AC" : {
 
+    },
+    "Add mark" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add mark"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加标记"
+          }
+        }
+      }
     },
     "All cards hidden" : {
       "localizations" : {
@@ -275,6 +326,57 @@
         }
       }
     },
+    "Application frame rate observation is unavailable on this Mac." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Application frame rate observation is unavailable on this Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 Mac 暂不支持应用帧率观测。"
+          }
+        }
+      }
+    },
+    "Application observation requires macOS 27 or later and a readable Metal source. You can switch to Desktop to check display activity." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Application observation requires macOS 27 or later and a readable Metal source. You can switch to Desktop to check display activity."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用观测需要 macOS 27 或更高版本及可读的 Metal 来源。可切换至桌面查看显示活动。"
+          }
+        }
+      }
+    },
+    "Application observation unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Application observation unavailable"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用观测不可用"
+          }
+        }
+      }
+    },
     "Approval required in System Settings → Login Items." : {
       "localizations" : {
         "zh-Hans" : {
@@ -359,8 +461,569 @@
         }
       }
     },
+    "Choose a source to continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a source to continue"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择来源以继续"
+          }
+        }
+      }
+    },
+    "Choose a target and try again while it is displaying new frames." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a target and try again while it is displaying new frames."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择目标，在它显示新画面时重试。"
+          }
+        }
+      }
+    },
+    "Choose an application above, then start while it is rendering." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an application above, then start while it is rendering."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在上方选择一个应用，并在其渲染画面时开始观测。"
+          }
+        }
+      }
+    },
+    "Choose one presentation source, then start the observation." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose one presentation source, then start the observation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个呈现来源后开始观测。"
+          }
+        }
+      }
+    },
+    "Clear selection" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear selection"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消固定"
+          }
+        }
+      }
+    },
+    "Click to pin a time. Press Escape to clear." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Click to pin a time. Press Escape to clear."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点击固定查看时间，按 Esc 取消固定。"
+          }
+        }
+      }
+    },
+    "Each source is measured separately. Select one above and start." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Each source is measured separately. Select one above and start."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个来源独立测量，请在上方选定一个来源后开始。"
+          }
+        }
+      }
+    },
+    "Finding a presentation source" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finding a presentation source"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在查找呈现来源"
+          }
+        }
+      }
+    },
+    "Finishing observation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finishing observation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在结束观测"
+          }
+        }
+      }
+    },
+    "Frame observation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frame observation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率观测"
+          }
+        }
+      }
+    },
+    "Frame rate: %@ FPS." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frame rate: %@ FPS."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率：%@ FPS。"
+          }
+        }
+      }
+    },
+    "Hover to inspect · Click to keep a reading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hover to inspect · Click to keep a reading"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悬停查看 · 点击固定读数"
+          }
+        }
+      }
+    },
+    "Inspection time: %@ seconds." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inspection time: %@ seconds."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看时间：%@ 秒。"
+          }
+        }
+      }
+    },
+    "Keep the target active. The trend appears when a valid measurement arrives." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep the target active. The trend appears when a valid measurement arrives."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请保持目标活动，收到有效读数后显示趋势。"
+          }
+        }
+      }
+    },
+    "Keeping this observation's results." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keeping this observation's results."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在保留本次观测结果。"
+          }
+        }
+      }
+    },
+    "Latest window: %@ FPS. Recorded windows: %@." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Latest window: %@ FPS. Recorded windows: %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新窗口：%1$@ FPS。记录窗口数：%2$@。"
+          }
+        }
+      }
+    },
+    "Mark %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标记 %lld"
+          }
+        }
+      }
+    },
+    "Mean frame-on-glass interval: %@ milliseconds." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mean frame-on-glass interval: %@ milliseconds."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平均上屏间隔：%@ 毫秒。"
+          }
+        }
+      }
+    },
+    "No readings recorded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No readings recorded"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未记录到读数"
+          }
+        }
+      }
+    },
+    "Not measured" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not measured"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未测量"
+          }
+        }
+      }
+    },
+    "Observation details" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Observation details"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "观测详情"
+          }
+        }
+      }
+    },
+    "Observation results" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Observation results"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "观测结果"
+          }
+        }
+      }
+    },
+    "Observe again" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Observe again"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再次观测"
+          }
+        }
+      }
+    },
+    "Pinned inspection" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pinned inspection"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已固定查看"
+          }
+        }
+      }
+    },
+    "Ready to observe" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready to observe"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "准备观测"
+          }
+        }
+      }
+    },
+    "Recorded window" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recorded window"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计窗口"
+          }
+        }
+      }
+    },
+    "Recorded window: %@ to %@ seconds." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recorded window: %@ to %@ seconds."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计窗口：%1$@ 至 %2$@ 秒。"
+          }
+        }
+      }
+    },
+    "Results stay until you change the target or observe again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Results stay until you change the target or observe again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结果保留至更换目标或再次观测。"
+          }
+        }
+      }
+    },
+    "Start here, then switch to the app or animation you want to check. Peakmon keeps recording." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start here, then switch to the app or animation you want to check. Peakmon keeps recording."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此开始后，切换到要检查的应用或动画，Peakmon 会继续记录。"
+          }
+        }
+      }
+    },
+    "The mark limit has been reached." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The mark limit has been reached."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标记数量已达上限。"
+          }
+        }
+      }
+    },
+    "The observation will begin when a readable source is found." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The observation will begin when a readable source is found."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找到可读来源后开始观测。"
+          }
+        }
+      }
+    },
+    "Waiting for the first reading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for the first reading"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待首次读数"
+          }
+        }
+      }
+    },
     "brew upgrade crafcat7/cellar/peakmon" : {
 
+    },
+    "Built-in display" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Built-in display"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内建显示来源"
+          }
+        }
+      }
     },
     "Built-in display backlight supply only; excludes display engines and external monitors." : {
       "localizations" : {
@@ -490,6 +1153,57 @@
         }
       }
     },
+    "Choose a presentation source" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a presentation source"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择呈现来源"
+          }
+        }
+      }
+    },
+    "Choose a presentation source before starting. Frame rates from different sources are not added." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a presentation source before starting. Frame rates from different sources are not added."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先选择呈现来源，不同来源的帧率不会相加。"
+          }
+        }
+      }
+    },
+    "Choose an application" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an application"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择应用"
+          }
+        }
+      }
+    },
     "Choose the language used by Peakmon." : {
       "localizations" : {
         "zh-Hans" : {
@@ -601,6 +1315,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法从 GitHub 获取最新发布信息，请稍后重试。"
+          }
+        }
+      }
+    },
+    "Counter source" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Counter source"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计数来源"
           }
         }
       }
@@ -733,6 +1464,40 @@
         }
       }
     },
+    "Desktop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desktop"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面"
+          }
+        }
+      }
+    },
+    "Desktop presentation activity" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desktop presentation activity"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面呈现活动"
+          }
+        }
+      }
+    },
     "DIAGNOSTICS" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -784,6 +1549,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示"
+          }
+        }
+      }
+    },
+    "Display swap events from one fixed counter source. A low rate on a static desktop is expected. Application FPS and display refresh rate describe different activity." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Display swap events from one fixed counter source. A low rate on a static desktop is expected. Application FPS and display refresh rate describe different activity."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "观测固定计数来源的显示交换事件。桌面静止时低数值属于正常情况；应用帧率与显示刷新率反映不同的活动。"
           }
         }
       }
@@ -841,6 +1623,40 @@
         }
       }
     },
+    "Each point is the average for its recorded window. Gaps mean no measurement; this chart does not score stutters." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Each point is the average for its recorded window. Gaps mean no measurement; this chart does not score stutters."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个点是其统计窗口的平均值，缺测处断线；此图不用于评价卡顿。"
+          }
+        }
+      }
+    },
+    "Elapsed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elapsed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已运行"
+          }
+        }
+      }
+    },
     "Enable the menu bar first; the popover needs it as an anchor." : {
       "localizations" : {
         "zh-Hans" : {
@@ -861,6 +1677,23 @@
         }
       }
     },
+    "External display source" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "External display source"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外接显示来源"
+          }
+        }
+      }
+    },
     "Fan" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -868,6 +1701,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "风扇"
+          }
+        }
+      }
+    },
+    "FPS" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FPS"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FPS"
+          }
+        }
+      }
+    },
+    "Frame Rate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frame Rate"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率"
+          }
+        }
+      }
+    },
+    "Frame rate trend" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frame rate trend"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帧率趋势"
+          }
+        }
+      }
+    },
+    "Frame-rate data could not be read. Start a new observation to retry." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frame-rate data could not be read. Start a new observation to retry."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取帧率数据，请重新开始观测以重试。"
           }
         }
       }
@@ -1066,6 +1967,23 @@
         }
       }
     },
+    "Last reading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last reading"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最后一次读数"
+          }
+        }
+      }
+    },
     "Later" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1099,12 +2017,46 @@
         }
       }
     },
+    "Latest window" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Latest window"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新窗口"
+          }
+        }
+      }
+    },
     "Launch at login" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录时启动"
+          }
+        }
+      }
+    },
+    "Layer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Layer"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图层"
           }
         }
       }
@@ -1169,6 +2121,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主导航"
+          }
+        }
+      }
+    },
+    "Marks" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标记"
+          }
+        }
+      }
+    },
+    "Mean frame-on-glass interval" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mean frame-on-glass interval"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平均上屏间隔"
           }
         }
       }
@@ -1344,6 +2330,23 @@
         }
       }
     },
+    "No active display presentation source is available. Display activity is required to identify an external source." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No active display presentation source is available. Display activity is required to identify an external source."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可用的活动显示呈现来源。识别外接来源需要显示活动。"
+          }
+        }
+      }
+    },
     "No anomalies in the last hour" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1375,6 +2378,40 @@
         }
       }
     },
+    "No frame rate data" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No frame rate data"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有帧率数据"
+          }
+        }
+      }
+    },
+    "No new presentation data was recorded during this observation." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No new presentation data was recorded during this observation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本次观测未记录到新的呈现数据。"
+          }
+        }
+      }
+    },
     "No newer release is available. Current version: %@." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1382,6 +2419,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有更新的发布版本。当前版本：%@。"
+          }
+        }
+      }
+    },
+    "No reading available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No reading available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无可用读数"
           }
         }
       }
@@ -1418,12 +2472,97 @@
         }
       }
     },
+    "Not started" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not started"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未开始"
+          }
+        }
+      }
+    },
     "Notify when History detects a new CPU, memory, power, thermal, disk, or network issue." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "当历史记录检测到新的 CPU、内存、电源、温度、磁盘或网络问题时通知。"
+          }
+        }
+      }
+    },
+    "Observation ended" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Observation ended"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "观测已结束"
+          }
+        }
+      }
+    },
+    "Observation failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Observation failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "观测失败"
+          }
+        }
+      }
+    },
+    "Observation target" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Observation target"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "观测对象"
+          }
+        }
+      }
+    },
+    "Observing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Observing"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在观测"
           }
         }
       }
@@ -1655,6 +2794,57 @@
         }
       }
     },
+    "Preparing observation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing observation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在准备观测"
+          }
+        }
+      }
+    },
+    "Presentation source" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Presentation source"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "呈现来源"
+          }
+        }
+      }
+    },
+    "Presented frames from one readable application source. Layers are never added together. An application without a readable source cannot be observed." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Presented frames from one readable application source. Layers are never added together. An application without a readable source cannot be observed."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "观测一个可读应用来源的呈现帧，多个图层不相加；没有可读来源的应用无法观测。"
+          }
+        }
+      }
+    },
     "Press shortcut" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1769,6 +2959,23 @@
         }
       }
     },
+    "Reading age" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reading age"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读数距今"
+          }
+        }
+      }
+    },
     "Recent issue" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1801,12 +3008,46 @@
         }
       }
     },
+    "Recorded windows" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recorded windows"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记录窗口数"
+          }
+        }
+      }
+    },
     "Refresh" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "刷新"
+          }
+        }
+      }
+    },
+    "Refresh applications" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh applications"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新应用列表"
           }
         }
       }
@@ -1951,6 +3192,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "采样、快捷键、诊断和启动行为。"
+          }
+        }
+      }
+    },
+    "Selected application is no longer running" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected application is no longer running"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选应用已不在运行"
           }
         }
       }
@@ -2100,12 +3358,28 @@
       }
     },
     "Source" : {
-      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "来源"
+          }
+        }
+      }
+    },
+    "Start observation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start observation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始观测"
           }
         }
       }
@@ -2131,6 +3405,23 @@
         }
       }
     },
+    "Stop observation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop observation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止观测"
+          }
+        }
+      }
+    },
     "stopped" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2138,6 +3429,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已停止"
+          }
+        }
+      }
+    },
+    "Stopping observation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stopping observation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在停止观测"
           }
         }
       }
@@ -2228,6 +3536,23 @@
         }
       }
     },
+    "Target exited" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Target exited"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标已退出"
+          }
+        }
+      }
+    },
     "Temp" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2249,12 +3574,97 @@
         }
       }
     },
+    "The display configuration changed. Start a new observation for the current source." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The display configuration changed. Start a new observation for the current source."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示配置已改变，请为当前来源重新开始观测。"
+          }
+        }
+      }
+    },
+    "The display presentation source became unavailable." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The display presentation source became unavailable."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示呈现来源已不可用。"
+          }
+        }
+      }
+    },
+    "The selected application has exited or restarted." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The selected application has exited or restarted."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选应用已退出或重新启动。"
+          }
+        }
+      }
+    },
+    "The selected presentation process has exited or restarted." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The selected presentation process has exited or restarted."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选呈现进程已退出或重新启动。"
+          }
+        }
+      }
+    },
     "These readings have different measurement scopes and do not add up to whole-system power." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "这些读数的测量范围不同，不能相加作为整机功率。"
+          }
+        }
+      }
+    },
+    "This application currently provides no readable Metal frame-rate data. Try again while it is rendering." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This application currently provides no readable Metal frame-rate data. Try again while it is rendering."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此应用当前没有可读的 Metal 帧率数据，请在它渲染时重试。"
           }
         }
       }
@@ -2491,6 +3901,23 @@
         }
       }
     },
+    "Waiting for a new reading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for a new reading"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待新的读数"
+          }
+        }
+      }
+    },
     "Warming up…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2509,6 +3936,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "警告"
+          }
+        }
+      }
+    },
+    "What this measures" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What this measures"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "观测口径"
+          }
+        }
+      }
+    },
+    "Window" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Window"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计窗口"
           }
         }
       }

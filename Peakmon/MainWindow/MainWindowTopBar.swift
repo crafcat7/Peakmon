@@ -3,7 +3,7 @@
 //  Peakmon
 //
 //  Floating pill segmented control at the top of the unified main
-//  window; switches Dashboard / History / Settings.
+//  window; switches Dashboard / History / Frame Rate / Settings.
 //
 //  Visual model:
 //  - Outer: continuous `Capsule` filled `.regularMaterial` with a
@@ -47,8 +47,7 @@ struct MainWindowTopBar: View {
         // blur source layer every scroll frame (`apply_blur` →
         // `vImageSepConvolve_ARGB8888` in `sample`). The border +
         // material already separate the pill from the surface.
-        // Accessibility: expose as one tab bar ("Tab bar, 3 items")
-        // rather than two unrelated buttons.
+        // Accessibility: expose all four destinations as one tab bar.
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Main navigation")
     }

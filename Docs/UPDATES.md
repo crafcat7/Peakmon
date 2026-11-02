@@ -106,8 +106,8 @@ final archive and signed feed together:
 RELEASE_TAG=20260930 ./Tools/release.sh
 ```
 
-Use `RELEASE_NOTES_v1.6.3.md` as the release body, with its SHA-256 updated
-from the final ZIP. Upload `build/release/Peakmon.app.zip` and
+Prepare the release body with the SHA-256 from the final ZIP.
+Upload `build/release/Peakmon.app.zip` and
 `build/release/appcast.xml` to the same draft release before publishing it.
 The app's fixed `SUFeedURL` and embedded public key remain valid for this
 release; version and build comparisons read the app bundle and release body.

@@ -41,6 +41,10 @@ public enum SMCError: Error, CustomStringConvertible {
     case callFailed(kern_return_t, command: UInt8)
     case keyNotFound(SMCKey)
     case unsupportedType(SMCKey, type: String)
+    case invalidDataSize(SMCKey, size: Int)
+    case invalidKeyCount(UInt32)
+    case invalidEnumerationKey(index: UInt32, raw: UInt32)
+    case invalidResponseSize(command: UInt8, size: Int)
 
     public var description: String {
         switch self {
@@ -50,6 +54,14 @@ public enum SMCError: Error, CustomStringConvertible {
         case .keyNotFound(let key): "SMC key not found: \(key.fourCC)"
         case .unsupportedType(let key, let type):
             "SMC key \(key.fourCC) has unsupported type: \(type)"
+        case .invalidDataSize(let key, let size):
+            "SMC key \(key.fourCC) has invalid payload size: \(size)"
+        case .invalidKeyCount(let count):
+            "SMC key count exceeds the supported limit: \(count)"
+        case .invalidEnumerationKey(let index, let raw):
+            "SMC key index \(index) returned an invalid or duplicate key: 0x\(String(raw, radix: 16))"
+        case .invalidResponseSize(let command, let size):
+            "SMC call \(command) returned an invalid response size: \(size)"
         }
     }
 }
@@ -99,10 +111,9 @@ public struct SMCKey: Hashable, Sendable, CustomStringConvertible {
 
     // MARK: - Thermal sensors (°C)
     //
-    // Apple Silicon exposes `Tp**` (P-core dies), `Tg**` (GPU dies),
-    // and `T*0P` proximity sensors. The exact set varies by SoC;
-    // ThermalCollector probes a whitelist and aggregates the hottest
-    // reading per category.
+    // Legacy candidates retained for existing callers. Die sensor keys
+    // vary by SoC; ThermalCollector selects a generation-specific map
+    // rather than treating these keys or their prefixes as universal.
 
     public static let cpuDieP1 = SMCKey("Tp01")
     public static let cpuDieP2 = SMCKey("Tp05")
@@ -113,7 +124,7 @@ public struct SMCKey: Hashable, Sendable, CustomStringConvertible {
 
     public static let gpuDie1 = SMCKey("Tg05")
     public static let gpuDie2 = SMCKey("Tg0D")
-    /// GPU proximity sensor; fallback when die keys absent.
+    /// GPU proximity sensor; fallback when no valid die reading is available.
     public static let gpuProximity = SMCKey("TG0P")
 
     // MARK: - Fan (RPM)
@@ -134,6 +145,12 @@ public struct SMCKeyInfo: Sendable {
     public let dataSize: UInt32
     public let dataType: UInt32  // also a 4-CC, e.g. "flt ", "fp1f", "ui32"
     public let dataAttributes: UInt8
+
+    init(dataSize: UInt32, dataType: UInt32, dataAttributes: UInt8 = 0) {
+        self.dataSize = dataSize
+        self.dataType = dataType
+        self.dataAttributes = dataAttributes
+    }
 
     public var typeString: String {
         SMCKey(raw: dataType).fourCC
@@ -232,6 +249,55 @@ public final class SMCBridge: @unchecked Sendable {
         }
     }
 
+    /// Enumerate key identifiers in their firmware index order. An
+    /// enumerated key's value may still be unavailable or non-numeric.
+    /// This read-only operation is intended for explicit diagnostics, not
+    /// periodic collector sampling. Unsupported or malformed replies throw.
+    public func allKeys() throws -> [SMCKey] {
+        try queue.sync {
+            let countKey = SMCKey("#KEY")
+            let info = try cachedInfoLocked(countKey)
+            let bytes = try readBytesLocked(countKey, info: info)
+            return try Self.enumeratedKeys(countInfo: info, countBytes: bytes) { index in
+                var input = SMCParamStruct()
+                input.data8 = Command.readIndex
+                input.data32 = index
+                return try call(input).key
+            }
+        }
+    }
+
+    /// Kept separate from the connection so enumeration validation can be
+    /// exercised without querying hardware or introducing a transport API.
+    static func enumeratedKeys(
+        countInfo: SMCKeyInfo,
+        countBytes: Data,
+        readIndex: (UInt32) throws -> UInt32,
+    ) throws -> [SMCKey] {
+        let countKey = SMCKey("#KEY")
+        guard countInfo.typeString == "ui32" else {
+            throw SMCError.unsupportedType(countKey, type: countInfo.typeString)
+        }
+        let count = UInt32(try decodeDouble(countBytes, for: countKey, info: countInfo))
+        // Bound both allocation and syscall count if firmware replies are
+        // corrupt.
+        guard count <= 65_536 else { throw SMCError.invalidKeyCount(count) }
+
+        var keys: [SMCKey] = []
+        keys.reserveCapacity(Int(count))
+        var seen = Set<SMCKey>()
+        for index in 0 ..< count {
+            let raw = try readIndex(index)
+            let bytes = [raw >> 24, (raw >> 16) & 0xFF, (raw >> 8) & 0xFF, raw & 0xFF]
+            let key = SMCKey(raw: raw)
+            guard bytes.allSatisfy({ (0x20 ... 0x7E).contains($0) }), seen.insert(key).inserted else {
+                throw SMCError.invalidEnumerationKey(index: index, raw: raw)
+            }
+            keys.append(key)
+        }
+        return keys
+    }
+
     /// Queue-internal cached lookup. Caller MUST already be inside
     /// `queue.sync`; this is the single place that mutates
     /// `keyInfoCache`.
@@ -248,12 +314,16 @@ public final class SMCBridge: @unchecked Sendable {
             dataType: output.keyInfo.dataType,
             dataAttributes: output.keyInfo.dataAttributes,
         )
-        keyInfoCache[key] = info
+        // A successful command can still return unusable metadata. Do not
+        // make a transient empty reply permanent for the connection's life.
+        if info.dataSize > 0, info.dataSize <= 32, info.dataType != 0 {
+            keyInfoCache[key] = info
+        }
         return info
     }
 
-    /// Returns the key's raw value bytes (up to 32). Use the typed
-    /// `read(_ key:as:)` helpers below in most code.
+    /// Returns the key's raw value bytes (up to 32). Use `readDouble(_:)`
+    /// for supported numeric types.
     ///
     /// Issues at most one extra `readKeyInfo` per *unfamiliar* key
     /// (cached afterwards) and then exactly one `readBytes` per
@@ -272,7 +342,7 @@ public final class SMCBridge: @unchecked Sendable {
     private func readBytesLocked(_ key: SMCKey, info: SMCKeyInfo) throws -> Data {
         let size = Int(info.dataSize)
         guard size > 0, size <= 32 else {
-            throw SMCError.keyNotFound(key)
+            throw SMCError.invalidDataSize(key, size: size)
         }
         // AppleSMC's `readBytes` command (data8 = 5) only validates
         // `dataSize`; the dataType field is ignored by the kernel
@@ -290,21 +360,54 @@ public final class SMCBridge: @unchecked Sendable {
 
     /// Read `key` and decode as `Double`, regardless of underlying
     /// SMC numeric type (`flt`, `fp*`, `sp*`, `ui8/16/32`, `si16`).
-    /// Throws `unsupportedType` for unknown type codes.
+    /// Throws `unsupportedType` for unknown type codes and `invalidDataSize`
+    /// when the payload does not match the numeric type's width.
     ///
     /// Steady-state cost: **one** `IOConnectCallStructMethod` per
     /// call (the actual `readBytes`). The key's metadata round-trip
     /// happens once per process lifetime via `keyInfoCache`.
     public func readDouble(_ key: SMCKey) throws -> Double {
-        let (info, bytes) = try queue.sync { () -> (SMCKeyInfo, Data) in
-            let info = try cachedInfoLocked(key)
-            let bytes = try readBytesLocked(key, info: info)
-            return (info, bytes)
+        do {
+            let (info, bytes) = try queue.sync { () -> (SMCKeyInfo, Data) in
+                let info = try cachedInfoLocked(key)
+                let bytes = try readBytesLocked(key, info: info)
+                return (info, bytes)
+            }
+            return try Self.decodeDouble(bytes, for: key, info: info)
+        } catch let error as SMCError {
+            if case .invalidDataSize = error {
+                // Retry key-info after a type/width mismatch, including a
+                // malformed nonzero width that passed the basic cache check.
+                queue.sync { _ = keyInfoCache.removeValue(forKey: key) }
+            }
+            throw error
         }
-        let type = info.typeString
+    }
 
-        if let fmt = Self.fixedPointFormats[type] {
-            return Self.decodeFixedPoint(bytes, fracBits: fmt.fracBits, signed: fmt.signed)
+    /// Numeric decoding is independent of the live connection. All loads
+    /// validate their width and tolerate an unaligned Data buffer.
+    static func decodeDouble(_ bytes: Data, for key: SMCKey, info: SMCKeyInfo) throws -> Double {
+        let type = info.typeString
+        let size: Int
+        switch type {
+        case "flt ", "ui32": size = 4
+        case "ui8 ": size = 1
+        case "ui16", "si16": size = 2
+        default:
+            guard fixedPointFormats[type] != nil else {
+                throw SMCError.unsupportedType(key, type: type)
+            }
+            size = 2
+        }
+        guard info.dataSize == UInt32(size) else {
+            throw SMCError.invalidDataSize(key, size: Int(info.dataSize))
+        }
+        guard bytes.count == size else {
+            throw SMCError.invalidDataSize(key, size: bytes.count)
+        }
+
+        if let fmt = fixedPointFormats[type] {
+            return decodeFixedPoint(bytes, fracBits: fmt.fracBits, signed: fmt.signed)
         }
         switch type {
         case "flt ":
@@ -314,14 +417,15 @@ public final class SMCBridge: @unchecked Sendable {
             // big-endian. Confirmed empirically on M-series Macs:
             // PSTR reads as sensible single-digit watts when loaded
             // little-endian and as 1e20+ garbage when byte-swapped.
-            return Double(bytes.withUnsafeBytes { $0.load(as: Float.self) })
-        case "ui8 ": return Double(bytes[0])
+            let bits = bytes.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).littleEndian }
+            return Double(Float(bitPattern: bits))
+        case "ui8 ": return Double(bytes.withUnsafeBytes { $0.load(as: UInt8.self) })
         case "ui16":
-            return Double(bytes.withUnsafeBytes { $0.load(as: UInt16.self).bigEndian })
+            return Double(bytes.withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian })
         case "ui32":
-            return Double(bytes.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
+            return Double(bytes.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian })
         case "si16":
-            return Double(bytes.withUnsafeBytes { $0.load(as: Int16.self).bigEndian })
+            return Double(bytes.withUnsafeBytes { $0.loadUnaligned(as: Int16.self).bigEndian })
         default:
             throw SMCError.unsupportedType(key, type: type)
         }
@@ -346,6 +450,7 @@ public final class SMCBridge: @unchecked Sendable {
 
     private enum Command {
         static let readBytes: UInt8 = 5
+        static let readIndex: UInt8 = 8
         static let readKeyInfo: UInt8 = 9
     }
 
@@ -369,6 +474,9 @@ public final class SMCBridge: @unchecked Sendable {
         guard kr == kIOReturnSuccess else {
             throw SMCError.callFailed(kr, command: input.data8)
         }
+        guard outSize == MemoryLayout<SMCParamStruct>.size else {
+            throw SMCError.invalidResponseSize(command: input.data8, size: outSize)
+        }
         if outStruct.result == 0x84 {
             // kSMCKeyNotFound — caller-facing.
             throw SMCError.keyNotFound(SMCKey(raw: input.key))
@@ -391,8 +499,7 @@ public final class SMCBridge: @unchecked Sendable {
         fracBits: Int,
         signed: Bool,
     ) -> Double {
-        guard data.count >= 2 else { return 0 }
-        let raw = data.withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
+        let raw = data.withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
         if signed {
             return Double(Int16(bitPattern: raw)) / Double(1 << fracBits)
         }
@@ -404,8 +511,8 @@ public final class SMCBridge: @unchecked Sendable {
 
 /// User-mode mirror of `kern/SMCParamStruct.h`. Layout has been frozen
 /// since 10.6; total size 80 bytes. We only populate `key`, `data8`
-/// and `keyInfo.dataSize` for the two commands we use (read-key-info,
-/// read-bytes).
+/// and `keyInfo.dataSize` for value reads; diagnostic index reads also
+/// populate `data32`.
 private struct SMCParamStruct {
     var key: UInt32 = 0
     var vers: SMCVersion = SMCVersion()

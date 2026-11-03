@@ -155,6 +155,7 @@ Next steps:
   git push origin "$REPORT_TAG"
   gh release create "$REPORT_TAG" --draft \\
       --title "Peakmon $APP_VERSION" \\
-      --notes-file "$PROJECT_ROOT/RELEASE_NOTES_v$APP_VERSION.md" \\
       "$ZIP_PATH"$REPORT_FEED_ARGUMENT
+  Write the release body in the GitHub draft (keep a Build Info table
+  with Version/Build) and publish only after verifying both assets.
 EOF
